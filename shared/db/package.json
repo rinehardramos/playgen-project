@@ -1,0 +1,23 @@
+{
+  "name": "@playgen/db",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "migrate": "node dist/migrate.js",
+    "seed": "node dist/seeds/index.js",
+    "seed:playgen": "node dist/seeds/playgen.js"
+  },
+  "dependencies": {
+    "pg": "^8.11.0",
+    "exceljs": "^4.4.0",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.4.0"
+  }
+}

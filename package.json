@@ -1,0 +1,19 @@
+{
+  "name": "playgen",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "test:unit": "pnpm -r --if-present run test:unit",
+    "test:integration": "pnpm -r --if-present run test:integration",
+    "test:all": "pnpm run test:unit && pnpm run test:integration",
+    "build": "pnpm -r --if-present run build",
+    "lint": "eslint 'services/**/*.ts' 'shared/**/*.ts'",
+    "typecheck": "tsc --noEmit --project tsconfig.base.json"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.4.0"
+  }
+}

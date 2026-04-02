@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.env
+.env.local
+*.log
+coverage
+.nyc_output
+frontend/.next
+frontend/out
