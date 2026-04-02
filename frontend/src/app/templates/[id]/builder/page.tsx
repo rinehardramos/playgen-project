@@ -29,16 +29,15 @@ interface TemplateSlot {
   category_id: string | null;
 }
 
-// Default colors for categories without a color_tag
-const DEFAULT_COLORS = [
-  'bg-blue-200 text-blue-800',
-  'bg-green-200 text-green-800',
-  'bg-yellow-200 text-yellow-800',
-  'bg-pink-200 text-pink-800',
-  'bg-purple-200 text-purple-800',
-  'bg-orange-200 text-orange-800',
-  'bg-teal-200 text-teal-800',
-  'bg-red-200 text-red-800',
+const CATEGORY_COLORS = [
+  'bg-violet-900/40 text-violet-300 border-violet-500/30',
+  'bg-blue-900/40 text-blue-300 border-blue-500/30',
+  'bg-green-900/40 text-green-300 border-green-500/30',
+  'bg-yellow-900/40 text-yellow-300 border-yellow-500/30',
+  'bg-pink-900/40 text-pink-300 border-pink-500/30',
+  'bg-orange-900/40 text-orange-300 border-orange-500/30',
+  'bg-teal-900/40 text-teal-300 border-teal-500/30',
+  'bg-red-900/40 text-red-300 border-red-500/30',
 ];
 
 const POSITIONS = [1, 2, 3, 4];
@@ -69,12 +68,11 @@ export default function TemplateBuilderPage() {
   const [error, setError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Which cell has the dropdown open
   const [openCell, setOpenCell] = useState<string | null>(null);
 
   const categoryColorMap = new Map<string, string>();
   categories.forEach((c, idx) => {
-    categoryColorMap.set(c.id, DEFAULT_COLORS[idx % DEFAULT_COLORS.length]);
+    categoryColorMap.set(c.id, CATEGORY_COLORS[idx % CATEGORY_COLORS.length]);
   });
 
   useEffect(() => {
@@ -96,11 +94,9 @@ export default function TemplateBuilderPage() {
       ]);
       setTemplate(tpl);
 
-      // Fetch categories for this station
       const cats = await api.get<Category[]>(`/api/v1/stations/${tpl.station_id}/categories`);
       setCategories(cats);
 
-      // Build slot map
       const map = new Map<string, string | null>();
       slotsData.forEach((slot) => {
         map.set(slotKey(slot.hour, slot.position), slot.category_id);
@@ -146,29 +142,26 @@ export default function TemplateBuilderPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      <div className="flex justify-center items-center min-h-screen bg-[#0b0b10]">
+        <div className="w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 md:p-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/templates"
-            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            &larr; Templates
+        <div className="flex items-center gap-4">
+          <Link href="/templates" className="text-sm text-gray-500 hover:text-gray-300 transition-colors">
+            ← Templates
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">
+            <h1 className="text-xl font-bold text-white">
               {template?.name ?? 'Template Builder'}
             </h1>
             {template && (
-              <p className="text-xs text-gray-500 capitalize">
+              <p className="text-xs text-gray-500 capitalize mt-0.5">
                 {template.type.replace('_', ' ')} template
               </p>
             )}
@@ -176,15 +169,15 @@ export default function TemplateBuilderPage() {
         </div>
         <div className="flex items-center gap-3">
           {saveSuccess && (
-            <span className="text-sm text-green-600 font-medium">Saved!</span>
+            <span className="text-sm text-green-400 font-medium">Saved!</span>
           )}
           {error && (
-            <span className="text-sm text-red-600">{error}</span>
+            <span className="text-sm text-red-400">{error}</span>
           )}
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-5 py-2 rounded-md bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            className="btn-primary disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
@@ -193,11 +186,11 @@ export default function TemplateBuilderPage() {
 
       {/* Category legend */}
       {categories.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-5">
           {categories.map((c) => (
             <span
               key={c.id}
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${categoryColorMap.get(c.id)}`}
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${categoryColorMap.get(c.id)}`}
             >
               {c.name}
             </span>
@@ -206,27 +199,27 @@ export default function TemplateBuilderPage() {
       )}
 
       {/* Grid */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="card overflow-x-auto">
         <table className="min-w-full text-sm border-collapse">
           <thead>
-            <tr className="bg-gray-50">
-              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-20 border-b border-gray-200">
+            <tr className="bg-[#13131a]">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase w-20 border-b border-[#2a2a40]">
                 Hour
               </th>
               {POSITIONS.map((p) => (
                 <th
                   key={p}
-                  className="px-3 py-2 text-center text-xs font-semibold text-gray-500 border-b border-gray-200"
+                  className="px-3 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase border-b border-[#2a2a40]"
                 >
-                  Position {p}
+                  Slot {p}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {HOURS.map((hour) => (
-              <tr key={hour} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="px-3 py-1.5 text-xs text-gray-500 font-medium whitespace-nowrap">
+              <tr key={hour} className="border-b border-[#2a2a40] hover:bg-[#24243a]">
+                <td className="px-3 py-2 text-xs text-gray-500 font-medium whitespace-nowrap">
                   {formatHour(hour)}
                 </td>
                 {POSITIONS.map((position) => {
@@ -240,10 +233,10 @@ export default function TemplateBuilderPage() {
                     <td key={position} className="px-2 py-1.5 text-center relative">
                       <button
                         onClick={() => setOpenCell(isOpen ? null : key)}
-                        className={`inline-flex items-center justify-center min-w-[80px] px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                        className={`inline-flex items-center justify-center min-w-[90px] px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
                           cat
-                            ? `${colorClass} border-transparent`
-                            : 'bg-gray-50 text-gray-400 border-dashed border-gray-300 hover:border-indigo-400 hover:text-indigo-500'
+                            ? colorClass
+                            : 'bg-[#1c1c28] text-gray-600 border-dashed border-[#2a2a40] hover:border-violet-500/50 hover:text-violet-400'
                         }`}
                       >
                         {cat ? cat.name : '+ Assign'}
@@ -251,10 +244,10 @@ export default function TemplateBuilderPage() {
 
                       {/* Dropdown */}
                       {isOpen && (
-                        <div className="absolute z-20 top-full left-1/2 -translate-x-1/2 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                        <div className="absolute z-20 top-full left-1/2 -translate-x-1/2 mt-1 w-48 bg-[#16161f] border border-[#2a2a40] rounded-xl shadow-2xl py-1">
                           <button
                             onClick={() => setSlotCategory(hour, position, null)}
-                            className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 italic"
+                            className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-[#24243a] italic"
                           >
                             Clear
                           </button>
@@ -262,12 +255,12 @@ export default function TemplateBuilderPage() {
                             <button
                               key={c.id}
                               onClick={() => setSlotCategory(hour, position, c.id)}
-                              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 ${
+                              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-[#24243a] ${
                                 catId === c.id ? 'font-semibold' : ''
                               }`}
                             >
                               <span
-                                className={`inline-block px-1.5 py-0.5 rounded text-xs ${categoryColorMap.get(c.id)}`}
+                                className={`inline-block px-1.5 py-0.5 rounded border text-xs ${categoryColorMap.get(c.id)}`}
                               >
                                 {c.name}
                               </span>
@@ -284,7 +277,6 @@ export default function TemplateBuilderPage() {
         </table>
       </div>
 
-      {/* Close dropdown on outside click */}
       {openCell && (
         <div
           className="fixed inset-0 z-10"

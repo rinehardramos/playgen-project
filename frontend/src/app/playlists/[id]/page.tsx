@@ -15,17 +15,23 @@ interface Playlist {
   status: PlaylistStatus;
   template_name?: string;
   station_id: string;
+  notes?: string;
 }
 
+// Field names match what the backend actually returns
 interface PlaylistEntry {
   id: string;
   hour: number;
   position: number;
-  category_name: string;
   song_id: string;
-  title: string;
-  artist: string;
-  is_override: boolean;
+  song_title: string;
+  song_artist: string;
+  category_label: string;
+  is_manual_override: boolean;
+}
+
+interface PlaylistWithEntries extends Playlist {
+  entries: PlaylistEntry[];
 }
 
 interface Song {
@@ -36,15 +42,15 @@ interface Song {
 }
 
 const STATUS_STYLES: Record<PlaylistStatus, string> = {
-  draft: 'bg-gray-100 text-gray-600',
-  generating: 'bg-blue-100 text-blue-700',
-  ready: 'bg-yellow-100 text-yellow-700',
-  approved: 'bg-green-100 text-green-700',
-  exported: 'bg-indigo-100 text-indigo-700',
-  failed: 'bg-red-100 text-red-700',
+  draft: 'bg-gray-800 text-gray-400',
+  generating: 'bg-blue-900/30 text-blue-400 animate-pulse',
+  ready: 'bg-yellow-900/30 text-yellow-400',
+  approved: 'bg-green-900/30 text-green-400',
+  exported: 'bg-violet-900/30 text-violet-400',
+  failed: 'bg-red-900/30 text-red-400',
 };
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080';
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost';
 
 export default function PlaylistDetailPage() {
   const router = useRouter();
@@ -58,7 +64,6 @@ export default function PlaylistDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
 
-  // Override modal state
   const [overrideEntry, setOverrideEntry] = useState<PlaylistEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Song[]>([]);
@@ -79,12 +84,11 @@ export default function PlaylistDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [pl, entriesData] = await Promise.all([
-        api.get<Playlist>(`/api/v1/playlists/${playlistId}`),
-        api.get<PlaylistEntry[]>(`/api/v1/playlists/${playlistId}/entries`),
-      ]);
+      // GET /playlists/:id returns { ...playlist, entries: [...] }
+      const data = await api.get<PlaylistWithEntries>(`/api/v1/playlists/${playlistId}`);
+      const { entries: e, ...pl } = data;
       setPlaylist(pl);
-      setEntries(entriesData);
+      setEntries(e ?? []);
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to load playlist');
     } finally {
@@ -96,8 +100,9 @@ export default function PlaylistDetailPage() {
     if (!playlist) return;
     setApproving(true);
     try {
-      await api.put<Playlist>(`/api/v1/playlists/${playlistId}`, { status: 'approved' });
-      setPlaylist((prev) => prev ? { ...prev, status: 'approved' } : prev);
+      // POST /playlists/:id/approve
+      const updated = await api.post<Playlist>(`/api/v1/playlists/${playlistId}/approve`, {});
+      setPlaylist(updated);
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to approve playlist');
     } finally {
@@ -126,14 +131,15 @@ export default function PlaylistDetailPage() {
     setOverrideSubmitting(true);
     setOverrideError(null);
     try {
-      await api.put<PlaylistEntry>(`/api/v1/playlists/${playlistId}/entries/${overrideEntry.id}`, {
-        song_id: song.id,
-        is_override: true,
-      });
+      // PUT /playlists/:id/entries/:hour/:position with { song_id }
+      const updated = await api.put<PlaylistEntry>(
+        `/api/v1/playlists/${playlistId}/entries/${overrideEntry.hour}/${overrideEntry.position}`,
+        { song_id: song.id }
+      );
       setEntries((prev) =>
         prev.map((e) =>
-          e.id === overrideEntry.id
-            ? { ...e, song_id: song.id, title: song.title, artist: song.artist, is_override: true }
+          e.hour === overrideEntry.hour && e.position === overrideEntry.position
+            ? updated
             : e
         )
       );
@@ -149,23 +155,22 @@ export default function PlaylistDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      <div className="flex justify-center items-center min-h-screen bg-[#0b0b10]">
+        <div className="w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (error && !playlist) {
     return (
-      <div className="p-8">
-        <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3">
-          <p className="text-sm text-red-700">{error}</p>
+      <div className="p-6 md:p-8">
+        <div className="bg-red-900/30 border border-red-700/50 text-red-400 px-4 py-3 rounded-lg">
+          {error}
         </div>
       </div>
     );
   }
 
-  // Group entries by hour for display
   const byHour = new Map<number, PlaylistEntry[]>();
   entries.forEach((e) => {
     const arr = byHour.get(e.hour) ?? [];
@@ -175,56 +180,50 @@ export default function PlaylistDetailPage() {
   const hours = Array.from(byHour.keys()).sort((a, b) => a - b);
 
   return (
-    <div className="p-8">
+    <div className="p-6 md:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Link href="/playlists" className="text-sm text-gray-500 hover:text-gray-700">
-            &larr; Playlists
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div className="flex items-center gap-4">
+          <Link href="/playlists" className="text-sm text-gray-500 hover:text-gray-300 transition-colors">
+            ← Playlists
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">
+            <h1 className="text-xl font-bold text-white">
               {playlist?.date
                 ? new Date(playlist.date + 'T00:00:00').toLocaleDateString(undefined, {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
+                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
                   })
                 : 'Playlist'}
             </h1>
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-1">
               {playlist && (
-                <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[playlist.status]}`}
-                >
+                <span className={`badge capitalize ${STATUS_STYLES[playlist.status]}`}>
                   {playlist.status}
                 </span>
               )}
               {playlist?.template_name && (
-                <span className="text-xs text-gray-400">{playlist.template_name}</span>
+                <span className="text-xs text-gray-500">{playlist.template_name}</span>
               )}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Export buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
           {playlist && (
             <>
               <a
-                href={`${BASE}/api/v1/playlists/${playlistId}/export?format=xlsx`}
+                href={`${BASE}/api/v1/playlists/${playlistId}/export/xlsx`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-2 rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="btn-secondary text-sm"
               >
                 Export XLSX
               </a>
               <a
-                href={`${BASE}/api/v1/playlists/${playlistId}/export?format=csv`}
+                href={`${BASE}/api/v1/playlists/${playlistId}/export/csv`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-2 rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="btn-secondary text-sm"
               >
                 Export CSV
               </a>
@@ -234,7 +233,7 @@ export default function PlaylistDetailPage() {
             <button
               onClick={handleApprove}
               disabled={approving}
-              className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+              className="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-semibold disabled:opacity-50 transition-colors"
             >
               {approving ? 'Approving…' : 'Approve'}
             </button>
@@ -243,30 +242,30 @@ export default function PlaylistDetailPage() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-3">
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="mb-4 bg-red-900/30 border border-red-700/50 text-red-400 px-4 py-3 rounded-lg text-sm">
+          {error}
         </div>
       )}
 
       {/* Entries table */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              {['Hour', 'Position', 'Category', 'Title', 'Artist', 'Override', 'Actions'].map((h) => (
+      <div className="card overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="bg-[#13131a]">
+              {['Hour', 'Pos', 'Category', 'Title', 'Artist', '', ''].map((h, i) => (
                 <th
-                  key={h}
-                  className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                  key={i}
+                  className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-[#2a2a40]"
                 >
                   {h}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {hours.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-12 text-center text-gray-600">
                   No entries found.
                 </td>
               </tr>
@@ -276,24 +275,25 @@ export default function PlaylistDetailPage() {
                 return (
                   <Fragment key={hour}>
                     {hourEntries.map((entry, idx) => (
-                      <tr key={entry.id} className={`hover:bg-gray-50 ${entry.is_override ? 'bg-yellow-50' : ''}`}>
+                      <tr
+                        key={entry.id}
+                        className={`border-b border-[#2a2a40] hover:bg-[#24243a] ${entry.is_manual_override ? 'bg-yellow-900/10' : ''}`}
+                      >
                         {idx === 0 ? (
                           <td
                             rowSpan={hourEntries.length}
-                            className="px-4 py-3 font-medium text-gray-700 align-top border-r border-gray-100"
+                            className="px-4 py-3 font-medium text-gray-400 align-top border-r border-[#2a2a40] whitespace-nowrap"
                           >
                             {hour}:00
                           </td>
                         ) : null}
-                        <td className="px-4 py-3 text-gray-600">{entry.position}</td>
-                        <td className="px-4 py-3 text-gray-600">{entry.category_name}</td>
-                        <td className="px-4 py-3 font-medium text-gray-900">{entry.title}</td>
-                        <td className="px-4 py-3 text-gray-600">{entry.artist}</td>
+                        <td className="px-4 py-3 text-gray-500">{entry.position}</td>
+                        <td className="px-4 py-3 text-gray-400">{entry.category_label}</td>
+                        <td className="px-4 py-3 font-medium text-white">{entry.song_title}</td>
+                        <td className="px-4 py-3 text-gray-400">{entry.song_artist}</td>
                         <td className="px-4 py-3">
-                          {entry.is_override && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
-                              Override
-                            </span>
+                          {entry.is_manual_override && (
+                            <span className="badge bg-yellow-900/30 text-yellow-400">Override</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -305,7 +305,7 @@ export default function PlaylistDetailPage() {
                                 setSearchResults([]);
                                 setOverrideError(null);
                               }}
-                              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                              className="text-xs text-violet-400 hover:text-violet-300 font-medium"
                             >
                               Override
                             </button>
@@ -323,57 +323,55 @@ export default function PlaylistDetailPage() {
 
       {/* Override Modal */}
       {overrideEntry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-xl p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Override Song</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Replacing: <strong>{overrideEntry.title}</strong> by {overrideEntry.artist} (Hour{' '}
-              {overrideEntry.hour}:00, Pos {overrideEntry.position})
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md bg-[#16161f] border border-[#2a2a40] rounded-2xl shadow-2xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-1">Override Song</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              Replacing: <span className="text-white font-medium">{overrideEntry.song_title}</span> by {overrideEntry.song_artist}
+              {' '}(Hour {overrideEntry.hour}:00, Pos {overrideEntry.position})
             </p>
 
             {overrideError && (
-              <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-3">
-                <p className="text-sm text-red-700">{overrideError}</p>
+              <div className="mb-4 bg-red-900/30 border border-red-700/50 text-red-400 px-4 py-3 rounded-lg text-sm">
+                {overrideError}
               </div>
             )}
 
-            <div className="mb-3">
-              <input
-                type="text"
-                placeholder="Search songs…"
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
+            <input
+              type="text"
+              placeholder="Search songs…"
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="input mb-3"
+            />
 
             {searching && (
               <div className="flex justify-center py-4">
-                <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
               </div>
             )}
 
             {searchResults.length > 0 && (
-              <div className="border border-gray-200 rounded-md divide-y divide-gray-100 max-h-52 overflow-y-auto">
+              <div className="border border-[#2a2a40] rounded-xl divide-y divide-[#2a2a40] max-h-52 overflow-y-auto mb-4">
                 {searchResults.map((song) => (
                   <button
                     key={song.id}
                     onClick={() => handleOverride(song)}
                     disabled={overrideSubmitting}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-[#24243a] transition-colors disabled:opacity-50"
                   >
-                    <span className="font-medium text-gray-900">{song.title}</span>
+                    <span className="font-medium text-white">{song.title}</span>
                     <span className="text-gray-500"> — {song.artist}</span>
                   </button>
                 ))}
               </div>
             )}
 
-            <div className="flex justify-end mt-4">
+            <div className="flex justify-end">
               <button
                 type="button"
                 onClick={() => setOverrideEntry(null)}
-                className="px-4 py-2 rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="btn-secondary"
               >
                 Cancel
               </button>

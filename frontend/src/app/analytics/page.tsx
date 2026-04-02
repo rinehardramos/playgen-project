@@ -11,44 +11,33 @@ interface Station {
   name: string;
 }
 
-interface HeatmapEntry {
+interface HeatmapRow {
   song_id: string;
   title: string;
   artist: string;
-  // Keys are ISO date strings (YYYY-MM-DD), values are play counts
   plays: Record<string, number>;
-  weekly_limit?: number;
 }
 
-interface OverplayedSong {
+interface OverplayedRow {
   song_id: string;
   title: string;
   artist: string;
-  play_count: number;
-  limit: number;
+  avg_plays_per_day: number;
+  threshold: number;
 }
 
-interface UnderplayedSong {
+interface UnderplayedRow {
   song_id: string;
   title: string;
   artist: string;
-  play_count: number;
-  expected: number;
+  total_plays: number;
+  last_played_at: string | null;
 }
 
-interface AnalyticsData {
-  dates: string[]; // last 14 days ISO date strings
-  heatmap: HeatmapEntry[];
-  overplayed: OverplayedSong[];
-  underplayed: UnderplayedSong[];
-}
-
-function cellColor(count: number, limit: number | undefined): string {
+function cellColor(count: number): string {
   if (count === 0) return 'bg-[#1c1c28] text-gray-600';
-  if (!limit) return 'bg-green-900/30 text-green-400';
-  const ratio = count / limit;
-  if (ratio >= 1) return 'bg-red-900/30 text-red-400 font-semibold';
-  if (ratio >= 0.8) return 'bg-yellow-900/30 text-yellow-400';
+  if (count >= 3) return 'bg-red-900/30 text-red-400 font-semibold';
+  if (count >= 2) return 'bg-yellow-900/30 text-yellow-400';
   return 'bg-green-900/30 text-green-400';
 }
 
@@ -64,7 +53,10 @@ export default function AnalyticsPage() {
 
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState<string>('');
-  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [heatmap, setHeatmap] = useState<HeatmapRow[]>([]);
+  const [overplayed, setOverplayed] = useState<OverplayedRow[]>([]);
+  const [underplayed, setUnderplayed] = useState<UnderplayedRow[]>([]);
+  const [dates, setDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,9 +78,9 @@ export default function AnalyticsPage() {
 
   async function fetchStations() {
     try {
-      const stations = await api.get<Station[]>(`/api/v1/companies/${companyId}/stations`);
-      setStations(stations);
-      if (stations.length > 0) setSelectedStation(stations[0].id);
+      const data = await api.get<Station[]>(`/api/v1/companies/${companyId}/stations`);
+      setStations(data);
+      if (data.length > 0) setSelectedStation(data[0].id);
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to load stations');
     }
@@ -98,10 +90,21 @@ export default function AnalyticsPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.get<AnalyticsData>(
-        `/api/v1/stations/${stationId}/analytics?days=14`
-      );
-      setData(result);
+      const [heatmapData, overplayedData, underplayedData] = await Promise.all([
+        api.get<HeatmapRow[]>(`/api/v1/stations/${stationId}/analytics/heatmap?days=14`),
+        api.get<OverplayedRow[]>(`/api/v1/stations/${stationId}/analytics/overplayed`),
+        api.get<UnderplayedRow[]>(`/api/v1/stations/${stationId}/analytics/underplayed`),
+      ]);
+
+      // Build sorted dates from heatmap plays keys
+      const dateSet = new Set<string>();
+      heatmapData.forEach((row) => Object.keys(row.plays).forEach((d) => dateSet.add(d)));
+      const sortedDates = Array.from(dateSet).sort();
+
+      setHeatmap(heatmapData);
+      setOverplayed(overplayedData);
+      setUnderplayed(underplayedData);
+      setDates(sortedDates);
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to load analytics');
     } finally {
@@ -109,20 +112,21 @@ export default function AnalyticsPage() {
     }
   }
 
+  const hasData = heatmap.length > 0 || overplayed.length > 0 || underplayed.length > 0;
+
   return (
     <div className="p-6 md:p-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-white">Analytics</h1>
       </div>
 
-      {/* Station selector */}
       {stations.length > 1 && (
-        <div className="mb-4">
+        <div className="mb-5">
           <label className="block text-sm text-gray-400 mb-1.5">Station</label>
           <select
             value={selectedStation}
             onChange={(e) => setSelectedStation(e.target.value)}
-            className="input"
+            className="input w-auto"
           >
             {stations.map((s) => (
               <option key={s.id} value={s.id}>
@@ -134,8 +138,8 @@ export default function AnalyticsPage() {
       )}
 
       {error && (
-        <div className="mb-4 rounded-md bg-red-900/30 border border-red-700/50 px-4 py-3">
-          <p className="text-sm text-red-400">{error}</p>
+        <div className="mb-4 bg-red-900/30 border border-red-700/50 text-red-400 px-4 py-3 rounded-lg text-sm">
+          {error}
         </div>
       )}
 
@@ -143,65 +147,54 @@ export default function AnalyticsPage() {
         <div className="flex justify-center py-16">
           <div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : data ? (
+      ) : hasData ? (
         <>
           {/* Legend */}
-          <div className="flex flex-wrap gap-3 mb-4 text-xs text-gray-400">
+          <div className="flex flex-wrap gap-3 mb-5 text-xs text-gray-400">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-4 h-4 rounded bg-green-900/30" /> OK
+              <span className="inline-block w-4 h-4 rounded bg-green-900/30" /> 1 play
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-4 h-4 rounded bg-yellow-900/30" /> Near limit (&ge;80%)
+              <span className="inline-block w-4 h-4 rounded bg-yellow-900/30" /> 2 plays
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-4 h-4 rounded bg-red-900/30" /> Over limit
+              <span className="inline-block w-4 h-4 rounded bg-red-900/30" /> 3+ plays
             </span>
           </div>
 
-          {/* Heatmap */}
-          <div className="card overflow-x-auto mb-8">
-            <table className="min-w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#13131a]">
-                  <th className="px-3 py-2 text-left font-semibold text-gray-500 uppercase border-b border-[#2a2a40] min-w-[160px]">
-                    Song
-                  </th>
-                  {data.dates.map((d) => (
-                    <th
-                      key={d}
-                      className="px-1.5 py-2 text-center font-semibold text-gray-500 uppercase border-b border-[#2a2a40] w-10"
-                    >
-                      {shortDate(d)}
+          {/* Rotation Heatmap */}
+          {heatmap.length > 0 && (
+            <div className="card overflow-x-auto mb-8">
+              <table className="min-w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#13131a]">
+                    <th className="px-3 py-2.5 text-left font-semibold text-gray-500 uppercase border-b border-[#2a2a40] min-w-[160px]">
+                      Song
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.heatmap.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={data.dates.length + 1}
-                      className="px-3 py-12 text-center text-gray-600"
-                    >
-                      No data available.
-                    </td>
+                    {dates.map((d) => (
+                      <th
+                        key={d}
+                        className="px-1.5 py-2.5 text-center font-semibold text-gray-500 uppercase border-b border-[#2a2a40] w-10"
+                      >
+                        {shortDate(d)}
+                      </th>
+                    ))}
                   </tr>
-                ) : (
-                  data.heatmap.map((row) => (
-                    <tr key={row.song_id} className="hover:bg-[#24243a] border-b border-[#2a2a40]">
+                </thead>
+                <tbody>
+                  {heatmap.map((row) => (
+                    <tr key={row.song_id} className="border-b border-[#2a2a40] hover:bg-[#24243a]">
                       <td className="px-3 py-2">
-                        <p className="font-medium text-white truncate max-w-[150px]">
-                          {row.title}
-                        </p>
+                        <p className="font-medium text-white truncate max-w-[150px]">{row.title}</p>
                         <p className="text-gray-500 truncate max-w-[150px]">{row.artist}</p>
                       </td>
-                      {data.dates.map((d) => {
+                      {dates.map((d) => {
                         const count = row.plays[d] ?? 0;
                         return (
                           <td key={d} className="px-1 py-1 text-center">
                             <span
-                              className={`inline-flex items-center justify-center w-8 h-8 rounded text-xs ${cellColor(count, row.weekly_limit)}`}
-                              title={`${count} plays${row.weekly_limit ? ` / limit ${row.weekly_limit}` : ''}`}
+                              className={`inline-flex items-center justify-center w-8 h-8 rounded text-xs ${cellColor(count)}`}
+                              title={`${count} plays`}
                             >
                               {count > 0 ? count : ''}
                             </span>
@@ -209,51 +202,44 @@ export default function AnalyticsPage() {
                         );
                       })}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-          {/* Two-column tables */}
+          {/* Overplayed + Underplayed */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Overplayed */}
             <div>
               <h2 className="text-base font-semibold text-white mb-3">Overplayed Songs</h2>
               <div className="card overflow-hidden">
                 <table className="min-w-full divide-y divide-[#2a2a40] text-sm">
                   <thead className="bg-[#13131a]">
                     <tr>
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">
-                        Song
-                      </th>
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">
-                        Plays
-                      </th>
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">
-                        Limit
-                      </th>
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Song</th>
+                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">Avg/Day</th>
+                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">Limit</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#2a2a40]">
-                    {data.overplayed.length === 0 ? (
+                    {overplayed.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-4 py-6 text-center text-gray-600 text-xs">
+                        <td colSpan={3} className="px-4 py-8 text-center text-gray-600 text-xs">
                           No overplayed songs.
                         </td>
                       </tr>
                     ) : (
-                      data.overplayed.map((song) => (
+                      overplayed.map((song) => (
                         <tr key={song.song_id} className="hover:bg-[#24243a]">
                           <td className="px-4 py-2.5">
                             <p className="font-medium text-white text-xs">{song.title}</p>
                             <p className="text-gray-500 text-xs">{song.artist}</p>
                           </td>
                           <td className="px-4 py-2.5 text-center text-xs font-semibold text-red-400">
-                            {song.play_count}
+                            {song.avg_plays_per_day}
                           </td>
                           <td className="px-4 py-2.5 text-center text-xs text-gray-500">
-                            {song.limit}
+                            {song.threshold}
                           </td>
                         </tr>
                       ))
@@ -263,43 +249,38 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Underplayed */}
             <div>
               <h2 className="text-base font-semibold text-white mb-3">Underplayed Songs</h2>
               <div className="card overflow-hidden">
                 <table className="min-w-full divide-y divide-[#2a2a40] text-sm">
                   <thead className="bg-[#13131a]">
                     <tr>
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">
-                        Song
-                      </th>
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">
-                        Plays
-                      </th>
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">
-                        Expected
-                      </th>
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Song</th>
+                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">Plays (14d)</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Last Played</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#2a2a40]">
-                    {data.underplayed.length === 0 ? (
+                    {underplayed.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-4 py-6 text-center text-gray-600 text-xs">
+                        <td colSpan={3} className="px-4 py-8 text-center text-gray-600 text-xs">
                           No underplayed songs.
                         </td>
                       </tr>
                     ) : (
-                      data.underplayed.map((song) => (
+                      underplayed.map((song) => (
                         <tr key={song.song_id} className="hover:bg-[#24243a]">
                           <td className="px-4 py-2.5">
                             <p className="font-medium text-white text-xs">{song.title}</p>
                             <p className="text-gray-500 text-xs">{song.artist}</p>
                           </td>
                           <td className="px-4 py-2.5 text-center text-xs font-semibold text-yellow-400">
-                            {song.play_count}
+                            {song.total_plays}
                           </td>
-                          <td className="px-4 py-2.5 text-center text-xs text-gray-500">
-                            {song.expected}
+                          <td className="px-4 py-2.5 text-xs text-gray-500">
+                            {song.last_played_at
+                              ? new Date(song.last_played_at).toLocaleDateString()
+                              : 'Never'}
                           </td>
                         </tr>
                       ))
@@ -312,7 +293,9 @@ export default function AnalyticsPage() {
         </>
       ) : (
         !error && (
-          <p className="text-center text-gray-600 py-16">Select a station to view analytics.</p>
+          <p className="text-center text-gray-600 py-16">
+            {selectedStation ? 'No play history data yet.' : 'Select a station to view analytics.'}
+          </p>
         )
       )}
     </div>

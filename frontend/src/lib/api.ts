@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080';
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost';
 
 // Token stored in memory for XSS safety; sessionStorage used for tab persistence
 let memoryToken: string | null = null;

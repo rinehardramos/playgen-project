@@ -99,6 +99,54 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ── POST /stations/:id/playlists/generate/month — batch for a whole month ──
+  app.post<{ Params: StationParams; Body: { year: number; month: number; template_id?: string } }>(
+    '/stations/:id/playlists/generate/month',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        body: {
+          type: 'object',
+          required: ['year', 'month'],
+          properties: {
+            year: { type: 'integer', minimum: 2000, maximum: 2100 },
+            month: { type: 'integer', minimum: 1, maximum: 12 },
+            template_id: { type: 'string', format: 'uuid' },
+          },
+        },
+      },
+      preHandler: [
+        authenticate,
+        requirePermission('playlist:write'),
+        requireStationAccess(),
+      ],
+    },
+    async (req: FastifyRequest<{ Params: StationParams; Body: { year: number; month: number; template_id?: string } }>, reply: FastifyReply) => {
+      const stationId = req.params.id;
+      const { year, month, template_id: templateId } = req.body;
+      const userId = req.user.sub;
+
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const jobs: { date: string; job_id: string }[] = [];
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        try {
+          const jobId = await enqueueGeneration({ stationId, date, templateId, triggeredBy: 'manual', userId });
+          jobs.push({ date, job_id: jobId });
+        } catch {
+          // Skip days that are already approved or generating — continue with others
+        }
+      }
+
+      return reply.code(202).send({ queued: jobs.length, jobs });
+    },
+  );
+
   // ── GET /stations/:id/jobs ────────────────────────────────────────────────
   app.get<{ Params: StationParams; Querystring: { limit?: number; offset?: number } }>(
     '/stations/:id/jobs',

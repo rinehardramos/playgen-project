@@ -5,7 +5,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
     "@playgen/middleware": "workspace:*",

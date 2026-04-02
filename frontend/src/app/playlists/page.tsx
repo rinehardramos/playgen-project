@@ -91,9 +91,8 @@ export default function PlaylistsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [year, month] = selectedMonth.split('-');
       const data = await api.get<Playlist[]>(
-        `/api/v1/stations/${selectedStation}/playlists?year=${year}&month=${month}`
+        `/api/v1/stations/${selectedStation}/playlists?month=${selectedMonth}`
       );
       setPlaylists(data);
     } catch (err: unknown) {
@@ -107,10 +106,10 @@ export default function PlaylistsPage() {
     setGenerating(true);
     setGenerateError(null);
     try {
-      const [year, month] = selectedMonth.split('-');
-      await api.post<void>(`/api/v1/stations/${selectedStation}/playlists/generate`, {
-        year: Number(year),
-        month: Number(month),
+      const [year, month] = selectedMonth.split('-').map(Number);
+      await api.post<void>(`/api/v1/stations/${selectedStation}/playlists/generate/month`, {
+        year,
+        month,
       });
       await fetchPlaylists();
     } catch (err: unknown) {
