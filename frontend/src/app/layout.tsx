@@ -3,7 +3,7 @@
 import './globals.css';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getCurrentUser } from '@/lib/auth';
 
 const NAV_LINKS = [
@@ -59,7 +59,8 @@ const NAV_LINKS = [
 
 function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
-  const user = getCurrentUser();
+  const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
+  useEffect(() => { setUser(getCurrentUser()); }, []);
 
   return (
     <div className="flex flex-col h-full bg-[#13131a] border-r border-[#2a2a40]">
@@ -124,10 +125,10 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const user = getCurrentUser();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isLoginPage = pathname === '/login' || pathname === '/';
-  const showNav = !!user && !isLoginPage;
+  // Base layout structure only on pathname — never on user (null during SSR → hydration mismatch)
+  const showNav = !isLoginPage;
 
   return (
     <html lang="en">

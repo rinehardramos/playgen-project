@@ -13,7 +13,7 @@ interface Station {
 
 interface Category {
   id: string;
-  name: string;
+  label: string;
 }
 
 interface Song {
@@ -22,7 +22,7 @@ interface Song {
   artist: string;
   category_id: string;
   category_name?: string;
-  eligible_hours?: string;
+  eligible_hours?: number[];
   is_active: boolean;
 }
 
@@ -108,8 +108,8 @@ export default function LibraryPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.get<Song[]>(`/api/v1/stations/${stationId}/songs`);
-      setSongs(data);
+      const result = await api.get<{data: Song[], meta: {total: number}}>(`/api/v1/stations/${stationId}/songs`);
+      setSongs(result.data);
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to load songs');
     } finally {
@@ -122,7 +122,18 @@ export default function LibraryPage() {
     setFormError(null);
     setSubmitting(true);
     try {
-      await api.post<Song>(`/api/v1/stations/${selectedStation}/songs`, songForm);
+      const body: Record<string, unknown> = {
+        title: songForm.title,
+        artist: songForm.artist,
+        category_id: songForm.category_id,
+      };
+      if (songForm.eligible_hours.trim()) {
+        const [start, end] = songForm.eligible_hours.split('-').map(Number);
+        if (!isNaN(start) && !isNaN(end)) {
+          body.eligible_hours = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+        }
+      }
+      await api.post<Song>(`/api/v1/stations/${selectedStation}/songs`, body);
       setSongModalOpen(false);
       setSongForm(EMPTY_SONG_FORM);
       await fetchSongs(selectedStation);
@@ -161,7 +172,7 @@ export default function LibraryPage() {
     }
   }
 
-  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+  const categoryMap = new Map(categories.map((c) => [c.id, c.label]));
 
   const filteredSongs = songs.filter((s) => {
     const matchSearch =
@@ -229,7 +240,7 @@ export default function LibraryPage() {
           <option value="">All categories</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {c.label}
             </option>
           ))}
         </select>
@@ -275,7 +286,7 @@ export default function LibraryPage() {
                     <td className="px-4 py-3 text-gray-400">
                       {song.category_name ?? categoryMap.get(song.category_id) ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-gray-400">{song.eligible_hours ?? '—'}</td>
+                    <td className="px-4 py-3 text-gray-400">{song.eligible_hours?.join(', ') ?? '—'}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -347,7 +358,7 @@ export default function LibraryPage() {
                   <option value="">Select a category…</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name}
+                      {c.label}
                     </option>
                   ))}
                 </select>

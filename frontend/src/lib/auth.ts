@@ -4,19 +4,37 @@ export interface AuthUser {
   id: string;
   email: string;
   display_name: string;
-  role: string;
+  role_code: string;
   company_id: string;
   station_ids: string[];
 }
 
 export interface LoginResponse {
-  access_token: string;
+  tokens: { access_token: string; refresh_token: string };
   user: AuthUser;
+}
+
+const USER_KEY = 'playgen_user';
+
+function saveUser(user: AuthUser): void {
+  try { sessionStorage.setItem(USER_KEY, JSON.stringify(user)); } catch { /* SSR or private */ }
+}
+
+function loadUser(): AuthUser | null {
+  try {
+    const raw = sessionStorage.getItem(USER_KEY);
+    return raw ? (JSON.parse(raw) as AuthUser) : null;
+  } catch { return null; }
+}
+
+function removeUser(): void {
+  try { sessionStorage.removeItem(USER_KEY); } catch { /* ignore */ }
 }
 
 export async function login(email: string, password: string): Promise<AuthUser> {
   const data = await api.post<LoginResponse>('/api/v1/auth/login', { email, password });
-  setToken(data.access_token);
+  setToken(data.tokens.access_token);
+  saveUser(data.user);
   return data.user;
 }
 
@@ -25,6 +43,7 @@ export async function logout(): Promise<void> {
     await api.post<void>('/api/v1/auth/logout', {});
   } finally {
     clearToken();
+    removeUser();
   }
 }
 
@@ -32,37 +51,17 @@ export function getCurrentUser(): AuthUser | null {
   const token = getToken();
   if (!token) return null;
 
+  // Check token expiry
   try {
-    // JWT is three base64url-encoded parts separated by dots
     const parts = token.split('.');
-    if (parts.length !== 3) return null;
-
-    // Decode the payload (second part)
-    const payload = parts[1];
-    // base64url → base64: replace - with + and _ with /
-    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-    // Pad to a multiple of 4
+    if (parts.length !== 3) { clearToken(); removeUser(); return null; }
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-    const decoded = atob(padded);
-    const json = JSON.parse(decoded) as Record<string, unknown>;
-
-    // Check expiry
+    const json = JSON.parse(atob(padded)) as Record<string, unknown>;
     if (typeof json['exp'] === 'number' && json['exp'] * 1000 < Date.now()) {
-      clearToken();
-      return null;
+      clearToken(); removeUser(); return null;
     }
+  } catch { clearToken(); removeUser(); return null; }
 
-    return {
-      id: String(json['sub'] ?? json['id'] ?? ''),
-      email: String(json['email'] ?? ''),
-      display_name: String(json['display_name'] ?? json['name'] ?? ''),
-      role: String(json['role'] ?? ''),
-      company_id: String(json['company_id'] ?? ''),
-      station_ids: Array.isArray(json['station_ids'])
-        ? (json['station_ids'] as unknown[]).map(String)
-        : [],
-    };
-  } catch {
-    return null;
-  }
+  return loadUser();
 }

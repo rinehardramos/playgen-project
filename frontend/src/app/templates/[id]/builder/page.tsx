@@ -19,14 +19,18 @@ interface Template {
 
 interface Category {
   id: string;
-  name: string;
+  label: string;
   color_tag?: string;
 }
 
 interface TemplateSlot {
   hour: number;
   position: number;
-  category_id: string | null;
+  required_category_id: string | null;
+}
+
+interface TemplateWithSlots extends Template {
+  slots: TemplateSlot[];
 }
 
 const CATEGORY_COLORS = [
@@ -62,6 +66,7 @@ export default function TemplateBuilderPage() {
 
   const [template, setTemplate] = useState<Template | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  // Map of "hour-position" → category_id | null
   const [slots, setSlots] = useState<Map<string, string | null>>(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -88,18 +93,17 @@ export default function TemplateBuilderPage() {
     setLoading(true);
     setError(null);
     try {
-      const [tpl, slotsData] = await Promise.all([
-        api.get<Template>(`/api/v1/templates/${templateId}`),
-        api.get<TemplateSlot[]>(`/api/v1/templates/${templateId}/slots`),
-      ]);
+      // GET /templates/:id returns { ...template, slots: [...] }
+      const tplWithSlots = await api.get<TemplateWithSlots>(`/api/v1/templates/${templateId}`);
+      const { slots: rawSlots, ...tpl } = tplWithSlots;
       setTemplate(tpl);
 
       const cats = await api.get<Category[]>(`/api/v1/stations/${tpl.station_id}/categories`);
       setCategories(cats);
 
       const map = new Map<string, string | null>();
-      slotsData.forEach((slot) => {
-        map.set(slotKey(slot.hour, slot.position), slot.category_id);
+      rawSlots.forEach((slot) => {
+        map.set(slotKey(slot.hour, slot.position), slot.required_category_id);
       });
       setSlots(map);
     } catch (err: unknown) {
@@ -123,11 +127,14 @@ export default function TemplateBuilderPage() {
     setSaveSuccess(false);
     setError(null);
     try {
-      const slotsPayload: TemplateSlot[] = [];
+      // Only send slots that have a category assigned
+      const slotsPayload: Array<{ hour: number; position: number; required_category_id: string }> = [];
       HOURS.forEach((hour) => {
         POSITIONS.forEach((position) => {
           const categoryId = slots.get(slotKey(hour, position)) ?? null;
-          slotsPayload.push({ hour, position, category_id: categoryId });
+          if (categoryId) {
+            slotsPayload.push({ hour, position, required_category_id: categoryId });
+          }
         });
       });
       await api.put<void>(`/api/v1/templates/${templateId}/slots`, { slots: slotsPayload });
@@ -192,7 +199,7 @@ export default function TemplateBuilderPage() {
               key={c.id}
               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${categoryColorMap.get(c.id)}`}
             >
-              {c.name}
+              {c.label}
             </span>
           ))}
         </div>
@@ -239,7 +246,7 @@ export default function TemplateBuilderPage() {
                             : 'bg-[#1c1c28] text-gray-600 border-dashed border-[#2a2a40] hover:border-violet-500/50 hover:text-violet-400'
                         }`}
                       >
-                        {cat ? cat.name : '+ Assign'}
+                        {cat ? cat.label : '+ Assign'}
                       </button>
 
                       {/* Dropdown */}
@@ -262,7 +269,7 @@ export default function TemplateBuilderPage() {
                               <span
                                 className={`inline-block px-1.5 py-0.5 rounded border text-xs ${categoryColorMap.get(c.id)}`}
                               >
-                                {c.name}
+                                {c.label}
                               </span>
                             </button>
                           ))}

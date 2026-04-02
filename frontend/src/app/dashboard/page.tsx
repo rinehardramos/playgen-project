@@ -23,14 +23,18 @@ interface StatCard {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const user = getCurrentUser();
+  const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
+  const [mounted, setMounted] = useState(false);
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) {
+    const u = getCurrentUser();
+    setUser(u);
+    setMounted(true);
+    if (!u) {
       router.replace('/login');
       return;
     }
@@ -47,9 +51,9 @@ export default function DashboardPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, [router, user]);
+  }, [router]);
 
-  if (!user) return null;
+  if (!mounted || !user) return null;
 
   const cards: StatCard[] = [
     {

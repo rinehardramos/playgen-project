@@ -11,14 +11,14 @@ interface User {
   display_name: string;
   email: string;
   role_id: string;
-  role_name?: string;
+  role_label?: string;
   station_ids: string[];
   is_active: boolean;
 }
 
 interface Role {
   id: string;
-  name: string;
+  label: string;
 }
 
 interface Station {
@@ -216,7 +216,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3 font-medium text-white">{user.display_name}</td>
                     <td className="px-4 py-3 text-gray-400">{user.email}</td>
                     <td className="px-4 py-3 text-gray-400 capitalize">
-                      {user.role_name ?? user.role_id}
+                      {user.role_label ?? user.role_id}
                     </td>
                     <td className="px-4 py-3 text-gray-400">
                       {user.station_ids.map((id) => stationMap.get(id) ?? id).join(', ') || '—'}
@@ -321,7 +321,7 @@ export default function UsersPage() {
                   <option value="">Select a role…</option>
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.name}
+                      {r.label}
                     </option>
                   ))}
                 </select>

@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost';
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 // Token stored in memory for XSS safety; sessionStorage used for tab persistence
 let memoryToken: string | null = null;
@@ -67,8 +67,15 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
   if (!response.ok) {
     let message = response.statusText;
     try {
-      const body = (await response.json()) as { message?: string; error?: string };
-      message = body.message ?? body.error ?? message;
+      const body = (await response.json()) as {
+        message?: string;
+        error?: { message?: string; code?: string } | string;
+      };
+      const errField = body.error;
+      message =
+        (typeof errField === 'object' ? errField?.message : errField) ??
+        body.message ??
+        message;
     } catch {
       // Non-JSON error body
     }
@@ -121,8 +128,15 @@ export const api = {
       if (!response.ok) {
         let message = response.statusText;
         try {
-          const b = (await response.json()) as { message?: string; error?: string };
-          message = b.message ?? b.error ?? message;
+          const b = (await response.json()) as {
+            message?: string;
+            error?: { message?: string; code?: string } | string;
+          };
+          const errField = b.error;
+          message =
+            (typeof errField === 'object' ? errField?.message : errField) ??
+            b.message ??
+            message;
         } catch { /* non-JSON */ }
         throw { status: response.status, message } satisfies ApiError;
       }

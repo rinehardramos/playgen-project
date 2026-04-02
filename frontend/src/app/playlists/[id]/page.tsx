@@ -190,7 +190,7 @@ export default function PlaylistDetailPage() {
           <div>
             <h1 className="text-xl font-bold text-white">
               {playlist?.date
-                ? new Date(playlist.date + 'T00:00:00').toLocaleDateString(undefined, {
+                ? new Date(playlist.date.slice(0, 10) + 'T00:00:00').toLocaleDateString(undefined, {
                     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
                   })
                 : 'Playlist'}

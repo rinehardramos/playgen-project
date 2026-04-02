@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import sensible from '@fastify/sensible';
 import { schedulerRoutes } from './routes/scheduler';
+import { configRoutes } from './routes/config';
 import { startCron, stopCron } from './services/cronService';
 import { closeQueue } from './services/queueService';
 
@@ -22,6 +23,7 @@ app.get('/health', async () => ({ status: 'ok', service: 'scheduler-service' }))
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 app.register(schedulerRoutes, { prefix: '/api/v1' });
+app.register(configRoutes, { prefix: '/api/v1' });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 

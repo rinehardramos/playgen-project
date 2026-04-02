@@ -90,7 +90,7 @@ function randomFrom<T>(arr: T[]): T {
  * Pick the best candidate song for a slot.
  * Returns null if candidates array is empty.
  */
-function pickBestCandidate(
+export function pickBestCandidate(
   candidates: CandidateSong[],
   recentHistory: PlayHistoryEntry[],
 ): CandidateSong | null {
@@ -141,7 +141,7 @@ function pickBestCandidate(
  * relaxGap: skip min_gap_hours check
  * relaxDayLimit: skip max_plays_per_day check
  */
-function filterCandidates(
+export function filterCandidates(
   candidates: CandidateSong[],
   rules: RotationRules,
   recentHistory: PlayHistoryEntry[],
@@ -373,7 +373,7 @@ export async function generatePlaylist(
            AND s.category_id = $2
            AND s.is_active = true
            AND (
-             EXISTS (SELECT 1 FROM song_slots ss WHERE ss.song_id = s.id AND ss.hour = $3)
+             EXISTS (SELECT 1 FROM song_slots ss WHERE ss.song_id = s.id AND ss.eligible_hour = $3)
              OR NOT EXISTS (SELECT 1 FROM song_slots ss2 WHERE ss2.song_id = s.id)
            )`,
         [stationId, slot.required_category_id, slot.hour],
@@ -489,9 +489,9 @@ export async function generatePlaylist(
       const now = new Date();
       for (const entry of newEntries) {
         await client.query(
-          `INSERT INTO play_history (station_id, song_id, played_at, playlist_id)
-           VALUES ($1, $2, $3, $4)`,
-          [stationId, entry.song_id, now, playlistId],
+          `INSERT INTO play_history (station_id, song_id, played_at)
+           VALUES ($1, $2, $3)`,
+          [stationId, entry.song_id, now],
         );
       }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth';
@@ -11,7 +11,7 @@ type PlaylistStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'exported'
 
 interface Playlist {
   id: string;
-  date: string; // ISO date string YYYY-MM-DD
+  date: string;
   status: PlaylistStatus;
   template_name?: string;
   station_id: string;
@@ -20,6 +20,11 @@ interface Playlist {
 interface Station {
   id: string;
   name: string;
+}
+
+interface GenerateJob {
+  date: string;
+  job_id: string;
 }
 
 const STATUS_STYLES: Record<PlaylistStatus, string> = {
@@ -58,8 +63,18 @@ export default function PlaylistsPage() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Month-batch generation state
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // Per-day generation state: date -> 'pending' | 'done' | 'failed'
+  const [dayGenerating, setDayGenerating] = useState<Record<string, boolean>>({});
+
+  // Polling ref
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeJobsRef = useRef<GenerateJob[]>([]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -67,13 +82,12 @@ export default function PlaylistsPage() {
       return;
     }
     fetchStations();
+    return () => stopPolling();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   useEffect(() => {
-    if (selectedStation) {
-      fetchPlaylists();
-    }
+    if (selectedStation) fetchPlaylists();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStation, selectedMonth]);
 
@@ -102,40 +116,129 @@ export default function PlaylistsPage() {
     }
   }
 
-  async function handleGenerate() {
-    setGenerating(true);
+  // ── Per-day generation ────────────────────────────────────────────────────────
+
+  async function handleGenerateDay(date: string) {
+    setDayGenerating((prev) => ({ ...prev, [date]: true }));
     setGenerateError(null);
     try {
+      const res = await api.post<{ job_id: string; playlist_id: string | null }>(
+        `/api/v1/stations/${selectedStation}/playlists/generate`,
+        { date }
+      );
+      // Start polling for this single job
+      startPolling([{ date, job_id: res.job_id }]);
+    } catch (err: unknown) {
+      setGenerateError((err as ApiError).message ?? `Failed to generate ${date}`);
+      setDayGenerating((prev) => ({ ...prev, [date]: false }));
+    }
+  }
+
+  // ── Month-batch generation ────────────────────────────────────────────────────
+
+  async function handleGenerateMonth() {
+    setGenerating(true);
+    setGenerateError(null);
+    setBatchProgress(null);
+    try {
       const [year, month] = selectedMonth.split('-').map(Number);
-      await api.post<void>(`/api/v1/stations/${selectedStation}/playlists/generate/month`, {
-        year,
-        month,
-      });
-      await fetchPlaylists();
+      const res = await api.post<{ queued: number; jobs: GenerateJob[] }>(
+        `/api/v1/stations/${selectedStation}/playlists/generate/month`,
+        { year, month }
+      );
+      if (res.queued === 0) {
+        setGenerateError('All playlists for this month are already approved or generating.');
+        setGenerating(false);
+        return;
+      }
+      setBatchProgress({ done: 0, total: res.queued });
+      startPolling(res.jobs);
     } catch (err: unknown) {
       setGenerateError((err as ApiError).message ?? 'Generation failed');
-    } finally {
       setGenerating(false);
+    }
+  }
+
+  // ── Polling ───────────────────────────────────────────────────────────────────
+
+  function startPolling(jobs: GenerateJob[]) {
+    activeJobsRef.current = jobs;
+    stopPolling();
+    pollRef.current = setInterval(() => pollJobs(), 2000);
+  }
+
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  async function pollJobs() {
+    if (!activeJobsRef.current.length) {
+      stopPolling();
+      return;
+    }
+
+    try {
+      // Fetch latest playlist statuses for the current month
+      const data = await api.get<Playlist[]>(
+        `/api/v1/stations/${selectedStation}/playlists?month=${selectedMonth}`
+      );
+      setPlaylists(data);
+
+      // Check if all active job dates have reached a terminal state
+      const terminalStatuses: PlaylistStatus[] = ['ready', 'approved', 'exported', 'failed'];
+      const playlistMap = new Map(data.map((p) => [p.date, p]));
+
+      const pendingDates = activeJobsRef.current.filter((job) => {
+        const pl = playlistMap.get(job.date);
+        return !pl || !terminalStatuses.includes(pl.status);
+      });
+
+      // Count completed
+      const doneDates = activeJobsRef.current.filter((job) => {
+        const pl = playlistMap.get(job.date);
+        return pl && terminalStatuses.includes(pl.status);
+      });
+
+      if (batchProgress) {
+        setBatchProgress({ done: doneDates.length, total: activeJobsRef.current.length });
+      }
+
+      // Clear per-day spinner for completed dates
+      const cleared: Record<string, boolean> = {};
+      doneDates.forEach((job) => { cleared[job.date] = false; });
+      setDayGenerating((prev) => ({ ...prev, ...cleared }));
+
+      if (pendingDates.length === 0) {
+        // All done
+        stopPolling();
+        activeJobsRef.current = [];
+        setGenerating(false);
+        setBatchProgress(null);
+        setDayGenerating({});
+      } else {
+        activeJobsRef.current = pendingDates;
+      }
+    } catch {
+      // Keep polling on transient errors
     }
   }
 
   function prevMonth() {
     const [year, month] = selectedMonth.split('-').map(Number);
-    const d = new Date(year, month - 2, 1);
-    setSelectedMonth(getMonthKey(d));
+    setSelectedMonth(getMonthKey(new Date(year, month - 2, 1)));
   }
 
   function nextMonth() {
     const [year, month] = selectedMonth.split('-').map(Number);
-    const d = new Date(year, month, 1);
-    setSelectedMonth(getMonthKey(d));
+    setSelectedMonth(getMonthKey(new Date(year, month, 1)));
   }
 
-  // Group playlists by date for calendar-style display
   const playlistsByDate = new Map<string, Playlist>();
-  playlists.forEach((p) => playlistsByDate.set(p.date, p));
+  playlists.forEach((p) => playlistsByDate.set(p.date.slice(0, 10), p));
 
-  // Build all days in the selected month
   const [selYear, selMonth] = selectedMonth.split('-').map(Number);
   const daysInMonth = new Date(selYear, selMonth, 0).getDate();
   const allDays = Array.from({ length: daysInMonth }, (_, i) => {
@@ -145,10 +248,11 @@ export default function PlaylistsPage() {
 
   return (
     <div className="p-6 md:p-8">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-white">Playlists</h1>
         <button
-          onClick={handleGenerate}
+          onClick={handleGenerateMonth}
           disabled={!selectedStation || generating}
           className="btn-primary disabled:opacity-50"
         >
@@ -166,34 +270,36 @@ export default function PlaylistsPage() {
             className="input"
           >
             {stations.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
+              <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
         </div>
       )}
 
       {/* Month picker */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={prevMonth}
-          className="btn-secondary px-3"
-          aria-label="Previous month"
-        >
-          &larr;
-        </button>
+      <div className="flex items-center gap-3 mb-4">
+        <button onClick={prevMonth} className="btn-secondary px-3" aria-label="Previous month">&larr;</button>
         <span className="text-sm font-semibold text-white min-w-[140px] text-center">
           {monthLabel(selectedMonth)}
         </span>
-        <button
-          onClick={nextMonth}
-          className="btn-secondary px-3"
-          aria-label="Next month"
-        >
-          &rarr;
-        </button>
+        <button onClick={nextMonth} className="btn-secondary px-3" aria-label="Next month">&rarr;</button>
       </div>
+
+      {/* Batch progress bar */}
+      {batchProgress && (
+        <div className="mb-4 rounded-lg bg-[#1c1c28] border border-[#2a2a40] px-4 py-3">
+          <div className="flex items-center justify-between text-sm mb-2">
+            <span className="text-gray-400">Generating playlists…</span>
+            <span className="text-white font-medium">{batchProgress.done} / {batchProgress.total}</span>
+          </div>
+          <div className="w-full bg-[#2a2a40] rounded-full h-1.5">
+            <div
+              className="bg-violet-500 h-1.5 rounded-full transition-all duration-500"
+              style={{ width: `${batchProgress.total > 0 ? (batchProgress.done / batchProgress.total) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {(error || generateError) && (
         <div className="mb-4 rounded-md bg-red-900/30 border border-red-700/50 px-4 py-3">
@@ -209,32 +315,61 @@ export default function PlaylistsPage() {
         <div className="space-y-1.5">
           {allDays.map((date) => {
             const playlist = playlistsByDate.get(date);
+            const isDayGenerating = dayGenerating[date];
+
             return (
               <div
                 key={date}
                 className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-[#1c1c28] border border-[#2a2a40] hover:bg-[#24243a] transition-colors"
               >
                 <span className="text-sm text-gray-400 w-48">{formatDateLabel(date)}</span>
-                {playlist ? (
-                  <div className="flex items-center gap-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[playlist.status]}`}
+
+                <div className="flex items-center gap-3">
+                  {playlist ? (
+                    <>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[playlist.status]}`}>
+                        {playlist.status}
+                      </span>
+                      {playlist.template_name && (
+                        <span className="text-xs text-gray-500">{playlist.template_name}</span>
+                      )}
+                      <Link
+                        href={`/playlists/${playlist.id}`}
+                        className="text-xs text-violet-400 hover:text-violet-300 font-medium"
+                      >
+                        View →
+                      </Link>
+                      {/* Regenerate for failed/ready playlists */}
+                      {(playlist.status === 'failed' || playlist.status === 'ready' || playlist.status === 'draft') && (
+                        <button
+                          onClick={() => handleGenerateDay(date)}
+                          disabled={isDayGenerating || generating}
+                          className="text-xs text-gray-500 hover:text-violet-400 disabled:opacity-40 font-medium transition-colors"
+                        >
+                          {isDayGenerating ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin inline-block" />
+                              Generating
+                            </span>
+                          ) : 'Regenerate'}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleGenerateDay(date)}
+                      disabled={isDayGenerating || generating}
+                      className="text-xs text-violet-400 hover:text-violet-300 disabled:opacity-40 font-medium transition-colors"
                     >
-                      {playlist.status}
-                    </span>
-                    {playlist.template_name && (
-                      <span className="text-xs text-gray-500">{playlist.template_name}</span>
-                    )}
-                    <Link
-                      href={`/playlists/${playlist.id}`}
-                      className="text-xs text-violet-400 hover:text-violet-300 font-medium"
-                    >
-                      View &rarr;
-                    </Link>
-                  </div>
-                ) : (
-                  <span className="text-xs text-gray-600 italic">No playlist</span>
-                )}
+                      {isDayGenerating ? (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin inline-block" />
+                          Generating…
+                        </span>
+                      ) : '+ Generate'}
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
