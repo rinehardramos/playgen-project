@@ -78,3 +78,23 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 - **nginx env-var template**: `gateway/nginx.conf` converted to `nginx.conf.template`; upstream hostnames injected via `AUTH_HOST`, `STATION_HOST`, etc. — works locally (Docker service names) and on Railway (`*.railway.internal`)
 - **Production CORS**: `ALLOWED_ORIGIN` env var on gateway allows Vercel app origin alongside localhost
 - Updated `.env.example` with cloud service connection string examples and Railway dashboard instructions
+
+---
+
+## [1.04] - 2026-04-03
+
+### Added
+- `frontend/src/app/settings/page.tsx` — settings page
+- `frontend/src/app/stations/page.tsx` — stations management page
+- `frontend/src/app/ClientShell.tsx` — client-side shell component
+- `shared/db/src/seeds/dev-sample.sql` — idempotent dev sample seed (categories, songs, templates for Test Station)
+- `services/scheduler/src/routes/config.ts` — rotation-rules and station config REST routes extracted into dedicated router
+- `services/scheduler/tests/integration/generation.test.ts` — integration test for playlist generation engine
+- Unit tests: `authService.test.ts`, `jwtService.test.ts`, `songService.test.ts`, `exportService.test.ts`, `analyticsService.test.ts`
+- `vitest.config.ts` added to analytics, playlist, auth, library, station, scheduler services
+- `pnpm-lock.yaml` committed for reproducible installs
+
+### Changed
+- `services/analytics/package.json` — add `vitest` dev dependency, `test` and `test:unit` scripts
+- `services/scheduler/package.json` — add `test:unit` and `test:integration` split scripts
+- `services/auth/vitest.config.ts` — add path aliases for shared workspace packages

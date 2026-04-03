@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+import jwt from 'jsonwebtoken';
 import { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken } from '../../src/services/jwtService';
 import type { JwtPayload } from '@playgen/types';
 
@@ -38,14 +39,11 @@ describe('signAccessToken / verifyAccessToken', () => {
   });
 
   it('throws on a token signed with wrong secret', () => {
-    const badToken = signAccessToken(mockPayload).replace(
-      process.env.JWT_ACCESS_SECRET!,
-      'wrong-secret'
-    );
-    // Sign with a different secret to force failure
-    process.env.JWT_ACCESS_SECRET = 'totally-different-secret-for-test';
-    expect(() => verifyAccessToken(badToken)).toThrow();
-    process.env.JWT_ACCESS_SECRET = 'test-access-secret-that-is-long-enough';
+    // Sign with a completely different secret using jsonwebtoken directly —
+    // jwtService captures ACCESS_SECRET as a module-level const, so mutating
+    // process.env after import has no effect. This tests the real behaviour.
+    const wrongSecretToken = jwt.sign(mockPayload as object, 'wrong-secret-entirely', { expiresIn: 900 });
+    expect(() => verifyAccessToken(wrongSecretToken)).toThrow();
   });
 
   it('includes iat and exp claims', () => {
