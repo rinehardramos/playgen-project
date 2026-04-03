@@ -103,9 +103,9 @@ importers:
       '@playgen/types':
         specifier: workspace:*
         version: link:../../shared/types
-      bcrypt:
-        specifier: ^5.1.1
-        version: 5.1.1
+      bcryptjs:
+        specifier: ^2.4.3
+        version: 2.4.3
       fastify:
         specifier: ^4.27.0
         version: 4.29.1
@@ -116,9 +116,9 @@ importers:
         specifier: ^8.11.0
         version: 8.20.0
     devDependencies:
-      '@types/bcrypt':
-        specifier: ^5.0.2
-        version: 5.0.2
+      '@types/bcryptjs':
+        specifier: ^2.4.6
+        version: 2.4.6
       '@types/jsonwebtoken':
         specifier: ^9.0.6
         version: 9.0.10

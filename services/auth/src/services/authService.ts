@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { getPool } from '../db';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from './jwtService';
