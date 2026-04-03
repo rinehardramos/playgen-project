@@ -98,3 +98,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 - `services/analytics/package.json` — add `vitest` dev dependency, `test` and `test:unit` scripts
 - `services/scheduler/package.json` — add `test:unit` and `test:integration` split scripts
 - `services/auth/vitest.config.ts` — add path aliases for shared workspace packages
+
+---
+
+## [1.05] - 2026-04-03
+
+### Fixed
+- All 6 service-level `db.ts` files now support `DATABASE_URL` env var with SSL (Supabase / Railway Postgres); previously only `shared/db/src/client.ts` was updated, leaving all services using hardcoded `POSTGRES_*` vars
+- `gateway/Dockerfile` — added explicit `EXPOSE 80` so Railway correctly detects the gateway port
+- `services/scheduler/Dockerfile` — removed duplicate `EXPOSE 3004 3005`; now exposes only `3004`
+- `gateway/railway.toml`, `services/station/railway.toml`, `services/scheduler/railway.toml` — refreshed for Railway service creation

@@ -1,11 +1,8 @@
 [build]
 builder = "DOCKERFILE"
-# Root directory must be set to repo root in Railway dashboard
-# so the Docker build context is the full monorepo.
 dockerfilePath = "gateway/Dockerfile"
 
 [deploy]
-# Expose port 80 publicly — this is the API gateway Vercel proxies to.
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"

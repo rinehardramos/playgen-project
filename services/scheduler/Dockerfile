@@ -27,5 +27,5 @@ COPY --from=builder /app/shared/middleware/dist ./shared/middleware/dist
 COPY --from=builder /app/services/scheduler/package.json ./services/scheduler/
 COPY --from=builder /app/services/scheduler/dist ./services/scheduler/dist
 RUN pnpm install --prod --no-frozen-lockfile
-EXPOSE 3004 3005
+EXPOSE 3004
 CMD ["node", "services/scheduler/dist/index.js"]

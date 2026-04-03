@@ -1,6 +1,6 @@
 {
   "name": "playgen",
-  "version": "1.04",
+  "version": "1.05",
   "private": true,
   "packageManager": "pnpm@9.0.0",
   "scripts": {
