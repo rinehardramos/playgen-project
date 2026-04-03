@@ -2,19 +2,11 @@
 # works both in local Docker Compose (auth, station, …) and on Railway
 # (auth.railway.internal, station.railway.internal, …).
 #
-# Required env vars (set in docker-compose.yml or Railway dashboard):
+# Required env vars:
 #   AUTH_HOST, STATION_HOST, LIBRARY_HOST, SCHEDULER_HOST,
-#   PLAYLIST_HOST, ANALYTICS_HOST, FRONTEND_HOST
+#   PLAYLIST_HOST, ANALYTICS_HOST, FRONTEND_HOST, DNS_RESOLVER
 
-upstream auth        { server ${AUTH_HOST}:3001; }
-upstream station     { server ${STATION_HOST}:3002; }
-upstream library     { server ${LIBRARY_HOST}:3003; }
-upstream scheduler   { server ${SCHEDULER_HOST}:3004; }
-upstream playlist    { server ${PLAYLIST_HOST}:3005; }
-upstream analytics   { server ${ANALYTICS_HOST}:3006; }
-
-# Use Docker's / Railway's internal DNS so upstream hosts are resolved
-# at request-time, not at nginx startup.
+# DNS resolver for runtime host resolution (required for set $var + proxy_pass pattern)
 resolver ${DNS_RESOLVER} valid=10s ipv6=off;
 
 server {
@@ -44,7 +36,8 @@ server {
 
     # ─── Auth routes ─────────────────────────────────────────────
     location /api/v1/auth/ {
-        proxy_pass http://auth;
+        set $svc http://${AUTH_HOST}:3001;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
@@ -52,7 +45,8 @@ server {
 
     # ─── Company & User & Role routes ────────────────────────────
     location ~ ^/api/v1/(companies|users|roles) {
-        proxy_pass http://station;
+        set $svc http://${STATION_HOST}:3002;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
@@ -60,7 +54,8 @@ server {
 
     # ─── Scheduler: cron + rotation-rules config ─────────────────
     location ~ ^/api/v1/stations/[^/]+/(config|cron|rotation-rules) {
-        proxy_pass http://scheduler;
+        set $svc http://${SCHEDULER_HOST}:3004;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
@@ -68,15 +63,17 @@ server {
 
     # ─── Scheduler: playlist generation ─────────────────────────
     location ~ ^/api/v1/stations/[^/]+/playlists/generate {
-        proxy_pass http://scheduler;
+        set $svc http://${SCHEDULER_HOST}:3004;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
     }
 
-    # ─── Analytics: heatmap + over/underplayed ───────────────────
+    # ─── Analytics ───────────────────────────────────────────────
     location ~ ^/api/v1/stations/[^/]+/analytics {
-        proxy_pass http://analytics;
+        set $svc http://${ANALYTICS_HOST}:3006;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
@@ -84,55 +81,62 @@ server {
 
     # ─── Library: songs + categories ────────────────────────────
     location ~ ^/api/v1/stations/[^/]+/(songs|categories) {
-        proxy_pass http://library;
+        set $svc http://${LIBRARY_HOST}:3003;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
     }
 
-    # ─── Library: templates (per-station) ────────────────────────
+    # ─── Library: templates ───────────────────────────────────────
     location ~ ^/api/v1/stations/[^/]+/templates {
-        proxy_pass http://library;
+        set $svc http://${LIBRARY_HOST}:3003;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
     }
 
-    # ─── Scheduler: station-level jobs list ──────────────────────
+    # ─── Scheduler: station-level jobs ───────────────────────────
     location ~ ^/api/v1/stations/[^/]+/jobs {
-        proxy_pass http://scheduler;
+        set $svc http://${SCHEDULER_HOST}:3004;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
     }
 
-    # ─── Playlist: station playlists list ────────────────────────
+    # ─── Playlist: station playlists ─────────────────────────────
     location ~ ^/api/v1/stations/[^/]+/playlists {
-        proxy_pass http://playlist;
+        set $svc http://${PLAYLIST_HOST}:3005;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
     }
 
-    # ─── Station: catch-all for remaining station routes ─────────
+    # ─── Station: catch-all ───────────────────────────────────────
     location ~ ^/api/v1/stations/ {
-        proxy_pass http://station;
+        set $svc http://${STATION_HOST}:3002;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
     }
 
-    # ─── Resource-level routes ────────────────────────────────────
+    # ─── Library: resource-level routes ──────────────────────────
     location ~ ^/api/v1/(songs|categories)/ {
-        proxy_pass http://library;
+        set $svc http://${LIBRARY_HOST}:3003;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
     }
 
-    # ─── Library: template resource routes ───────────────────────
+    # ─── Library: templates resource ─────────────────────────────
     location ~ ^/api/v1/templates/ {
-        proxy_pass http://library;
+        set $svc http://${LIBRARY_HOST}:3003;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
@@ -140,7 +144,8 @@ server {
 
     # ─── Scheduler: job resource routes ──────────────────────────
     location ~ ^/api/v1/jobs/ {
-        proxy_pass http://scheduler;
+        set $svc http://${SCHEDULER_HOST}:3004;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
@@ -148,7 +153,8 @@ server {
 
     # ─── Playlist: playlist + entry resource routes ───────────────
     location ~ ^/api/v1/playlists/ {
-        proxy_pass http://playlist;
+        set $svc http://${PLAYLIST_HOST}:3005;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
@@ -156,7 +162,8 @@ server {
 
     # ─── Analytics: per-song history ─────────────────────────────
     location ~ ^/api/v1/songs/[^/]+/history {
-        proxy_pass http://analytics;
+        set $svc http://${ANALYTICS_HOST}:3006;
+        proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Request-ID $request_id;
@@ -169,8 +176,8 @@ server {
     }
 
     # ─── Frontend catch-all ───────────────────────────────────────
-    # Only active when FRONTEND_HOST is set (local Docker Compose).
-    # On Railway/Vercel the frontend is served by Vercel — omit FRONTEND_HOST.
+    # Active when FRONTEND_HOST is set (local Docker Compose).
+    # On Railway/Vercel the frontend is on Vercel — leave FRONTEND_HOST blank.
     location / {
         set $fe_upstream http://${FRONTEND_HOST}:3000;
         proxy_pass $fe_upstream;

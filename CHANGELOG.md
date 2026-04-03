@@ -146,6 +146,14 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.11] - 2026-04-03
+
+### Fixed
+- `gateway/nginx.conf.template` — removed static `upstream {}` blocks which caused nginx to resolve `.railway.internal` hostnames at startup (before Railway's internal DNS is ready); replaced with `set $svc http://HOST:PORT` + `proxy_pass $svc` pattern on every location so all DNS resolution is deferred to request time
+- `gateway/Dockerfile` — added `10-detect-dns.sh` entrypoint script that auto-detects the container DNS resolver from `/etc/resolv.conf` at startup; removes dependency on hardcoded `DNS_RESOLVER=127.0.0.11` which only works in Docker Compose
+
+---
+
 ## [1.10] - 2026-04-03
 
 ### Fixed
