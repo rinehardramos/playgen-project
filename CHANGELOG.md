@@ -146,6 +146,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.13] - 2026-04-03
+
+### Fixed
+- `gateway/docker-start.sh` — prefer IPv4 nameserver but fall back to IPv6 (wrapped in nginx brackets `[addr]`) when only IPv6 is available; Railway containers expose their private DNS as `fd12::10` (IPv6) which is the only resolver that can resolve `.railway.internal` hostnames
+
+---
+
 ## [1.12] - 2026-04-03
 
 ### Fixed
