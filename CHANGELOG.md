@@ -50,3 +50,18 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 - Fastify microservice backend (auth, library, scheduler, playlist, station, analytics)
 - PostgreSQL 16 + Redis 7 + BullMQ infrastructure
 - nginx reverse-proxy gateway with JWT auth forwarding
+
+---
+
+## [1.02] - 2026-04-03
+
+### Added
+- `frontend/Dockerfile` — multi-stage Next.js standalone build (deps → builder → runner)
+- `frontend/.dockerignore` — excludes node_modules/.next from build context
+- `frontend` Docker Compose service — frontend now runs as a container alongside the API services
+- nginx `resolver 127.0.0.11` + `set $fe_upstream` — deferred DNS resolution so gateway starts before frontend without errors
+- nginx catch-all `location /` — proxies all non-API traffic to the Next.js frontend container; port 80 now serves the full app
+- `docker-compose.prod.yml` — production overrides: no exposed DB/Redis ports, memory limits, `restart: always`
+- `.github/workflows/deploy.yml` — GitHub Actions CD: triggers on version tags, SSHes into VPS, builds and redeploys
+- `scripts/setup-vps.sh` — one-time Ubuntu/Debian VPS bootstrap (Docker install, deploy user, repo clone)
+- `scripts/setup-ssl.sh` — Let's Encrypt SSL setup via Certbot with nginx HTTPS server block

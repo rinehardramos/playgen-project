@@ -51,6 +51,18 @@ services:
     command: ["node", "dist/migrate.js"]
     restart: "no"
 
+  # ─── Frontend ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        GATEWAY_URL: http://gateway
+    environment:
+      GATEWAY_URL: http://gateway
+      NODE_ENV: production
+    restart: unless-stopped
+
   # ─── API Gateway ────────────────────────────────────────────
   gateway:
     build:

@@ -1,0 +1,78 @@
+# Production overrides — used with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file:
+#   - Removes dev-only exposed ports (postgres, redis)
+#   - Adds deploy resource limits for small VPS (2 vCPU / 2 GB RAM)
+#   - Sets restart policies to always
+#   - Passes NEXT_PUBLIC_API_URL build arg so export links use the real domain
+
+services:
+  postgres:
+    ports: !reset []          # don't expose 5432 publicly
+
+  redis:
+    ports: !reset []          # don't expose 6379 publicly
+
+  frontend:
+    build:
+      args:
+        GATEWAY_URL: http://gateway
+        # Set to your public domain, e.g. https://playgen.example.com
+        NEXT_PUBLIC_API_URL: ${PUBLIC_URL:-}
+    environment:
+      GATEWAY_URL: http://gateway
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  gateway:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+
+  auth:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  station:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  library:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  scheduler:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 192m
+
+  playlist:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  analytics:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 128m
