@@ -135,3 +135,11 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ### Removed
 - All `railway.toml` files (`gateway/`, `services/*/`) — Railway only reads `railway.toml` at the root of each service's configured directory; subdirectory toml files are never auto-detected. Services are now configured entirely through the Railway dashboard (Builder: Dockerfile, Dockerfile Path set per service).
+
+---
+
+## [1.09] - 2026-04-03
+
+### Fixed
+- `gateway/Dockerfile` — `COPY nginx.conf.template` → `COPY gateway/nginx.conf.template` (build context is repo root on Railway; relative path must include subdirectory)
+- `docker-compose.yml` gateway — `context: ./gateway` → `context: .` + `dockerfile: gateway/Dockerfile` (aligns local and Railway build contexts)

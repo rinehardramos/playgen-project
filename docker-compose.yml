@@ -66,8 +66,8 @@ services:
   # ─── API Gateway ────────────────────────────────────────────
   gateway:
     build:
-      context: ./gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: gateway/Dockerfile
     ports:
       - "80:80"
     environment:
