@@ -143,3 +143,18 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 ### Fixed
 - `gateway/Dockerfile` — `COPY nginx.conf.template` → `COPY gateway/nginx.conf.template` (build context is repo root on Railway; relative path must include subdirectory)
 - `docker-compose.yml` gateway — `context: ./gateway` → `context: .` + `dockerfile: gateway/Dockerfile` (aligns local and Railway build contexts)
+
+---
+
+## [1.10] - 2026-04-03
+
+### Fixed
+- `vercel.json` — removed invalid `rootDirectory` property (must be set in Vercel dashboard project settings, not in config file)
+- Moved `vercel.json` from repo root to `frontend/vercel.json` — Vercel reads config relative to the configured Root Directory (`frontend`)
+
+### Added
+- Database migrations applied to Supabase (all 15 migrations + default admin seed)
+- Railway shared variable `DATABASE_URL` updated to use Supabase transaction pooler URL (`aws-1-ap-northeast-1`, port 6543)
+- `REDIS_URL` set on Railway scheduler service (Upstash)
+- Public Railway domain generated for gateway: `gateway-production-db99.up.railway.app`
+- All 7 Railway services redeployed with working `DATABASE_URL` + `REDIS_URL`
