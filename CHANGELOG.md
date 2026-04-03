@@ -128,3 +128,10 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ### Changed
 - `.gitignore` — added `*.tsbuildinfo` to exclude TypeScript build artifacts
+
+---
+
+## [1.08] - 2026-04-03
+
+### Removed
+- All `railway.toml` files (`gateway/`, `services/*/`) — Railway only reads `railway.toml` at the root of each service's configured directory; subdirectory toml files are never auto-detected. Services are now configured entirely through the Railway dashboard (Builder: Dockerfile, Dockerfile Path set per service).
