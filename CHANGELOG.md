@@ -108,3 +108,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 - `gateway/Dockerfile` — added explicit `EXPOSE 80` so Railway correctly detects the gateway port
 - `services/scheduler/Dockerfile` — removed duplicate `EXPOSE 3004 3005`; now exposes only `3004`
 - `gateway/railway.toml`, `services/station/railway.toml`, `services/scheduler/railway.toml` — refreshed for Railway service creation
+
+---
+
+## [1.06] - 2026-04-03
+
+### Changed
+- Production domain set to `www.playgen.site`
+- `frontend/src/app/playlists/[id]/page.tsx` — export link base URL falls back to `''` (relative URL) instead of `http://localhost`; set `NEXT_PUBLIC_API_URL=https://www.playgen.site` in Vercel for absolute export links
+- `.env.example` — updated `NEXT_PUBLIC_API_URL` and `ALLOWED_ORIGIN` examples to use `www.playgen.site`
+- `gateway/nginx.conf.template` — updated `ALLOWED_ORIGIN` comment to reference `www.playgen.site`

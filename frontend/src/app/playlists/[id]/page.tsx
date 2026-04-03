@@ -50,7 +50,10 @@ const STATUS_STYLES: Record<PlaylistStatus, string> = {
   failed: 'bg-red-900/30 text-red-400',
 };
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost';
+// Empty string = relative URL so Vercel proxies /api/v1/* to the gateway.
+// Set NEXT_PUBLIC_API_URL=https://www.playgen.site in production to make export
+// links absolute (required for download prompts in some browsers).
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 export default function PlaylistDetailPage() {
   const router = useRouter();

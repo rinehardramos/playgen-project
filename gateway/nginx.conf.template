@@ -29,7 +29,7 @@ server {
     if ($http_origin ~* "^https?://[a-zA-Z0-9-]+\.vercel\.app$") {
         set $cors_origin $http_origin;
     }
-    # Production: set ALLOWED_ORIGIN=https://your-app.vercel.app in gateway env
+    # Production: set ALLOWED_ORIGIN=https://www.playgen.site in Railway gateway env vars
     if ($http_origin = "${ALLOWED_ORIGIN}") { set $cors_origin $http_origin; }
 
     add_header Access-Control-Allow-Origin $cors_origin always;
