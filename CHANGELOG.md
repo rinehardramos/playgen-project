@@ -146,6 +146,15 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.12] - 2026-04-03
+
+### Fixed
+- `gateway/Dockerfile` — replaced nginx template entrypoint mechanism with a custom `docker-start.sh` CMD; `/docker-entrypoint.d/` scripts run in subshells and cannot export env vars to subsequent scripts, so `DNS_RESOLVER` was never available to `envsubst`
+- `gateway/docker-start.sh` — auto-detects DNS resolver from `/etc/resolv.conf` at startup, exports it, then runs `envsubst` with an explicit variable list before starting nginx; works on both Docker Compose (`127.0.0.11`) and Railway (cluster DNS)
+- Removed hardcoded `DNS_RESOLVER=127.0.0.11` from Railway gateway env vars (Docker-only value that fails on Railway)
+
+---
+
 ## [1.11] - 2026-04-03
 
 ### Fixed

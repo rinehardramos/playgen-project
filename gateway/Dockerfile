@@ -1,12 +1,11 @@
 FROM nginx:1.25-alpine
 
-# Auto-detect DNS resolver at startup (runs before envsubst on templates)
-COPY gateway/10-detect-dns.sh /docker-entrypoint.d/10-detect-dns.sh
-RUN chmod +x /docker-entrypoint.d/10-detect-dns.sh
+# Custom startup: auto-detects DNS resolver and runs envsubst before nginx.
+# Bypasses the nginx Docker template mechanism so env vars are correctly
+# propagated (entrypoint.d scripts run in subshells and cannot export vars).
+COPY gateway/nginx.conf.template /etc/nginx/nginx.conf.template
+COPY gateway/docker-start.sh /docker-start.sh
+RUN chmod +x /docker-start.sh
 
-# The official nginx image runs envsubst on files in /etc/nginx/templates/
-# at container start, outputting to /etc/nginx/conf.d/ with .template suffix stripped.
-COPY gateway/nginx.conf.template /etc/nginx/templates/default.conf.template
-
-# Explicit EXPOSE so Railway detects the correct port
 EXPOSE 80
+CMD ["/docker-start.sh"]
