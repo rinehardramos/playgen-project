@@ -70,6 +70,17 @@ services:
       dockerfile: Dockerfile
     ports:
       - "80:80"
+    environment:
+      # Docker Compose internal hostnames — override on Railway with *.railway.internal
+      AUTH_HOST:      auth
+      STATION_HOST:   station
+      LIBRARY_HOST:   library
+      SCHEDULER_HOST: scheduler
+      PLAYLIST_HOST:  playlist
+      ANALYTICS_HOST: analytics
+      FRONTEND_HOST:  frontend
+      DNS_RESOLVER:   "127.0.0.11"
+      ALLOWED_ORIGIN: ""
     depends_on:
       - auth
       - station

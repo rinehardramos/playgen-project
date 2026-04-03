@@ -2,11 +2,15 @@ import { Queue, Worker, Job } from 'bullmq';
 import { generatePlaylist, GeneratePlaylistParams } from './generationEngine';
 
 // ─── Redis connection config ──────────────────────────────────────────────────
+// REDIS_URL takes precedence (Railway Redis, Upstash, etc.)
+// Falls back to individual REDIS_HOST / REDIS_PORT for local Docker Compose.
 
-const redisConnection = {
-  host: process.env.REDIS_HOST ?? 'redis',
-  port: Number(process.env.REDIS_PORT ?? 6379),
-};
+const redisConnection = process.env.REDIS_URL
+  ? { url: process.env.REDIS_URL }
+  : {
+      host: process.env.REDIS_HOST ?? 'redis',
+      port: Number(process.env.REDIS_PORT ?? 6379),
+    };
 
 // ─── Queue & Worker setup ─────────────────────────────────────────────────────
 

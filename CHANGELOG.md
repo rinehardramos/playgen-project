@@ -65,3 +65,16 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 - `.github/workflows/deploy.yml` — GitHub Actions CD: triggers on version tags, SSHes into VPS, builds and redeploys
 - `scripts/setup-vps.sh` — one-time Ubuntu/Debian VPS bootstrap (Docker install, deploy user, repo clone)
 - `scripts/setup-ssl.sh` — Let's Encrypt SSL setup via Certbot with nginx HTTPS server block
+
+---
+
+## [1.03] - 2026-04-03
+
+### Added
+- **Vercel deployment**: `vercel.json` at repo root — sets `rootDirectory: frontend`, auto-deploys on push to `main`
+- **Railway deployment**: `railway.toml` in each service directory (`gateway`, `auth`, `station`, `library`, `scheduler`, `playlist`, `analytics`) — configure Root Directory to repo root + Config Path to service path in Railway dashboard
+- **Supabase / managed Postgres**: `shared/db/src/client.ts` now accepts `DATABASE_URL` env var with automatic SSL (`rejectUnauthorized: false`); falls back to individual `POSTGRES_*` vars for local dev
+- **Railway Redis / Upstash**: scheduler `queueService.ts` now accepts `REDIS_URL` env var; falls back to `REDIS_HOST` + `REDIS_PORT`
+- **nginx env-var template**: `gateway/nginx.conf` converted to `nginx.conf.template`; upstream hostnames injected via `AUTH_HOST`, `STATION_HOST`, etc. — works locally (Docker service names) and on Railway (`*.railway.internal`)
+- **Production CORS**: `ALLOWED_ORIGIN` env var on gateway allows Vercel app origin alongside localhost
+- Updated `.env.example` with cloud service connection string examples and Railway dashboard instructions
