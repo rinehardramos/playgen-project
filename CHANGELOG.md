@@ -118,3 +118,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 - `frontend/src/app/playlists/[id]/page.tsx` — export link base URL falls back to `''` (relative URL) instead of `http://localhost`; set `NEXT_PUBLIC_API_URL=https://www.playgen.site` in Vercel for absolute export links
 - `.env.example` — updated `NEXT_PUBLIC_API_URL` and `ALLOWED_ORIGIN` examples to use `www.playgen.site`
 - `gateway/nginx.conf.template` — updated `ALLOWED_ORIGIN` comment to reference `www.playgen.site`
+
+---
+
+## [1.07] - 2026-04-03
+
+### Added
+- `frontend/.env.development` — local dev gateway URL config (`GATEWAY_URL=http://localhost`)
+
+### Changed
+- `.gitignore` — added `*.tsbuildinfo` to exclude TypeScript build artifacts
