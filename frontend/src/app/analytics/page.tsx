@@ -34,6 +34,13 @@ interface UnderplayedRow {
   last_played_at: string | null;
 }
 
+interface CategoryDistributionRow {
+  category_code: string;
+  category_label: string;
+  total_plays: number;
+  percentage: number;
+}
+
 function cellColor(count: number): string {
   if (count === 0) return 'bg-[#1c1c28] text-gray-600';
   if (count >= 3) return 'bg-red-900/30 text-red-400 font-semibold';
@@ -44,6 +51,21 @@ function cellColor(count: number): string {
 function shortDate(iso: string): string {
   const d = new Date(iso + 'T00:00:00');
   return d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
+}
+
+const BAR_COLORS = [
+  'bg-violet-500',
+  'bg-blue-500',
+  'bg-green-500',
+  'bg-yellow-500',
+  'bg-pink-500',
+  'bg-orange-500',
+  'bg-teal-500',
+  'bg-red-500',
+];
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function AnalyticsPage() {
@@ -60,6 +82,12 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Category distribution by date
+  const [distDate, setDistDate] = useState<string>(todayIso());
+  const [distribution, setDistribution] = useState<CategoryDistributionRow[]>([]);
+  const [distLoading, setDistLoading] = useState(false);
+  const [distError, setDistError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!currentUser) {
       router.replace('/login');
@@ -72,6 +100,7 @@ export default function AnalyticsPage() {
   useEffect(() => {
     if (selectedStation) {
       fetchAnalytics(selectedStation);
+      fetchDistribution(selectedStation, distDate);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStation]);
@@ -112,6 +141,26 @@ export default function AnalyticsPage() {
     }
   }
 
+  async function fetchDistribution(stationId: string, date: string) {
+    setDistLoading(true);
+    setDistError(null);
+    try {
+      const data = await api.get<CategoryDistributionRow[]>(
+        `/api/v1/stations/${stationId}/analytics/category-distribution?date=${date}`,
+      );
+      setDistribution(data);
+    } catch (err: unknown) {
+      setDistError((err as ApiError).message ?? 'Failed to load distribution');
+    } finally {
+      setDistLoading(false);
+    }
+  }
+
+  function handleDistDateChange(newDate: string) {
+    setDistDate(newDate);
+    if (selectedStation) fetchDistribution(selectedStation, newDate);
+  }
+
   const hasData = heatmap.length > 0 || overplayed.length > 0 || underplayed.length > 0;
 
   return (
@@ -140,6 +189,55 @@ export default function AnalyticsPage() {
       {error && (
         <div className="mb-4 bg-red-900/30 border border-red-700/50 text-red-400 px-4 py-3 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+
+      {/* ── Category Distribution by Date ──────────────────────────────── */}
+      {selectedStation && (
+        <div className="card mb-8 p-5">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-white">Category Distribution</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Scheduled songs per category on a given day</p>
+            </div>
+            <input
+              type="date"
+              value={distDate}
+              onChange={(e) => handleDistDateChange(e.target.value)}
+              className="input text-sm w-auto"
+            />
+          </div>
+
+          {distError && (
+            <p className="text-xs text-red-400 mb-3">{distError}</p>
+          )}
+
+          {distLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : distribution.length === 0 ? (
+            <p className="text-center text-gray-600 text-xs py-8">
+              No playlist scheduled for this date.
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {distribution.map((row, idx) => (
+                <div key={row.category_code} className="flex items-center gap-3">
+                  <span className="text-xs text-gray-400 w-28 truncate shrink-0">{row.category_label}</span>
+                  <div className="flex-1 h-5 bg-[#1c1c28] rounded overflow-hidden">
+                    <div
+                      className={`h-full rounded ${BAR_COLORS[idx % BAR_COLORS.length]} transition-all duration-500`}
+                      style={{ width: `${row.percentage}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-semibold text-gray-300 w-16 text-right shrink-0">
+                    {row.percentage}% <span className="text-gray-600 font-normal">({row.total_plays})</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

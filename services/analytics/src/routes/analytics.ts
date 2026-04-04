@@ -31,12 +31,23 @@ export async function analyticsRoutes(app: FastifyInstance) {
     return analyticsService.getUnderplayedSongs(id);
   });
 
-  // ── GET /stations/:id/analytics/category-distribution?days=7 ─────────────
+  // ── GET /stations/:id/analytics/category-distribution?days=7 ────────────
+  // ── GET /stations/:id/analytics/category-distribution?date=YYYY-MM-DD ───
   app.get('/stations/:id/analytics/category-distribution', {
     onRequest: [requirePermission('analytics:read'), requireStationAccess()],
-  }, async (req) => {
+  }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const query = req.query as { days?: string };
+    const query = req.query as { days?: string; date?: string };
+
+    if (query.date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(query.date)) {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'date must be in YYYY-MM-DD format' },
+        });
+      }
+      return analyticsService.getCategoryDistributionByDate(id, query.date);
+    }
+
     const days = query.days ? parseInt(query.days, 10) : 7;
     return analyticsService.getCategoryDistribution(id, days);
   });
