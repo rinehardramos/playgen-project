@@ -14,6 +14,7 @@ type DjSegmentType = 'show_intro' | 'song_intro' | 'song_transition' | 'show_out
 
 interface DjSegment {
   id: string;
+  playlist_entry_id: string | null;
   segment_type: DjSegmentType;
   position: number;
   script_text: string;
