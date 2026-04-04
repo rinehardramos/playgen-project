@@ -93,6 +93,41 @@ export async function resetUserPassword(id: string, newPassword: string): Promis
   return (rowCount ?? 0) > 0;
 }
 
+export async function updateUserProfile(id: string, data: {
+  display_name?: string;
+  password?: string;
+}): Promise<UserWithRole | null> {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  let i = 1;
+
+  if (data.display_name !== undefined) {
+    fields.push(`display_name = $${i++}`);
+    values.push(data.display_name);
+  }
+
+  if (data.password !== undefined) {
+    const password_hash = await bcrypt.hash(data.password, 12);
+    fields.push(`password_hash = $${i++}`);
+    values.push(password_hash);
+  }
+
+  if (!fields.length) return getUser(id);
+
+  fields.push('updated_at = NOW()');
+  values.push(id);
+
+  const { rows } = await getPool().query<UserWithRole>(
+    `WITH updated AS (
+       UPDATE users SET ${fields.join(', ')} WHERE id = $${i} RETURNING *
+     )
+     SELECT u.*, r.code AS role_code, r.label AS role_label
+     FROM updated u JOIN roles r ON r.id = u.role_id`,
+    values
+  );
+  return rows[0] ?? null;
+}
+
 export async function listRoles(companyId: string) {
   const { rows } = await getPool().query(
     'SELECT * FROM roles WHERE company_id = $1 OR company_id IS NULL ORDER BY code',

@@ -36,9 +36,12 @@ server {
         return 204;
     }
 
-    # ─── Auth routes ─────────────────────────────────────────────
-    location /api/v1/auth/ {
-        set $svc http://${AUTH_HOST}:3001;
+    # ─── Auth: login, logout, me ──────────────────────────────────
+    location ~ ^/api/v1/(auth|me) {
+        set $svc http://${STATION_HOST}:3002;
+        if ($uri ~ ^/api/v1/auth) {
+            set $svc http://${AUTH_HOST}:3001;
+        }
         proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
