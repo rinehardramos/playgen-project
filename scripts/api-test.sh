@@ -242,6 +242,16 @@ if [ -n "$STATION_ID" ]; then
   fi
 fi
 
+DASH_RESP=$(body -H "Authorization: Bearer $ACCESS_TOKEN" \
+  "$GATEWAY/api/v1/dashboard/stats")
+if echo "$DASH_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'active_songs' in d" 2>/dev/null; then
+  pass "GET /api/v1/dashboard/stats → valid JSON with active_songs"
+else
+  fail "GET /api/v1/dashboard/stats" "${DASH_RESP:0:120}"
+fi
+
+assert_status "GET /api/v1/dashboard/stats (no token) → 401" "401" "$GATEWAY/api/v1/dashboard/stats"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 10. DJ service
 # NOTE: DJ service must be created and deployed on Railway separately.
