@@ -40,15 +40,16 @@ export async function createProfile(
   }
 
   const { rows } = await pool.query<DjProfile>(
-    `INSERT INTO dj_profiles (company_id, name, personality, voice_style,
+    `INSERT INTO dj_profiles (company_id, name, personality, voice_style, persona_config,
        llm_model, llm_temperature, tts_provider, tts_voice_id, is_default, is_active)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      RETURNING *`,
     [
       company_id,
       data.name,
       data.personality,
       data.voice_style,
+      JSON.stringify(data.persona_config || {}),
       data.llm_model,
       data.llm_temperature,
       data.tts_provider,
@@ -79,12 +80,13 @@ export async function updateProfile(
      SET name = COALESCE($3, name),
          personality = COALESCE($4, personality),
          voice_style = COALESCE($5, voice_style),
-         llm_model = COALESCE($6, llm_model),
-         llm_temperature = COALESCE($7, llm_temperature),
-         tts_provider = COALESCE($8, tts_provider),
-         tts_voice_id = COALESCE($9, tts_voice_id),
-         is_default = COALESCE($10, is_default),
-         is_active = COALESCE($11, is_active),
+         persona_config = COALESCE($6, persona_config),
+         llm_model = COALESCE($7, llm_model),
+         llm_temperature = COALESCE($8, llm_temperature),
+         tts_provider = COALESCE($9, tts_provider),
+         tts_voice_id = COALESCE($10, tts_voice_id),
+         is_default = COALESCE($11, is_default),
+         is_active = COALESCE($12, is_active),
          updated_at = NOW()
      WHERE id = $1 AND company_id = $2
      RETURNING *`,
@@ -93,6 +95,7 @@ export async function updateProfile(
       data.name ?? null,
       data.personality ?? null,
       data.voice_style ?? null,
+      data.persona_config ? JSON.stringify(data.persona_config) : null,
       data.llm_model ?? null,
       data.llm_temperature ?? null,
       data.tts_provider ?? null,
