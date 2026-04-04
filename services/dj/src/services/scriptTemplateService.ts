@@ -52,3 +52,11 @@ export async function updateTemplate(
   );
   return rows[0] ?? null;
 }
+
+export async function deleteTemplate(id: string, station_id: string): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `DELETE FROM dj_script_templates WHERE id = $1 AND station_id = $2`,
+    [id, station_id],
+  );
+  return (rowCount ?? 0) > 0;
+}
