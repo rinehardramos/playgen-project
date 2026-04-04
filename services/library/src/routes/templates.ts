@@ -57,6 +57,20 @@ export async function templateRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
+  app.post('/templates/:id/clone', {
+    onRequest: [requirePermission('library:write')],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { target_station_id } = req.body as { target_station_id: string };
+    
+    if (!target_station_id) {
+      return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'target_station_id is required' } });
+    }
+
+    const template = await templateService.cloneTemplate(id, target_station_id);
+    return reply.code(201).send(template);
+  });
+
   // ── Template Slots (bulk replace) ──────────────────────────────────────────
 
   app.put('/templates/:id/slots', {
