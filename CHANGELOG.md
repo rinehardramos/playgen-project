@@ -9,6 +9,7 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ### Fixed
 - **CD Pipeline**: Switch Vercel `installCommand` from `npm install` to `pnpm install --frozen-lockfile` and `buildCommand` to `pnpm run build` to match the pnpm monorepo setup and fix Vercel production deploy failures
+- **Vercel pnpm module resolution**: Add root `.npmrc` with `shamefully-hoist=true` so pnpm hoists all packages to root `node_modules`, allowing `@tailwindcss/postcss` and other devDependencies to be resolved correctly during Vercel's monorepo build; remove `--cwd frontend` from `vercel deploy` command
 
 ---
 
