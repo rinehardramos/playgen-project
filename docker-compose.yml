@@ -216,6 +216,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: ${DJ_SERVICE_PORT:-3007}
+      STORAGE_LOCAL_PATH: /app/data/audio
+    volumes:
+      - dj_audio_data:/app/data/audio
     depends_on:
       postgres:
         condition: service_healthy
@@ -232,3 +235,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  dj_audio_data:

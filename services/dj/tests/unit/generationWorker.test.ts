@@ -82,7 +82,11 @@ describe('generationWorker', () => {
         tts_voice_id: 'alloy',
       }],
     });
-    // 3. Playlist entries (1 entry)
+    // 3. Playlist info
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ playlist_date: new Date() }],
+    });
+    // 3b. Playlist entries (1 entry)
     mockQuery.mockResolvedValueOnce({
       rows: [
         { id: 'entry-1', hour: 10, position: 0, song_title: 'Song 1', song_artist: 'Artist 1', duration_sec: 180 },

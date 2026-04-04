@@ -35,13 +35,11 @@ export class ElevenLabsTtsAdapter implements TtsAdapter {
       throw new Error(`ElevenLabs TTS failed (${response.status}): ${errBody}`);
     }
 
-    await fs.mkdir(path.dirname(opts.output_path), { recursive: true });
     const buffer = Buffer.from(await response.arrayBuffer());
-    await fs.writeFile(opts.output_path, buffer);
 
     // Estimate duration from file size (128kbps MP3)
     const duration_sec = Math.round((buffer.length / (128000 / 8)) * 10) / 10;
 
-    return { audio_path: opts.output_path, duration_sec };
+    return { audio_data: buffer, duration_sec };
   }
 }

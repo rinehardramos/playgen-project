@@ -6,9 +6,42 @@ import { enqueueDjGeneration } from '../queues/djQueue.js';
 import { generateSegmentTts, loadTtsProviderConfig } from '../services/ttsService.js';
 import type { ReviewScriptRequest, GenerateScriptRequest } from '@playgen/types';
 import { getPool } from '../db.js';
+import { getStorageAdapter } from '../lib/storage/index.js';
 
 export async function scriptRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate);
+
+  // Get segment audio stream
+  app.get<{ Params: { id: string } }>(
+    '/dj/segments/:id/audio',
+    async (req, reply) => {
+      const { id } = req.params;
+      const pool = getPool();
+      const { rows } = await pool.query(
+        `SELECT audio_url FROM dj_segments WHERE id = $1`,
+        [id],
+      );
+      const segment = rows[0];
+      if (!segment?.audio_url) return reply.notFound('Audio not found for this segment');
+
+      // The audio_url is like "/api/v1/dj/audio/company-1/station-1/..."
+      // We need the relative path after "/api/v1/dj/audio/"
+      const prefix = '/api/v1/dj/audio/';
+      if (!segment.audio_url.startsWith(prefix)) {
+        return reply.badRequest('Invalid audio URL format');
+      }
+
+      const relativePath = segment.audio_url.substring(prefix.length);
+      const storage = getStorageAdapter();
+      
+      try {
+        const buffer = await storage.read(relativePath);
+        return reply.type('audio/mpeg').send(buffer);
+      } catch (err) {
+        return reply.notFound('Audio file not found on storage');
+      }
+    },
+  );
 
   // Get the DJ script for a playlist (latest version)
   app.get<{ Params: { playlistId: string } }>(

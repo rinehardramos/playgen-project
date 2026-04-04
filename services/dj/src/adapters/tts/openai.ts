@@ -26,11 +26,8 @@ export class OpenAiTtsAdapter implements TtsAdapter {
       response_format: 'mp3',
     });
 
-    await fs.mkdir(path.dirname(opts.output_path), { recursive: true });
     const buffer = Buffer.from(await response.arrayBuffer());
-    await fs.writeFile(opts.output_path, buffer);
-
-    return { audio_path: opts.output_path, duration_sec: null };
+    return { audio_data: buffer, duration_sec: null };
   }
 }
 

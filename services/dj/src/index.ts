@@ -25,7 +25,7 @@ app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
 // ── Static file serving for TTS audio ────────────────────────────────────────
 
 app.register(fastifyStatic, {
-  root: path.join('/tmp', 'dj-audio'),
+  root: config.storage.localPath,
   prefix: '/api/v1/dj/audio/',
   decorateReply: false,
 });
