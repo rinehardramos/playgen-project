@@ -74,7 +74,7 @@ export default function ProfilePage() {
       }
     } catch (err) {
       const apiErr = err as ApiError;
-      setError(apiErr.error?.message || 'Failed to update profile.');
+      setError(apiErr.message || 'Failed to update profile.');
     } finally {
       setSaving(false);
     }

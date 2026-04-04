@@ -5,7 +5,7 @@ import * as userService from '../services/userService';
 export async function userRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate);
 
-  app.get('/me', async (req) => {
+  app.get('/me', async (req, reply) => {
     const user = await userService.getUser(req.user.sub);
     if (!user) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } });
     return user;
