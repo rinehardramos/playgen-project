@@ -6,6 +6,23 @@ Priorities: `P0` = blocker / must-have MVP | `P1` = important | `P2` = nice-to-h
 
 ---
 
+## 🛡️ Security Fixes (TODO)
+
+- [ ] `HIGH` **Next.js**: HTTP request deserialization DoS. Upgrade `frontend` to `next@>=15.0.8`.
+- [x] `HIGH` **tar**: Arbitrary file creation/overwrite & path traversal. Fixed via `pnpm` override to `>=7.5.11`.
+- [x] `HIGH` **Fastify**: Content-Type validation bypass. Upgraded all services to `fastify@^5.8.4`.
+
+---
+
+## 📦 Security Backlog
+
+- [ ] `MODERATE` **esbuild**: Dev server response read vulnerability. Upgrade to `>=0.25.0`.
+- [ ] `MODERATE` **Next.js**: Image optimizer DoS, HTTP request smuggling, unbounded image cache.
+- [ ] `MODERATE` **Fastify**: Protocol/Host spoofing via headers.
+- [ ] `LOW` **Fastify**: DoS via unbounded memory allocation in `sendWebStream`.
+
+---
+
 ## Phase 1 — Foundation
 
 - [x] `P0` Set up monorepo structure (services/, frontend/, shared/, gateway/)
@@ -43,7 +60,7 @@ Priorities: `P0` = blocker / must-have MVP | `P1` = important | `P2` = nice-to-h
   - Role assignment dropdown (shows company's configured role labels)
   - Station multi-select checkboxes
   - Activate/Deactivate toggle
-- [ ] `P1` Self-service profile page (user can update own display_name + password)
+- [x] `P1` Self-service profile page (user can update own display_name + password)
 - [ ] `P1` User invite flow (generate invite link, user sets own password)
 - [ ] `P1` Admin password reset button
 - [ ] `P2` Audit log for user management actions (who created/modified a user)
@@ -63,7 +80,7 @@ Priorities: `P0` = blocker / must-have MVP | `P1` = important | `P2` = nice-to-h
 - [x] `P1` Song search (title, artist) with pagination — `?search=&limit=` on `GET /stations/:id/songs`
 - [x] `P1` Song activation toggle (`is_active` flag — deactivate without deleting)
 - [x] `P1` Bulk song import via XLSM/CSV upload (UI + `POST /stations/:id/songs/import`)
-- [ ] `P1` Duplicate detection on import (same title + artist)
+- [x] `P1` Duplicate detection on import (same title + artist)
 - [ ] `P2` Song duration tracking (for future time-accurate scheduling)
 - [ ] `P2` Company-level song library view (shared songs across stations)
 
@@ -78,7 +95,7 @@ Priorities: `P0` = blocker / must-have MVP | `P1` = important | `P2` = nice-to-h
 - [x] `P0` Template slot definitions (hour × position × required_category) — `PUT /templates/:id/slots` (bulk), `PUT/DELETE /templates/:id/slots/:hour/:position`
 - [x] `P0` Support template types: `1_day`, `3_hour`, `4_hour`
 - [x] `P0` Template visual builder UI — 24-hour × 4-position grid, assign category per cell via dropdown
-- [ ] `P1` Clone template to another station (within same company)
+- [x] `P1` Clone template to another station (within same company)
 - [ ] `P1` Per-day-of-week template overrides
   - Data model ready from day one (`day_of_week_overrides JSONB` on templates table)
   - MVP UI: one default template
@@ -117,7 +134,7 @@ Priorities: `P0` = blocker / must-have MVP | `P1` = important | `P2` = nice-to-h
 - [x] `P0` Rotation dashboard: songs × recent days heatmap (`analyticsService.ts` + `/analytics` page)
 - [x] `P0` Overplayed songs report (songs exceeding rotation thresholds)
 - [x] `P0` Underplayed songs report (songs rarely/never scheduled)
-- [ ] `P1` Per-song play history timeline
+- [x] `P1` Per-song play history timeline
 - [ ] `P1` Category distribution report (% of playlist per category per day)
 - [ ] `P2` Rule validation warnings in playlist editor (flag if rotation rule violated)
 - [ ] `P2` Rule presets (e.g., "Standard Rotation", "Heavy Rotation", "Seasonal")

@@ -11,13 +11,15 @@ export const dynamic = 'force-dynamic';
 
 const GATEWAY = (process.env.GATEWAY_URL ?? '').replace(/\/$/, '');
 
-async function proxy(req: NextRequest, { params }: { params: { path: string[] } }) {
+async function proxy(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const { path } = await props.params;
   if (!GATEWAY) {
     return NextResponse.json({ error: 'GATEWAY_URL not configured' }, { status: 503 });
   }
 
-  const { path } = params;
-  const url = `${GATEWAY}/api/v1/${path.join('/')}${req.nextUrl.search}`;
+  const pathStr = path.join('/');
+  const search = req.nextUrl.search ?? '';
+  const targetUrl = `${GATEWAY}/api/v1/${pathStr}${search}`;
 
   const headers = new Headers(req.headers);
   headers.delete('host');
