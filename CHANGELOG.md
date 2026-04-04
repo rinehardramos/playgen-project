@@ -5,6 +5,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.26] - 2026-04-05
+
+### Fixed
+- **CD Pipeline**: Re-move `tailwindcss`, `@tailwindcss/postcss`, `postcss`, and `autoprefixer` from `devDependencies` to `dependencies` in frontend `package.json` (was reverted by PR #136); Vercel's `NODE_ENV=production` causes pnpm to skip devDependencies even with `shamefully-hoist=true`
+
+---
+
 ## [1.25] - 2026-04-05
 
 ### Fixed
