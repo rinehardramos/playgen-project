@@ -12,7 +12,7 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: github/codeql-action/init@v3
         with:
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/dependency-review-action@v4
         with:
@@ -35,7 +35,7 @@ jobs:
     name: Secret Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -47,7 +47,7 @@ jobs:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
 
