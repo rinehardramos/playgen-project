@@ -1,0 +1,30 @@
+{
+  "name": "@playgen/dj-service",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test:unit": "vitest run src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@playgen/types": "workspace:*",
+    "fastify": "^4.27.0",
+    "@fastify/sensible": "^5.5.0",
+    "@fastify/static": "^7.0.0",
+    "bullmq": "^5.7.0",
+    "ioredis": "^5.4.0",
+    "pg": "^8.11.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.5.0",
+    "supertest": "^7.0.0",
+    "@types/supertest": "^6.0.0",
+    "tsx": "^4.7.0"
+  }
+}
