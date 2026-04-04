@@ -100,7 +100,7 @@ export default function DjProfilesPage() {
       setProfiles(pData);
       setVoices(vData);
     } catch (err: unknown) {
-      setError((err as ApiError).error?.message ?? 'Failed to load DJ profiles');
+      setError((err as ApiError).message ?? 'Failed to load DJ profiles');
     } finally {
       setLoading(false);
     }
@@ -136,7 +136,7 @@ export default function DjProfilesPage() {
       setModalOpen(false);
       fetchData();
     } catch (err: unknown) {
-      setFormError((err as ApiError).error?.message ?? 'Failed to save DJ profile');
+      setFormError((err as ApiError).message ?? 'Failed to save DJ profile');
     } finally {
       setSubmitting(false);
     }
@@ -148,7 +148,7 @@ export default function DjProfilesPage() {
       await api.delete(`/api/v1/dj/profiles/${id}`);
       fetchData();
     } catch (err: unknown) {
-      alert((err as ApiError).error?.message ?? 'Failed to delete DJ profile');
+      alert((err as ApiError).message ?? 'Failed to delete DJ profile');
     }
   }
 
