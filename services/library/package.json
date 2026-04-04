@@ -24,6 +24,6 @@
     "typescript": "^5.4.0",
     "vitest": "^1.5.0",
     "supertest": "^7.0.0",
-    "@types/supertest": "^6.0.0"
+    "@types/supertest": "^7.2.0"
   }
 }
