@@ -217,3 +217,23 @@ gh project item-edit --project-id "$PROJECT_ID" --id "$ITEM" --field-id "$FIELD_
 **How to apply**: Before changing a line of code, write down what EXACTLY is broken and why. If you can't explain the root cause in one sentence, keep investigating.
 
 ---
+
+## [process] Always check for existing PRs before claiming a ticket — 2026-04-05
+
+**Trigger**: Two agents both picked issue #101 (dashboard stats) independently. Agent 1 had it in Active Work but Agent 2 didn't check open PRs before starting — resulted in duplicate PRs #118 and #120 for the same issue.
+
+**Rule**: BEFORE claiming any ticket, run `gh pr list --state open` and verify no existing PR references the issue number. Also read `tasks/agent-collab.md` Active Work. Both checks are mandatory.
+
+**Why**: Multiple agents run concurrently. agent-collab.md Active Work is the primary lock, but if an agent forgets to claim before starting, or claims but hasn't pushed yet, only the PR list check catches it.
+
+**How to apply**:
+```bash
+export PATH="/opt/homebrew/bin:$PATH"
+# Step 1: check active claims
+cat tasks/agent-collab.md
+# Step 2: check open PRs for issue coverage
+gh pr list --state open --json number,title,headRefName | grep -i "<issue-number>\|<short-keyword>"
+# Only proceed if BOTH checks are clear
+```
+
+---
