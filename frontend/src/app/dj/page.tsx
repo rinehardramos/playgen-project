@@ -6,11 +6,23 @@ import { getCurrentUser } from '@/lib/auth';
 import { api } from '@/lib/api';
 import type { ApiError } from '@/lib/api';
 
+interface PersonaConfig {
+  catchphrases?: string[];
+  signature_greeting?: string;
+  signature_signoff?: string;
+  topics_to_avoid?: string[];
+  energy_level?: number;
+  humor_level?: number;
+  formality?: 'casual' | 'balanced' | 'formal';
+  backstory?: string;
+}
+
 interface DjProfile {
   id: string;
   name: string;
   personality: string;
   voice_style: string;
+  persona_config: PersonaConfig;
   llm_model: string;
   llm_temperature: number;
   tts_provider: string;
@@ -19,10 +31,24 @@ interface DjProfile {
   is_active: boolean;
 }
 
-const EMPTY_FORM: Omit<DjProfile, 'id'> = {
+interface FormData {
+  name: string;
+  personality: string;
+  voice_style: string;
+  persona_config: PersonaConfig;
+  llm_model: string;
+  llm_temperature: number;
+  tts_provider: string;
+  tts_voice_id: string;
+  is_default: boolean;
+  is_active: boolean;
+}
+
+const EMPTY_FORM: FormData = {
   name: '',
   personality: '',
   voice_style: 'energetic',
+  persona_config: {},
   llm_model: 'anthropic/claude-sonnet-4-5',
   llm_temperature: 0.8,
   tts_provider: 'openai',
@@ -30,6 +56,57 @@ const EMPTY_FORM: Omit<DjProfile, 'id'> = {
   is_default: false,
   is_active: true,
 };
+
+function TagInput({ tags, onChange, placeholder }: {
+  tags: string[];
+  onChange: (tags: string[]) => void;
+  placeholder: string;
+}) {
+  const [input, setInput] = useState('');
+
+  function addTag() {
+    const trimmed = input.trim();
+    if (trimmed && !tags.includes(trimmed)) {
+      onChange([...tags, trimmed]);
+      setInput('');
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {tags.map((tag, i) => (
+          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-900/30 text-violet-300 text-xs">
+            {tag}
+            <button
+              type="button"
+              onClick={() => onChange(tags.filter((_, j) => j !== i))}
+              className="text-violet-400 hover:text-violet-200"
+            >
+              x
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+          className="input flex-1"
+          placeholder={placeholder}
+        />
+        <button
+          type="button"
+          onClick={addTag}
+          className="btn-secondary text-xs px-3"
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function DjProfilesPage() {
   const router = useRouter();
@@ -40,8 +117,9 @@ export default function DjProfilesPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [showPersonality, setShowPersonality] = useState(false);
 
   useEffect(() => {
     if (!currentUser) { router.replace('/login'); return; }
@@ -64,6 +142,7 @@ export default function DjProfilesPage() {
   function openCreate() {
     setForm(EMPTY_FORM);
     setEditingId(null);
+    setShowPersonality(false);
     setShowForm(true);
   }
 
@@ -72,6 +151,7 @@ export default function DjProfilesPage() {
       name: p.name,
       personality: p.personality,
       voice_style: p.voice_style,
+      persona_config: p.persona_config ?? {},
       llm_model: p.llm_model,
       llm_temperature: p.llm_temperature,
       tts_provider: p.tts_provider,
@@ -80,7 +160,13 @@ export default function DjProfilesPage() {
       is_active: p.is_active,
     });
     setEditingId(p.id);
+    const hasConfig = p.persona_config && Object.keys(p.persona_config).length > 0;
+    setShowPersonality(!!hasConfig);
     setShowForm(true);
+  }
+
+  function updateConfig(patch: Partial<PersonaConfig>) {
+    setForm((prev) => ({ ...prev, persona_config: { ...prev.persona_config, ...patch } }));
   }
 
   async function handleSubmit() {
@@ -117,6 +203,8 @@ export default function DjProfilesPage() {
       </div>
     );
   }
+
+  const pc = form.persona_config;
 
   return (
     <div className="p-6 md:p-8">
@@ -161,11 +249,26 @@ export default function DjProfilesPage() {
                   <span className="badge bg-violet-900/30 text-violet-400 text-xs">Default</span>
                 )}
               </div>
-              <p className="text-sm text-gray-400 line-clamp-2 mb-3">{p.personality}</p>
+              <p className="text-sm text-gray-400 line-clamp-2 mb-2">{p.personality}</p>
+              {p.persona_config?.catchphrases && p.persona_config.catchphrases.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {p.persona_config.catchphrases.slice(0, 2).map((c, i) => (
+                    <span key={i} className="text-xs text-violet-400 bg-violet-900/20 px-1.5 py-0.5 rounded">
+                      &ldquo;{c}&rdquo;
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-2 text-xs text-gray-600 mb-4">
                 <span>{p.llm_model.split('/').pop()}</span>
                 <span>|</span>
                 <span>TTS: {p.tts_provider}/{p.tts_voice_id}</span>
+                {p.persona_config?.energy_level != null && (
+                  <>
+                    <span>|</span>
+                    <span>Energy: {p.persona_config.energy_level}/10</span>
+                  </>
+                )}
               </div>
               <div className="flex gap-2">
                 <button onClick={() => openEdit(p)} className="text-xs text-violet-400 hover:text-violet-300 font-medium">
@@ -210,6 +313,137 @@ export default function DjProfilesPage() {
                   rows={3}
                   placeholder="Describe the DJ's personality, tone, and style..."
                 />
+              </div>
+
+              {/* Personality Traits (collapsible) */}
+              <div className="border-t border-[#2a2a40] pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPersonality(!showPersonality)}
+                  className="flex items-center gap-2 text-sm text-violet-400 hover:text-violet-300 font-medium w-full"
+                >
+                  <svg
+                    className={`w-4 h-4 transition-transform ${showPersonality ? 'rotate-90' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  Personality Traits
+                  <span className="text-xs text-gray-600 font-normal ml-1">(optional)</span>
+                </button>
+
+                {showPersonality && (
+                  <div className="space-y-4 mt-4">
+                    {/* Energy + Humor sliders */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs text-gray-500 font-medium">
+                          Energy Level: {pc.energy_level ?? 5}
+                        </label>
+                        <input
+                          type="range"
+                          min={1} max={10}
+                          value={pc.energy_level ?? 5}
+                          onChange={(e) => updateConfig({ energy_level: Number(e.target.value) })}
+                          className="w-full mt-1 accent-violet-500"
+                        />
+                        <div className="flex justify-between text-xs text-gray-600">
+                          <span>Chill</span><span>Hype</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 font-medium">
+                          Humor Level: {pc.humor_level ?? 5}
+                        </label>
+                        <input
+                          type="range"
+                          min={1} max={10}
+                          value={pc.humor_level ?? 5}
+                          onChange={(e) => updateConfig({ humor_level: Number(e.target.value) })}
+                          className="w-full mt-1 accent-violet-500"
+                        />
+                        <div className="flex justify-between text-xs text-gray-600">
+                          <span>Serious</span><span>Comedy</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Formality */}
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium mb-2 block">Formality</label>
+                      <div className="flex gap-2">
+                        {(['casual', 'balanced', 'formal'] as const).map((f) => (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => updateConfig({ formality: f })}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors capitalize ${
+                              (pc.formality ?? 'balanced') === f
+                                ? 'bg-violet-600 text-white'
+                                : 'bg-[#2a2a40] text-gray-400 hover:bg-[#34344f]'
+                            }`}
+                          >
+                            {f}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Signature greeting */}
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium">Signature Greeting</label>
+                      <input
+                        value={pc.signature_greeting ?? ''}
+                        onChange={(e) => updateConfig({ signature_greeting: e.target.value })}
+                        className="input w-full mt-1"
+                        placeholder="e.g. Hey hey, you're live with Alex!"
+                      />
+                    </div>
+
+                    {/* Signature sign-off */}
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium">Signature Sign-off</label>
+                      <input
+                        value={pc.signature_signoff ?? ''}
+                        onChange={(e) => updateConfig({ signature_signoff: e.target.value })}
+                        className="input w-full mt-1"
+                        placeholder="e.g. Stay tuned, stay awesome!"
+                      />
+                    </div>
+
+                    {/* Catchphrases */}
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium mb-1.5 block">Catchphrases</label>
+                      <TagInput
+                        tags={pc.catchphrases ?? []}
+                        onChange={(tags) => updateConfig({ catchphrases: tags })}
+                        placeholder="Add a catchphrase and press Enter"
+                      />
+                    </div>
+
+                    {/* Topics to avoid */}
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium mb-1.5 block">Topics to Avoid</label>
+                      <TagInput
+                        tags={pc.topics_to_avoid ?? []}
+                        onChange={(tags) => updateConfig({ topics_to_avoid: tags })}
+                        placeholder="e.g. politics, religion"
+                      />
+                    </div>
+
+                    {/* Backstory */}
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium">Backstory</label>
+                      <textarea
+                        value={pc.backstory ?? ''}
+                        onChange={(e) => updateConfig({ backstory: e.target.value })}
+                        className="input w-full mt-1"
+                        rows={3}
+                        placeholder="Character backstory for deeper persona..."
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">

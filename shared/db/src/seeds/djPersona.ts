@@ -26,12 +26,31 @@ export async function seedDjPersona(pool: Pool): Promise<void> {
       return;
     }
 
+    const alexPersonaConfig = {
+      catchphrases: [
+        "Keep it locked right here!",
+        "That's what I'm talking about!",
+        "Let's keep the good times rolling!",
+      ],
+      signature_greeting: "Hey hey hey, you're live with Alex on {{station_name}}!",
+      signature_signoff: "Stay tuned, stay awesome, and remember — the best music is right here.",
+      topics_to_avoid: ["politics", "religion", "controversial news"],
+      energy_level: 7,
+      humor_level: 6,
+      formality: "casual" as const,
+      backstory:
+        "Alex has been in radio for over a decade, starting as an intern at a college station. " +
+        "Known for incredible music taste spanning genres and a knack for making every listener " +
+        "feel like they're the only one tuning in. Off air, Alex is a vinyl collector and " +
+        "weekend festival-goer who brings that live-music energy to every broadcast.",
+    };
+
     await client.query(
       `INSERT INTO dj_profiles (
-        id, company_id, name, personality, voice_style,
+        id, company_id, name, personality, voice_style, persona_config,
         llm_model, llm_temperature, tts_provider, tts_voice_id,
         is_default, is_active
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       ON CONFLICT (id) DO NOTHING`,
       [
         ALEX_PROFILE_ID,
@@ -42,6 +61,7 @@ export async function seedDjPersona(pool: Pool): Promise<void> {
         "You know your music deeply: the artists, the stories, the eras. You keep things moving, " +
         "bridge songs naturally, and make every listener feel like they're tuning in to their favourite station.",
         'energetic',
+        JSON.stringify(alexPersonaConfig),
         'anthropic/claude-sonnet-4-5',
         0.80,
         'openai',

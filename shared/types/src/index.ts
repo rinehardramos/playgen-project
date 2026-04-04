@@ -261,12 +261,24 @@ export type ManifestStatus = 'building' | 'ready' | 'failed';
 export type TtsProvider = 'openai' | 'elevenlabs';
 export type StorageProvider = 'local' | 's3';
 
+export interface PersonaConfig {
+  catchphrases?: string[];
+  signature_greeting?: string;
+  signature_signoff?: string;
+  topics_to_avoid?: string[];
+  energy_level?: number;       // 1-10
+  humor_level?: number;        // 1-10
+  formality?: 'casual' | 'balanced' | 'formal';
+  backstory?: string;
+}
+
 export interface DjProfile {
   id: string;
   company_id: string;
   name: string;
   personality: string;
   voice_style: string;
+  persona_config: PersonaConfig;
   llm_model: string;
   llm_temperature: number;
   tts_provider: TtsProvider;

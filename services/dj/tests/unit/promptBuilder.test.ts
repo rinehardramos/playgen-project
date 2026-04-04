@@ -8,6 +8,7 @@ const mockProfile: DjProfile = {
   name: 'Alex',
   personality: 'Upbeat and charismatic radio DJ who loves music.',
   voice_style: 'energetic',
+  persona_config: {},
   llm_model: 'anthropic/claude-sonnet-4-5',
   llm_temperature: 0.8,
   tts_provider: 'openai',
@@ -16,6 +17,20 @@ const mockProfile: DjProfile = {
   is_active: true,
   created_at: new Date(),
   updated_at: new Date(),
+};
+
+const richProfile: DjProfile = {
+  ...mockProfile,
+  persona_config: {
+    catchphrases: ['Keep it locked!', "That's what I'm talking about!"],
+    signature_greeting: 'Hey hey, you are live with Alex!',
+    signature_signoff: 'Stay tuned, stay awesome.',
+    topics_to_avoid: ['politics', 'religion'],
+    energy_level: 8,
+    humor_level: 5,
+    formality: 'casual',
+    backstory: 'Alex started as a college radio intern a decade ago.',
+  },
 };
 
 describe('buildSystemPrompt', () => {
@@ -33,6 +48,57 @@ describe('buildSystemPrompt', () => {
   it('includes no-AI disclosure rule', () => {
     const prompt = buildSystemPrompt(mockProfile);
     expect(prompt).toContain('Never break the fourth wall');
+  });
+
+  it('works with empty persona_config', () => {
+    const prompt = buildSystemPrompt(mockProfile);
+    expect(prompt).not.toContain('Character traits:');
+    expect(prompt).toContain('Alex');
+  });
+
+  it('includes catchphrases from persona_config', () => {
+    const prompt = buildSystemPrompt(richProfile);
+    expect(prompt).toContain('Keep it locked!');
+    expect(prompt).toContain("That's what I'm talking about!");
+    expect(prompt).toContain('signature phrases');
+  });
+
+  it('includes signature greeting and signoff', () => {
+    const prompt = buildSystemPrompt(richProfile);
+    expect(prompt).toContain('Hey hey, you are live with Alex!');
+    expect(prompt).toContain('Stay tuned, stay awesome.');
+  });
+
+  it('includes topics to avoid', () => {
+    const prompt = buildSystemPrompt(richProfile);
+    expect(prompt).toContain('NEVER discuss');
+    expect(prompt).toContain('politics');
+    expect(prompt).toContain('religion');
+  });
+
+  it('includes energy level description', () => {
+    const prompt = buildSystemPrompt(richProfile);
+    expect(prompt).toContain('high energy');
+  });
+
+  it('includes humor level description', () => {
+    const prompt = buildSystemPrompt(richProfile);
+    expect(prompt).toContain('light humor');
+  });
+
+  it('includes formality description', () => {
+    const prompt = buildSystemPrompt(richProfile);
+    expect(prompt).toContain('casually');
+  });
+
+  it('includes backstory', () => {
+    const prompt = buildSystemPrompt(richProfile);
+    expect(prompt).toContain('college radio intern');
+  });
+
+  it('includes Character traits section header when config is populated', () => {
+    const prompt = buildSystemPrompt(richProfile);
+    expect(prompt).toContain('Character traits:');
   });
 });
 
@@ -89,7 +155,6 @@ describe('buildUserPrompt', () => {
       dj_profile: mockProfile,
       segment_type: 'song_intro',
     });
-    // Should not throw, empty strings replace missing songs
     expect(prompt).toBeDefined();
     expect(prompt.length).toBeGreaterThan(0);
   });
