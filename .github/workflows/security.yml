@@ -20,17 +20,9 @@ jobs:
 
       - uses: github/codeql-action/analyze@v3
 
-  dependency-review:
-    name: Dependency Review
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: high
+  # dependency-review is disabled: requires Dependency Graph to be enabled in GitHub
+  # Settings → Security & Analysis → Dependency graph. Re-enable once that is configured.
+  # CVE scanning is covered by Security Audit (pnpm audit) and OWASP Dependency Check below.
 
   secret-scan:
     name: Secret Scan
