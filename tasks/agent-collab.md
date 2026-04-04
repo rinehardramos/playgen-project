@@ -11,9 +11,10 @@ Before starting any task, an agent MUST:
 7. PR MERGE MANDATE: Before merging any PR, verify `mergeable_state` is clean. Rebase onto `origin/main` locally, resolve conflicts manually (never blindly `-X theirs`), verify `pnpm run typecheck` passes, then force-push and wait for CI to go green before merging.
 
 ## Active Work
-- [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
 
 ## Recently Completed
+- [x] Fix high vulnerabilities (Next.js 15, Fastify 5, tar override) — PR #110 | @gemini-cli | 2026-04-04
+- [x] Seed default DJ persona for new stations (issue #29, feat/dj-persona-seed) | @claude-code | 2026-04-04
 - [x] Add DJ link to sidebar navigation (issue #103, feat/dj-sidebar-nav) | @claude-code | 2026-04-04
 - [x] DJ Personality Feature (persona_config JSONB, PersonaConfig type, prompt builder, seed, frontend form) | @claude-code | 2026-04-04
 - [x] Fix @fastify/rate-limit v10→v9 for Fastify v4 compatibility (DJ + Station services) | @claude-code | 2026-04-04
