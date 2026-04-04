@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import fs from 'fs/promises';
 import path from 'path';
 import { config } from '../../config.js';
+import { ElevenLabsTtsAdapter } from './elevenlabs.js';
 import type { TtsAdapter, TtsOptions, TtsResult } from './interface.js';
 
 export class OpenAiTtsAdapter implements TtsAdapter {
@@ -30,8 +31,6 @@ export class OpenAiTtsAdapter implements TtsAdapter {
 export function getTtsAdapter(): TtsAdapter {
   if (config.tts.provider === 'openai') return new OpenAiTtsAdapter();
   if (config.tts.provider === 'elevenlabs') {
-    // Dynamic import to avoid loading ElevenLabs when not needed
-    const { ElevenLabsTtsAdapter } = require('./elevenlabs.js');
     return new ElevenLabsTtsAdapter();
   }
   throw new Error(`TTS provider "${config.tts.provider}" not yet implemented`);
