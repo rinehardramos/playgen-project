@@ -22,7 +22,7 @@ describe('config', () => {
   });
 
   it('has redis defaults', () => {
-    expect(config.redis.host).toBe('redis');
+    expect(config.redis.host).toBe('localhost');
     expect(config.redis.port).toBe(6379);
   });
 });

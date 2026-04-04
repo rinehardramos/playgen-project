@@ -71,6 +71,8 @@ describe('generationWorker', () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1' }],
     });
+    // 1b. Station settings (empty — no overrides)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
     // 2. DJ profile
     mockQuery.mockResolvedValueOnce({
       rows: [{
