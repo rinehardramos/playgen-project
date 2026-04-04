@@ -26,7 +26,7 @@ async function proxy(req: NextRequest, props: { params: Promise<{ path: string[]
   headers.delete('connection');
 
   try {
-    const res = await fetch(url, {
+    const res = await fetch(targetUrl, {
       method: req.method,
       headers,
       body: req.method !== 'GET' && req.method !== 'HEAD' ? await req.blob() : undefined,
@@ -44,7 +44,7 @@ async function proxy(req: NextRequest, props: { params: Promise<{ path: string[]
       headers: responseHeaders,
     });
   } catch (err) {
-    console.error(`Proxy error [${req.method} ${url}]:`, err);
+    console.error(`Proxy error [${req.method} ${targetUrl}]:`, err);
     return NextResponse.json({ error: 'Gateway unreachable' }, { status: 502 });
   }
 }
