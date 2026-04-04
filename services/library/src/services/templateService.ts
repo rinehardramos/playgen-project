@@ -139,3 +139,54 @@ export async function deleteTemplateSlot(templateId: string, hour: number, posit
   );
   return (rowCount ?? 0) > 0;
 }
+
+export async function cloneTemplate(templateId: string, targetStationId: string): Promise<TemplateWithSlots> {
+  const pool = getPool();
+  
+  // 1. Fetch source template and slots
+  const source = await getTemplate(templateId);
+  if (!source) throw new Error('Source template not found');
+
+  // 2. Fetch all categories for source and target to map them by code
+  const { rows: sourceCats } = await pool.query<{ id: string, code: string }>(
+    'SELECT id, code FROM categories WHERE station_id = $1',
+    [source.station_id]
+  );
+  const { rows: targetCats } = await pool.query<{ id: string, code: string }>(
+    'SELECT id, code FROM categories WHERE station_id = $1',
+    [targetStationId]
+  );
+
+  const targetCatMap = new Map(targetCats.map(c => [c.code, c.id]));
+  const sourceCatIdToCode = new Map(sourceCats.map(c => [c.id, c.code]));
+
+  // 3. Create the new template
+  const newTemplate = await createTemplate({
+    station_id: targetStationId,
+    name: `${source.name} (Copy)`,
+    type: source.type,
+    is_default: false,
+  });
+
+  // 4. Map and insert slots
+  const newSlots: Array<{ hour: number; position: number; required_category_id: string }> = [];
+  for (const slot of source.slots) {
+    const code = sourceCatIdToCode.get(slot.required_category_id);
+    if (!code) continue; // Should not happen
+
+    const targetCatId = targetCatMap.get(code);
+    if (targetCatId) {
+      newSlots.push({
+        hour: slot.hour,
+        position: slot.position,
+        required_category_id: targetCatId,
+      });
+    }
+  }
+
+  if (newSlots.length > 0) {
+    await setTemplateSlots(newTemplate.id, newSlots);
+  }
+
+  return getTemplate(newTemplate.id) as Promise<TemplateWithSlots>;
+}

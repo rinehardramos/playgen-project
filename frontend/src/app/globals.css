@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 @layer base {
+  @reference "tailwindcss";
+
   :root {
     --bg-base: #0b0b10;
     --bg-elevated: #16161f;
@@ -8,40 +10,34 @@
     --bg-hover: #24243a;
     --border: #2a2a40;
     --accent: #7c3aed;
-    --accent-light: #a78bfa;
-    --text-primary: #f1f0ff;
-    --text-secondary: #8b8ba8;
-    --text-muted: #52526b;
+    --accent-hover: #8b5cf6;
+    --text-primary: #ffffff;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
   }
 
   body {
-    background-color: var(--bg-base);
-    color: var(--text-primary);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    -webkit-font-smoothing: antialiased;
+    @apply bg-[var(--bg-base)] text-[var(--bg-primary)] antialiased selection:bg-violet-500/30;
   }
-
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: #2a2a40 transparent;
-  }
-  *::-webkit-scrollbar { width: 6px; }
-  *::-webkit-scrollbar-track { background: transparent; }
-  *::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 3px; }
 }
 
 @layer components {
-  .card {
-    @apply bg-[#1c1c28] border border-[#2a2a40] rounded-xl;
-  }
+  @reference "tailwindcss";
+
   .btn-primary {
-    @apply bg-violet-600 hover:bg-violet-500 text-white font-semibold px-4 py-2 rounded-lg transition-colors;
+    @apply bg-violet-600 hover:bg-violet-500 text-white font-semibold py-2 px-4 rounded-lg transition-all shadow-lg shadow-violet-900/20 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
   }
   .btn-secondary {
-    @apply bg-[#24243a] hover:bg-[#2e2e4a] text-gray-200 font-medium px-4 py-2 rounded-lg transition-colors border border-[#2a2a40];
+    @apply bg-[#1c1c28] hover:bg-[#24243a] text-gray-200 font-medium py-2 px-4 rounded-lg border border-[#2a2a40] transition-all active:scale-[0.98] disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply hover:bg-white/5 text-gray-400 hover:text-white py-2 px-4 rounded-lg transition-all;
+  }
+  .card {
+    @apply bg-[#1c1c28] border border-[#2a2a40] rounded-xl shadow-xl overflow-hidden;
   }
   .input {
-    @apply bg-[#16161f] border border-[#2a2a40] text-white placeholder-gray-600 rounded-lg px-3 py-2 w-full focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-colors;
+    @apply bg-[#0f0f1a] border border-[#2a2a40] text-white placeholder-gray-600 rounded-lg px-3 py-2 w-full focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-colors;
   }
   .badge {
     @apply text-xs font-medium px-2 py-0.5 rounded-full;

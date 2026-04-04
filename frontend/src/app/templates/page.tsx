@@ -52,6 +52,9 @@ export default function TemplatesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [cloneModalOpen, setCloneModalOpen] = useState(false);
+  const [cloningTemplate, setCloningTemplate] = useState<Template | null>(null);
+  const [targetStation, setTargetStation] = useState<string>('');
   const [formData, setFormData] = useState<TemplateFormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -68,6 +71,7 @@ export default function TemplatesPage() {
   useEffect(() => {
     if (selectedStation) {
       fetchTemplates(selectedStation);
+      setTargetStation(selectedStation);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStation]);
@@ -76,7 +80,10 @@ export default function TemplatesPage() {
     try {
       const data = await api.get<Station[]>(`/api/v1/companies/${companyId}/stations`);
       setStations(data);
-      if (data.length > 0) setSelectedStation(data[0].id);
+      if (data.length > 0) {
+        setSelectedStation(data[0].id);
+        setTargetStation(data[0].id);
+      }
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to load stations');
     }
@@ -109,6 +116,27 @@ export default function TemplatesPage() {
       await fetchTemplates(selectedStation);
     } catch (err: unknown) {
       setFormError((err as ApiError).message ?? 'Failed to create template');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleClone(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!cloningTemplate) return;
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      await api.post(`/api/v1/templates/${cloningTemplate.id}/clone`, {
+        target_station_id: targetStation,
+      });
+      setCloneModalOpen(false);
+      setCloningTemplate(null);
+      if (targetStation === selectedStation) {
+        await fetchTemplates(selectedStation);
+      }
+    } catch (err: unknown) {
+      setFormError((err as ApiError).message ?? 'Failed to clone template');
     } finally {
       setSubmitting(false);
     }
@@ -184,12 +212,28 @@ export default function TemplatesPage() {
                     </span>
                   )}
                 </div>
-                <Link
-                  href={`/templates/${tpl.id}/builder`}
-                  className="btn-secondary text-sm w-full text-center"
-                >
-                  Edit in Builder
-                </Link>
+                <div className="flex gap-2">
+                  <Link
+                    href={`/templates/${tpl.id}/builder`}
+                    className="btn-secondary text-sm flex-1 text-center"
+                  >
+                    Edit
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setCloningTemplate(tpl);
+                      setTargetStation(selectedStation);
+                      setFormError(null);
+                      setCloneModalOpen(true);
+                    }}
+                    className="btn-secondary text-sm px-3"
+                    title="Clone Template"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             ))
           )}
@@ -258,6 +302,60 @@ export default function TemplatesPage() {
                   className="btn-primary disabled:opacity-50"
                 >
                   {submitting ? 'Creating…' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Clone Template Modal */}
+      {cloneModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-sm bg-[#16161f] border border-[#2a2a40] rounded-2xl shadow-2xl p-6">
+            <h2 className="text-base font-semibold text-white mb-1">Clone Template</h2>
+            <p className="text-xs text-gray-500 mb-4">Copy "{cloningTemplate?.name}" to another station.</p>
+            
+            {formError && (
+              <div className="mb-4 rounded-md bg-red-900/30 border border-red-700/50 px-4 py-3">
+                <p className="text-sm text-red-400">{formError}</p>
+              </div>
+            )}
+            
+            <form onSubmit={handleClone} className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">Target Station</label>
+                <select
+                  value={targetStation}
+                  onChange={(e) => setTargetStation(e.target.value)}
+                  className="input w-full"
+                  required
+                >
+                  {stations.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.id === selectedStation ? '(Current)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCloneModalOpen(false);
+                    setCloningTemplate(null);
+                  }}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  {submitting ? 'Cloning…' : 'Clone'}
                 </button>
               </div>
             </form>

@@ -16,42 +16,33 @@ async function proxy(req: NextRequest, { params }: { params: { path: string[] } 
     return NextResponse.json({ error: 'GATEWAY_URL not configured' }, { status: 503 });
   }
 
-  const path = params.path.join('/');
-  const search = req.nextUrl.search ?? '';
-  const targetUrl = `${GATEWAY}/api/v1/${path}${search}`;
+  const { path } = params;
+  const url = `${GATEWAY}/api/v1/${path.join('/')}${req.nextUrl.search}`;
 
-  // Forward all headers except host
-  const headers = new Headers();
-  req.headers.forEach((value, key) => {
-    if (!['host', 'connection', 'transfer-encoding'].includes(key.toLowerCase())) {
-      headers.set(key, value);
-    }
-  });
-
-  const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await req.arrayBuffer();
+  const headers = new Headers(req.headers);
+  headers.delete('host');
+  headers.delete('connection');
 
   try {
-    const upstream = await fetch(targetUrl, {
+    const res = await fetch(url, {
       method: req.method,
       headers,
-      body,
-      // @ts-expect-error Node 18+ fetch option
-      duplex: 'half',
+      body: req.method !== 'GET' && req.method !== 'HEAD' ? await req.blob() : undefined,
+      cache: 'no-store',
     });
 
-    const resHeaders = new Headers();
-    upstream.headers.forEach((value, key) => {
-      if (!['transfer-encoding', 'connection'].includes(key.toLowerCase())) {
-        resHeaders.set(key, value);
-      }
-    });
+    const data = res.status !== 204 ? await res.blob() : null;
+    const responseHeaders = new Headers(res.headers);
+    responseHeaders.delete('content-encoding');
+    responseHeaders.delete('transfer-encoding');
 
-    return new NextResponse(upstream.body, {
-      status: upstream.status,
-      headers: resHeaders,
+    return new NextResponse(data, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: responseHeaders,
     });
   } catch (err) {
-    console.error('[proxy] upstream error:', err);
+    console.error(`Proxy error [${req.method} ${url}]:`, err);
     return NextResponse.json({ error: 'Gateway unreachable' }, { status: 502 });
   }
 }
