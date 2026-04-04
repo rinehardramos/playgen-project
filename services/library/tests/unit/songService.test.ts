@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { listSongs, createSong } from './songService';
+import { listSongs, createSong, bulkCreateSongs } from '../../src/services/songService';
 
 const mockQuery = vi.fn();
 const mockConnect = vi.fn();
 
-vi.mock('../db', () => ({
+vi.mock('../../src/db', () => ({
   getPool: () => ({
     query: mockQuery,
     connect: mockConnect,
@@ -213,5 +213,43 @@ describe('createSong', () => {
     const queryArgs = client.query.mock.calls.map((c: unknown[]) => c[0] as string);
     expect(queryArgs).toContain('ROLLBACK');
     expect(client.release).toHaveBeenCalled();
+  });
+});
+
+// ─── bulkCreateSongs ──────────────────────────────────────────────────────────
+
+describe('bulkCreateSongs', () => {
+  it('skips duplicates (Postgres error 23505) and continues', async () => {
+    const songData = {
+      company_id: 'company-1',
+      station_id: 'station-1',
+      category_id: 'cat-1',
+      title: 'S1',
+      artist: 'A1',
+    };
+
+    const duplicateError = new Error('Unique constraint');
+    (duplicateError as any).code = '23505';
+
+    const clientSuccess = {
+      query: vi.fn().mockResolvedValue({ rows: [{ id: 'new-id' }] }),
+      release: vi.fn(),
+    };
+    const clientFail = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockRejectedValueOnce(duplicateError), // INSERT
+      release: vi.fn(),
+    };
+
+    mockConnect
+      .mockResolvedValueOnce(clientSuccess)
+      .mockResolvedValueOnce(clientFail)
+      .mockResolvedValueOnce(clientSuccess);
+
+    const result = await bulkCreateSongs([songData, songData, songData]);
+
+    expect(result.created).toBe(2);
+    expect(result.skipped).toBe(1);
   });
 });
