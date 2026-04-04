@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Fragment } from 'react';
+import { useEffect, useState, Fragment, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth';
@@ -8,6 +8,27 @@ import { api } from '@/lib/api';
 import type { ApiError } from '@/lib/api';
 
 type PlaylistStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'exported' | 'failed';
+type DjReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'auto_approved';
+type DjSegmentType = 'show_intro' | 'song_intro' | 'song_transition' | 'show_outro' | 'station_id' | 'time_check' | 'weather_tease' | 'ad_break';
+
+interface DjSegment {
+  id: string;
+  segment_type: DjSegmentType;
+  position: number;
+  script_text: string;
+  edited_text: string | null;
+}
+
+interface DjScript {
+  id: string;
+  review_status: DjReviewStatus;
+  llm_model: string;
+  generation_ms: number | null;
+  total_segments: number;
+  segments: DjSegment[];
+}
+
+type TabView = 'playlist' | 'dj-script';
 
 interface Playlist {
   id: string;
@@ -74,6 +95,110 @@ export default function PlaylistDetailPage() {
   const [overrideSubmitting, setOverrideSubmitting] = useState(false);
   const [overrideError, setOverrideError] = useState<string | null>(null);
 
+  // DJ Script state
+  const [activeTab, setActiveTab] = useState<TabView>('playlist');
+  const [djScript, setDjScript] = useState<DjScript | null>(null);
+  const [djLoading, setDjLoading] = useState(false);
+  const [djError, setDjError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [rejectNotes, setRejectNotes] = useState('');
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [editingSegment, setEditingSegment] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+
+  const fetchDjScript = useCallback(async () => {
+    setDjLoading(true);
+    setDjError(null);
+    try {
+      const script = await api.get<DjScript>(`/api/v1/dj/playlists/${playlistId}/script`);
+      setDjScript(script);
+    } catch (err: unknown) {
+      const e = err as ApiError;
+      if (e.status !== 404) setDjError(e.message ?? 'Failed to load DJ script');
+      setDjScript(null);
+    } finally {
+      setDjLoading(false);
+    }
+  }, [playlistId]);
+
+  async function handleGenerateScript() {
+    if (!playlist) return;
+    setGenerating(true);
+    setDjError(null);
+    try {
+      await api.post(`/api/v1/dj/playlists/${playlistId}/generate`, {
+        playlist_id: playlistId,
+      });
+      // Poll for completion
+      const poll = setInterval(async () => {
+        try {
+          const script = await api.get<DjScript>(`/api/v1/dj/playlists/${playlistId}/script`);
+          if (script && script.total_segments > 0) {
+            setDjScript(script);
+            setGenerating(false);
+            clearInterval(poll);
+          }
+        } catch { /* still generating */ }
+      }, 3000);
+      // Safety timeout
+      setTimeout(() => { clearInterval(poll); setGenerating(false); }, 120000);
+    } catch (err: unknown) {
+      setDjError((err as ApiError).message ?? 'Failed to generate script');
+      setGenerating(false);
+    }
+  }
+
+  async function handleReviewAction(action: 'approve' | 'reject') {
+    if (!djScript) return;
+    setReviewing(true);
+    setDjError(null);
+    try {
+      const body: Record<string, unknown> = { action };
+      if (action === 'reject') body.review_notes = rejectNotes;
+      const updated = await api.post<DjScript>(`/api/v1/dj/scripts/${djScript.id}/review`, body);
+      if (action === 'reject') {
+        // Re-generation queued, start polling
+        setDjScript(null);
+        setShowRejectModal(false);
+        setRejectNotes('');
+        setGenerating(true);
+        const poll = setInterval(async () => {
+          try {
+            const script = await api.get<DjScript>(`/api/v1/dj/playlists/${playlistId}/script`);
+            if (script && script.total_segments > 0 && script.id !== djScript.id) {
+              setDjScript(script);
+              setGenerating(false);
+              clearInterval(poll);
+            }
+          } catch { /* still generating */ }
+        }, 3000);
+        setTimeout(() => { clearInterval(poll); setGenerating(false); }, 120000);
+      } else {
+        setDjScript({ ...djScript, review_status: updated.review_status });
+      }
+    } catch (err: unknown) {
+      setDjError((err as ApiError).message ?? 'Review action failed');
+    } finally {
+      setReviewing(false);
+    }
+  }
+
+  async function handleSaveEdit(segmentId: string) {
+    if (!djScript) return;
+    try {
+      const updated = await api.post<DjScript>(`/api/v1/dj/scripts/${djScript.id}/review`, {
+        action: 'edit',
+        edited_segments: [{ id: segmentId, edited_text: editText }],
+      });
+      setDjScript(updated);
+      setEditingSegment(null);
+      setEditText('');
+    } catch (err: unknown) {
+      setDjError((err as ApiError).message ?? 'Failed to save edit');
+    }
+  }
+
   useEffect(() => {
     if (!currentUser) {
       router.replace('/login');
@@ -82,6 +207,12 @@ export default function PlaylistDetailPage() {
     fetchPlaylist();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playlistId]);
+
+  useEffect(() => {
+    if (activeTab === 'dj-script' && !djScript && !djLoading) {
+      fetchDjScript();
+    }
+  }, [activeTab, djScript, djLoading, fetchDjScript]);
 
   async function fetchPlaylist() {
     setLoading(true);
@@ -250,8 +381,230 @@ export default function PlaylistDetailPage() {
         </div>
       )}
 
+      {/* Tab bar */}
+      <div className="flex gap-1 mb-4 border-b border-[#2a2a40]">
+        <button
+          onClick={() => setActiveTab('playlist')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'playlist'
+              ? 'border-violet-500 text-violet-300'
+              : 'border-transparent text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          Playlist
+        </button>
+        <button
+          onClick={() => setActiveTab('dj-script')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'dj-script'
+              ? 'border-violet-500 text-violet-300'
+              : 'border-transparent text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          DJ Script
+          {djScript && (
+            <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+              djScript.review_status === 'approved' || djScript.review_status === 'auto_approved'
+                ? 'bg-green-900/30 text-green-400'
+                : djScript.review_status === 'rejected'
+                ? 'bg-red-900/30 text-red-400'
+                : 'bg-yellow-900/30 text-yellow-400'
+            }`}>
+              {djScript.review_status.replace('_', ' ')}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* DJ Script Tab */}
+      {activeTab === 'dj-script' && (
+        <div className="mb-6">
+          {djError && (
+            <div className="mb-4 bg-red-900/30 border border-red-700/50 text-red-400 px-4 py-3 rounded-lg text-sm">
+              {djError}
+            </div>
+          )}
+
+          {/* No script yet — generate button */}
+          {!djScript && !djLoading && !generating && (
+            <div className="card flex flex-col items-center justify-center py-16 gap-4">
+              <svg className="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+              </svg>
+              <p className="text-gray-500 text-sm">No DJ script has been generated for this playlist yet.</p>
+              <button
+                onClick={handleGenerateScript}
+                className="btn-primary px-6 py-2.5 text-sm"
+              >
+                Generate DJ Script
+              </button>
+            </div>
+          )}
+
+          {/* Generating spinner */}
+          {(djLoading || generating) && (
+            <div className="card flex flex-col items-center justify-center py-16 gap-3">
+              <div className="w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-gray-400 text-sm">
+                {generating ? 'Generating DJ script via OpenRouter...' : 'Loading script...'}
+              </p>
+            </div>
+          )}
+
+          {/* Script segments */}
+          {djScript && !generating && (
+            <>
+              {/* Script header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <span className={`badge capitalize ${
+                    djScript.review_status === 'approved' || djScript.review_status === 'auto_approved'
+                      ? 'bg-green-900/30 text-green-400'
+                      : djScript.review_status === 'rejected'
+                      ? 'bg-red-900/30 text-red-400'
+                      : 'bg-yellow-900/30 text-yellow-400'
+                  }`}>
+                    {djScript.review_status.replace('_', ' ')}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {djScript.total_segments} segments
+                    {djScript.generation_ms ? ` | ${(djScript.generation_ms / 1000).toFixed(1)}s` : ''}
+                    {` | ${djScript.llm_model}`}
+                  </span>
+                </div>
+
+                {djScript.review_status === 'pending_review' && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleReviewAction('approve')}
+                      disabled={reviewing}
+                      className="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-semibold disabled:opacity-50 transition-colors"
+                    >
+                      {reviewing ? 'Approving...' : 'Approve Script'}
+                    </button>
+                    <button
+                      onClick={() => setShowRejectModal(true)}
+                      disabled={reviewing}
+                      className="px-4 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm font-semibold disabled:opacity-50 transition-colors"
+                    >
+                      Reject & Rewrite
+                    </button>
+                  </div>
+                )}
+
+                {(djScript.review_status === 'approved' || djScript.review_status === 'auto_approved') && (
+                  <button
+                    onClick={handleGenerateScript}
+                    className="btn-secondary text-sm"
+                  >
+                    Regenerate
+                  </button>
+                )}
+              </div>
+
+              {/* Segments list */}
+              <div className="space-y-3">
+                {djScript.segments.map((seg) => (
+                  <div
+                    key={seg.id}
+                    className="card p-4 border border-[#2a2a40] hover:border-[#3a3a50] transition-colors"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-mono text-violet-400 bg-violet-900/20 px-2 py-0.5 rounded">
+                        {seg.segment_type.replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-xs text-gray-600">#{seg.position + 1}</span>
+                    </div>
+
+                    {editingSegment === seg.id ? (
+                      <div>
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          rows={3}
+                          className="input w-full mb-2 text-sm"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSaveEdit(seg.id)}
+                            className="btn-primary text-xs px-3 py-1.5"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => { setEditingSegment(null); setEditText(''); }}
+                            className="btn-secondary text-xs px-3 py-1.5"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+                          {seg.edited_text ?? seg.script_text}
+                        </p>
+                        {djScript.review_status === 'pending_review' && (
+                          <button
+                            onClick={() => {
+                              setEditingSegment(seg.id);
+                              setEditText(seg.edited_text ?? seg.script_text);
+                            }}
+                            className="text-xs text-violet-400 hover:text-violet-300 font-medium flex-shrink-0"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {seg.edited_text && (
+                      <p className="mt-1 text-xs text-gray-600 italic">Edited</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Reject modal */}
+          {showRejectModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+              <div className="w-full max-w-md bg-[#16161f] border border-[#2a2a40] rounded-2xl shadow-2xl p-6">
+                <h2 className="text-lg font-semibold text-white mb-1">Reject & Rewrite Script</h2>
+                <p className="text-sm text-gray-400 mb-4">
+                  The script will be regenerated by the LLM. Provide feedback to guide the rewrite.
+                </p>
+                <textarea
+                  value={rejectNotes}
+                  onChange={(e) => setRejectNotes(e.target.value)}
+                  placeholder="What should be different? (e.g. 'Too formal, make it more casual')"
+                  rows={3}
+                  className="input w-full mb-4"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => { setShowRejectModal(false); setRejectNotes(''); }}
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleReviewAction('reject')}
+                    disabled={!rejectNotes.trim() || reviewing}
+                    className="px-4 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm font-semibold disabled:opacity-50 transition-colors"
+                  >
+                    {reviewing ? 'Rejecting...' : 'Reject & Rewrite'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Entries table */}
-      <div className="card overflow-x-auto">
+      <div className={`card overflow-x-auto ${activeTab !== 'playlist' ? 'hidden' : ''}`}>
         <table className="min-w-full text-sm">
           <thead>
             <tr className="bg-[#13131a]">
@@ -325,7 +678,7 @@ export default function PlaylistDetailPage() {
       </div>
 
       {/* Override Modal */}
-      {overrideEntry && (
+      {overrideEntry && activeTab === 'playlist' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md bg-[#16161f] border border-[#2a2a40] rounded-2xl shadow-2xl p-6">
             <h2 className="text-lg font-semibold text-white mb-1">Override Song</h2>

@@ -5,6 +5,31 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.20] - 2026-04-04
+
+### Added
+- **AI DJ Service**: New `dj-service` microservice (port 3007) — OpenRouter LLM script generation, pluggable TTS adapters, BullMQ pipeline, DJ persona profiles, daypart assignments, script review workflow (approve/reject/edit), auto-approve toggle per station
+- DB migrations 016–022: `dj_profiles`, `dj_daypart_assignments`, `dj_script_templates`, `dj_scripts`, `dj_segments`, `dj_show_manifests`, `stations.dj_auto_approve/dj_enabled`
+- Default DJ persona "Alex" seed (auto-created on migration)
+- DJ types added to `@playgen/types`
+- nginx gateway route `/api/v1/dj/*` → dj-service
+- **CI/CD Pipeline**: GitHub Actions automation
+  - `ci.yml` — lint, typecheck, unit tests, security audit, Docker build verification on every PR and push to main
+  - `cd.yml` — GHCR image push, Supabase DB migration, Vercel frontend deploy, Railway service deploy, post-deploy smoke tests
+  - `security.yml` — weekly CodeQL analysis, dependency review on PRs, TruffleHog secret scanning, OWASP dependency audit
+- `scripts/smoke-test.sh` — post-deploy health check script
+- `Makefile` — local Docker build commands (`make build-all`, `make up`, `make down`)
+
+### Removed
+- `.github/workflows/deploy.yml` — legacy VPS SSH deploy (replaced by `cd.yml`)
+
+### Changed
+- `frontend/vercel.json` — disabled git auto-deploy (now handled by CD workflow)
+- `docker-compose.yml` — added dj-service container
+- `shared/db/src/migrate.ts` — seeds DJ persona after admin seed
+
+---
+
 ## [1.01] - 2026-04-03
 
 ### Fixed

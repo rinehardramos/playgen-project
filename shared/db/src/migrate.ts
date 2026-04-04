@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { getPool } from './client';
 import { seedAdmin } from './seeds/admin';
+import { seedDjPersona } from './seeds/djPersona';
 
 async function migrate() {
   const pool = getPool();
@@ -47,6 +48,7 @@ async function migrate() {
     }
     console.log('Migrations complete.');
     await seedAdmin(pool);
+    await seedDjPersona(pool);
   } finally {
     client.release();
     await pool.end();

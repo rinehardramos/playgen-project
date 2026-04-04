@@ -109,6 +109,18 @@ export default function PlaylistsPage() {
         `/api/v1/stations/${selectedStation}/playlists?month=${selectedMonth}`
       );
       setPlaylists(data);
+
+      // Resume polling for any playlists still generating (e.g. user navigated away and back)
+      const inProgress = data.filter((p) => p.status === 'generating');
+      if (inProgress.length > 0 && activeJobsRef.current.length === 0) {
+        const jobs = inProgress.map((p) => ({ date: p.date, job_id: 'resume' }));
+        setDayGenerating((prev) => {
+          const next = { ...prev };
+          inProgress.forEach((p) => { next[p.date] = true; });
+          return next;
+        });
+        startPolling(jobs);
+      }
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to load playlists');
     } finally {
