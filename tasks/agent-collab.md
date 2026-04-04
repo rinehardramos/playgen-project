@@ -15,6 +15,7 @@ Before starting any task, an agent MUST:
 - [ ] Generation failure alerting — endpoint + UI red badge (issue #133, feat/issue-133-generation-failure-alerting) | @claude-code | 2026-04-05
 
 ## Recently Completed
+- [x] Auth flows — password reset, user invite, admin force-reset (issues #127, #128, #129, #131, PR #145) | @claude-code | 2026-04-05
 - [x] Category distribution by date + bar chart (issue #134, PR #143) | @claude-code | 2026-04-05
 - [x] Day-of-week template overrides (issue #130, PR #138) | @claude-code | 2026-04-05
 - [x] Re-generate single slot (issue #132, PR #140) | @claude-code | 2026-04-05
