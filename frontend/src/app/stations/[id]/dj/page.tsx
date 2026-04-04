@@ -73,6 +73,11 @@ export default function DjProfilesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Generation settings (station-level)
+  const [autoApprove, setAutoApprove] = useState(false);
+  const [autoApproveLoading, setAutoApproveLoading] = useState(false);
+  const [autoApproveError, setAutoApproveError] = useState<string | null>(null);
+
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<DjProfile | null>(null);
@@ -93,16 +98,31 @@ export default function DjProfilesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [pData, vData] = await Promise.all([
+      const [pData, vData, stationData] = await Promise.all([
         api.get<DjProfile[]>(`/api/v1/dj/profiles`),
         api.get<Voice[]>(`/api/v1/dj/tts/voices`),
+        api.get<{ dj_auto_approve: boolean }>(`/api/v1/stations/${stationId}`),
       ]);
       setProfiles(pData);
       setVoices(vData);
+      setAutoApprove(stationData.dj_auto_approve ?? false);
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to load DJ profiles');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleToggleAutoApprove(value: boolean) {
+    setAutoApproveLoading(true);
+    setAutoApproveError(null);
+    try {
+      await api.put(`/api/v1/stations/${stationId}`, { dj_auto_approve: value });
+      setAutoApprove(value);
+    } catch (err: unknown) {
+      setAutoApproveError((err as ApiError).message ?? 'Failed to update setting');
+    } finally {
+      setAutoApproveLoading(false);
     }
   }
 
@@ -179,6 +199,50 @@ export default function DjProfilesPage() {
           <p className="text-sm text-red-400">{error}</p>
         </div>
       )}
+
+      {/* Generation Settings */}
+      <div className="card p-5 mb-6 border border-[#2a2a40]">
+        <h2 className="text-sm font-semibold text-white mb-4">Generation Settings</h2>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <p className="text-sm text-gray-300 font-medium">Auto-approve scripts</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Skip review and generate audio immediately after script generation.
+            </p>
+            {autoApprove && (
+              <div className="mt-2 flex items-center gap-1.5 text-amber-400 text-xs font-medium">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Scripts will not be reviewed before audio is generated
+              </div>
+            )}
+            {autoApproveError && (
+              <p className="mt-2 text-xs text-red-400">{autoApproveError}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {autoApproveLoading && (
+              <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+            )}
+            <button
+              role="switch"
+              aria-checked={autoApprove}
+              disabled={autoApproveLoading}
+              onClick={() => handleToggleAutoApprove(!autoApprove)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-[#16161f] disabled:opacity-50 ${
+                autoApprove ? 'bg-violet-600' : 'bg-gray-700'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  autoApprove ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {profiles.length === 0 ? (

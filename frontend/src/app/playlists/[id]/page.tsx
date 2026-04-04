@@ -105,6 +105,7 @@ export default function PlaylistDetailPage() {
   const [djLoading, setDjLoading] = useState(false);
   const [djError, setDjError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [stationAutoApprove, setStationAutoApprove] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [rejectNotes, setRejectNotes] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -290,6 +291,15 @@ export default function PlaylistDetailPage() {
       const { entries: e, ...pl } = data;
       setPlaylist(pl);
       setEntries(e ?? []);
+      // Fetch station's auto-approve setting for status messaging
+      if (pl.station_id) {
+        try {
+          const st = await api.get<{ dj_auto_approve: boolean }>(`/api/v1/stations/${pl.station_id}`);
+          setStationAutoApprove(st.dj_auto_approve ?? false);
+        } catch {
+          // Non-critical — fall back to false
+        }
+      }
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to load playlist');
     } finally {
@@ -513,7 +523,11 @@ export default function PlaylistDetailPage() {
             <div className="card flex flex-col items-center justify-center py-16 gap-3">
               <div className="w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
               <p className="text-gray-400 text-sm">
-                {generating ? 'Generating DJ script via OpenRouter...' : 'Loading script...'}
+                {generating
+                  ? stationAutoApprove
+                    ? 'Generating DJ script and audio…'
+                    : 'Generating DJ script via OpenRouter…'
+                  : 'Loading script...'}
               </p>
             </div>
           )}
