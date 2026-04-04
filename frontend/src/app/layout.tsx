@@ -1,12 +1,7 @@
-'use client';
-
 import './globals.css';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { DjPlayerProvider } from '@/lib/DjPlayerContext';
-import DjPlayer from '@/components/DjPlayer';
-import { getCurrentUser } from '@/lib/auth';
+import ClientLayout from '@/components/ClientLayout';
+
+export const dynamic = 'force-dynamic';
 
 const NAV_LINKS = [
   {
@@ -65,152 +60,23 @@ const NAV_LINKS = [
       </svg>
     ),
   },
-  {
-    href: '/dj', label: 'DJ Profiles',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
-      </svg>
-    ),
-  },
-  {
-    href: '/dj/templates', label: 'DJ Templates',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-      </svg>
-    ),
-  },
 ];
 
-function Sidebar({ onClose }: { onClose?: () => void }) {
-  const pathname = usePathname();
-  const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
-  useEffect(() => { setUser(getCurrentUser()); }, []);
-
-  return (
-    <div className="flex flex-col h-full bg-[#13131a] border-r border-[#2a2a40]">
-      {/* Logo */}
-      <div className="px-5 py-5 flex items-center gap-3">
-        <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-900/40">
-          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-          </svg>
-        </div>
-        <span className="text-white font-bold text-lg tracking-tight">PlayGen</span>
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {NAV_LINKS.map(({ href, label, icon }) => {
-          // Exact-match nav entries that have child routes registered separately in NAV_LINKS
-          const exactOnly = NAV_LINKS.some((other) => other.href !== href && other.href.startsWith(href + '/'));
-          const active = pathname === href || (!exactOnly && pathname.startsWith(href + '/'));
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={onClose}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                active
-                  ? 'bg-violet-600/20 text-violet-300 border border-violet-500/20'
-                  : 'text-gray-500 hover:text-gray-200 hover:bg-[#1e1e2e]'
-              }`}
-            >
-              <span className={active ? 'text-violet-400' : ''}>{icon}</span>
-              {label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* User */}
-      {user && (
-        <div className="px-4 py-4 border-t border-[#2a2a40]">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-violet-600/30 flex items-center justify-center text-violet-300 text-sm font-semibold flex-shrink-0">
-              {user.display_name?.[0]?.toUpperCase() ?? user.email[0].toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="text-white text-xs font-medium truncate">{user.display_name ?? user.email}</p>
-              <p className="text-gray-500 text-xs capitalize">{user.role_code?.replace('_', ' ')}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              import('@/lib/auth').then(({ logout }) => logout().catch(() => null));
-              window.location.href = '/login';
-            }}
-            className="w-full text-left text-xs text-gray-500 hover:text-gray-300 transition-colors py-1"
-          >
-            Sign out →
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
+export const metadata = {
+  title: 'PlayGen — AI Radio Station Manager',
+  description: 'AI-powered radio automation and scheduling',
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const isLoginPage = pathname === '/login' || pathname === '/';
-  // Base layout structure only on pathname — never on user (null during SSR → hydration mismatch)
-  const showNav = !isLoginPage;
-
   return (
     <html lang="en">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="bg-[#0b0b10] text-white min-h-screen">
-        <DjPlayerProvider>
-          {showNav ? (
-            <div className="flex h-screen overflow-hidden">
-              {/* Desktop sidebar */}
-              <aside className="hidden md:flex md:w-56 lg:w-60 flex-shrink-0 flex-col">
-                <Sidebar />
-              </aside>
-
-              {/* Mobile sidebar overlay */}
-              {mobileOpen && (
-                <div className="fixed inset-0 z-50 md:hidden">
-                  <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
-                  <aside className="relative w-64 h-full">
-                    <Sidebar onClose={() => setMobileOpen(false)} />
-                  </aside>
-                </div>
-              )}
-
-              {/* Main */}
-              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                {/* Mobile top bar */}
-                <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-[#13131a] border-b border-[#2a2a40]">
-                  <button onClick={() => setMobileOpen(true)} className="text-gray-400 hover:text-white">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/>
-                    </svg>
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 bg-violet-600 rounded-md flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                      </svg>
-                    </div>
-                    <span className="text-white font-bold text-base">PlayGen</span>
-                  </div>
-                </div>
-
-                <main className="flex-1 overflow-y-auto">
-                  {children}
-                </main>
-              </div>
-            </div>
-          ) : (
-            <main className="min-h-screen">{children}</main>
-          )}
-          <DjPlayer />
-        </DjPlayerProvider>
+        <ClientLayout>
+          {children}
+        </ClientLayout>
       </body>
     </html>
   );

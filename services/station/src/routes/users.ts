@@ -5,6 +5,22 @@ import * as userService from '../services/userService';
 export async function userRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate);
 
+  app.get('/me', async (req, reply) => {
+    const user = await userService.getUser(req.user.sub);
+    if (!user) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+    return user;
+  });
+
+  app.put('/me', async (req, reply) => {
+    const body = req.body as { display_name?: string; password?: string };
+    if (body.password && body.password.length < 8) {
+      return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'Password must be at least 8 characters' } });
+    }
+    const user = await userService.updateUserProfile(req.user.sub, body);
+    if (!user) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+    return user;
+  });
+
   app.get('/companies/:id/users', { onRequest: [requirePermission('users:read')] }, async (req) => {
     const { id } = req.params as { id: string };
     return userService.listUsers(id);

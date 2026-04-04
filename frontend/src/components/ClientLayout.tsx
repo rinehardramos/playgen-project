@@ -2,9 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { getCurrentUser } from '@/lib/auth';
-import type { AuthUser } from '@/lib/auth';
 
 const NAV_LINKS = [
   {
@@ -48,14 +47,6 @@ const NAV_LINKS = [
     ),
   },
   {
-    href: '/dj', label: 'DJ Profiles',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
-      </svg>
-    ),
-  },
-  {
     href: '/analytics', label: 'Analytics',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -64,29 +55,30 @@ const NAV_LINKS = [
     ),
   },
   {
-    href: '/stations', label: 'Stations',
+    href: '/settings', label: 'Settings',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
       </svg>
     ),
   },
   {
-    href: '/settings', label: 'Settings',
+    href: '/users/profile', label: 'My Profile',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h10a7 7 0 00-7-7z"/>
       </svg>
     ),
   },
 ];
 
-function Sidebar({ user, onClose }: { user: AuthUser | null; onClose?: () => void }) {
+function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
+  const [user, setUser] = useState<any>(null);
+  useEffect(() => { setUser(getCurrentUser()); }, []);
 
   return (
     <div className="flex flex-col h-full bg-[#13131a] border-r border-[#2a2a40]">
-      {/* Logo */}
       <div className="px-5 py-5 flex items-center gap-3">
         <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-900/40">
           <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -96,7 +88,6 @@ function Sidebar({ user, onClose }: { user: AuthUser | null; onClose?: () => voi
         <span className="text-white font-bold text-lg tracking-tight">PlayGen</span>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
         {NAV_LINKS.map(({ href, label, icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/');
@@ -118,12 +109,11 @@ function Sidebar({ user, onClose }: { user: AuthUser | null; onClose?: () => voi
         })}
       </nav>
 
-      {/* User */}
       {user && (
         <div className="px-4 py-4 border-t border-[#2a2a40]">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-8 h-8 rounded-full bg-violet-600/30 flex items-center justify-center text-violet-300 text-sm font-semibold flex-shrink-0">
-              {(user.display_name?.[0] ?? user.email?.[0] ?? '?').toUpperCase()}
+              {user.display_name?.[0]?.toUpperCase() ?? user.email[0].toUpperCase()}
             </div>
             <div className="min-w-0">
               <p className="text-white text-xs font-medium truncate">{user.display_name ?? user.email}</p>
@@ -145,42 +135,31 @@ function Sidebar({ user, onClose }: { user: AuthUser | null; onClose?: () => voi
   );
 }
 
-export default function ClientShell({ children }: { children: React.ReactNode }) {
+function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [user, setUser] = useState<AuthUser | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    setUser(getCurrentUser());
-  }, [pathname]);
-
   const isLoginPage = pathname === '/login' || pathname === '/';
-  const showNav = !isLoginPage;
-
-  if (!showNav) {
+  
+  if (isLoginPage) {
     return <main className="min-h-screen">{children}</main>;
   }
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-56 lg:w-60 flex-shrink-0 flex-col">
-        <Sidebar user={user} />
+        <Sidebar />
       </aside>
 
-      {/* Mobile sidebar overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
           <aside className="relative w-64 h-full">
-            <Sidebar user={user} onClose={() => setMobileOpen(false)} />
+            <Sidebar onClose={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile top bar */}
         <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-[#13131a] border-b border-[#2a2a40]">
           <button onClick={() => setMobileOpen(true)} className="text-gray-400 hover:text-white">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -197,10 +176,18 @@ export default function ClientShell({ children }: { children: React.ReactNode })
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1">
           {children}
         </main>
       </div>
     </div>
+  );
+}
+
+export default function ClientLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-500"></div></div>}>
+      <ClientLayoutContent>{children}</ClientLayoutContent>
+    </Suspense>
   );
 }
