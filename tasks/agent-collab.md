@@ -8,6 +8,13 @@ Before starting any task, an agent MUST:
 4. Update this file in the SAME commit as the work (start and finish).
 5. When finished, move the entry to `## Recently Completed`.
 
+## Rules
+
+- **Create a ticket first**: If user requests a feature or reports a bug, create a GitHub issue BEFORE implementing.
+- **No direct Railway deploys**: Push to main and let CI/CD pipeline deploy. Never use `railway up` directly.
+- **Fix root causes**: No workarounds. Diagnose and fix the real issue.
+- **No untracked work**: Every feature/bug/task must have a GitHub issue.
+
 ## Active Work
 
 ## Recently Completed

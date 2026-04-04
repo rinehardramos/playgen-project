@@ -146,3 +146,55 @@ URL=$(gh issue create --repo "$REPO" --title "..." --body "..." 2>&1 | tail -1)
 ITEM=$(gh project item-add 2 --owner rinehardramos --url "$URL" --format json | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
 gh project item-edit --project-id "$PROJECT_ID" --id "$ITEM" --field-id "$FIELD_ID" --single-select-option-id "$TODO_OPT"
 ```
+
+---
+
+## [deployment] NEVER deploy directly to Railway — always use the CI/CD pipeline — 2026-04-04
+
+**Trigger**: Used `railway up --service <name> --detach` directly to fix a broken service. User corrected: "do not deploy directly! use the pipeline!"
+
+**Rule**: NEVER run `railway up`, `railway redeploy`, or any direct Railway deploy commands. ALL deployments MUST go through the CD pipeline (push to main branch → CI passes → CD deploys).
+
+**Why**: Direct deployments bypass CI checks, may deploy untested code, and are not tracked in git history. The pipeline ensures code is tested before deployment and maintains deployment auditability.
+
+**How to apply**: Push fixes to main branch. If CI/CD pipeline is stuck in queue (GitHub Actions runner backlog), wait — do not bypass with manual deploys. Only exception: emergency fixes with user's explicit authorization.
+
+---
+
+## [deployment] Add DJ_HOST to gateway envsubst list when adding new services — 2026-04-04
+
+**Trigger**: Site went down with `nginx: [emerg] unknown "dj_host" variable` because `${DJ_HOST}` was used in nginx.conf.template but not listed in the envsubst command in docker-start.sh.
+
+**Rule**: Whenever a new service is added to nginx.conf.template, ALWAYS add `${NEW_HOST}` to BOTH the envsubst variable list in `gateway/docker-start.sh` AND set the env var in Railway's gateway service.
+
+**Why**: envsubst with an explicit variable list leaves unlisted `${VARS}` as literal text, which nginx then tries to interpret as nginx variables. Unknown nginx variables cause nginx to fail to start.
+
+**Example**: When adding DJ service routes, add `${DJ_HOST}` to:
+1. `gateway/docker-start.sh`: envsubst `'... ${DJ_HOST} ...'`
+2. Railway gateway service env vars: `DJ_HOST=dj.railway.internal`
+
+---
+
+## [dependencies] @fastify/rate-limit v10+ requires Fastify v5 — 2026-04-04
+
+**Trigger**: Station service crash-looped on Railway with `FST_ERR_PLUGIN_VERSION_MISMATCH: @fastify/rate-limit - expected '5.x' fastify version, '4.29.1' is installed`.
+
+**Rule**: ALWAYS check `@fastify/rate-limit` version compatibility before installing. For Fastify v4 services, use `@fastify/rate-limit@^9.0.0` (not v10+).
+
+**Why**: `@fastify/rate-limit` v10+ is only compatible with Fastify v5. All PlayGen services use Fastify v4.27.x, so they must use `@fastify/rate-limit@^9.x`.
+
+---
+
+---
+
+## [process] Fix root causes, never workarounds — 2026-04-04
+
+**Trigger**: User corrected: "do not implement workarounds, fix the root cause in a systematic way"
+
+**Rule**: ALWAYS diagnose the actual root cause before writing any fix. Never patch symptoms. If a fix feels like a bandaid (skipping a step, hardcoding, special-casing), stop and find why the underlying system is broken.
+
+**Why**: Workarounds compound. They hide real bugs, create technical debt, and cause harder failures later. Root-cause fixes are the only acceptable resolution.
+
+**How to apply**: Before changing a line of code, write down what EXACTLY is broken and why. If you can't explain the root cause in one sentence, keep investigating.
+
+---
