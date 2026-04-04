@@ -5,6 +5,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.25] - 2026-04-05
+
+### Fixed
+- **CD Pipeline**: Remove `--cwd frontend` from Vercel deploy command (re-introduced by another agent); Vercel dashboard already has `Root Directory: frontend` configured so `--cwd frontend` caused a doubled `frontend/frontend` path error
+
+---
+
 ## [1.23] - 2026-04-05
 
 ### Fixed
