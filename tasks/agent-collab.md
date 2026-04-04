@@ -23,7 +23,7 @@ If ANY of these show the issue is taken → pick a different issue.
 
 ## Active Work
 - [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
-- [ ] Implement script review flow: pending_review → approve/reject/edit (issue #30, feat/issue-30-script-review-flow) | @claude-code | 2026-04-05
+- [x] Script review backend: explicit approve/reject/edit/regen endpoints + TTS gating (issue #30, feat/issue-30-script-review-flow) | @claude-code | 2026-04-05
 
 ## Recently Completed
 - [x] Add DJ link to sidebar navigation (issue #103, feat/dj-sidebar-nav) | @claude-code | 2026-04-04

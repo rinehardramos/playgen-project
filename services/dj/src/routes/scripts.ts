@@ -4,7 +4,7 @@ import * as scriptService from '../services/scriptService.js';
 import * as manifestService from '../services/manifestService.js';
 import { getDefaultProfile } from '../services/profileService.js';
 import { enqueueDjGeneration } from '../queues/djQueue.js';
-import { generateSegmentTts, loadTtsProviderConfig } from '../services/ttsService.js';
+import { generateSegmentTts, generateScriptAudio, loadTtsProviderConfig } from '../services/ttsService.js';
 import type { ReviewScriptRequest, GenerateScriptRequest } from '@playgen/types';
 import { getPool } from '../db.js';
 import { getStorageAdapter } from '../lib/storage/index.js';
@@ -163,6 +163,116 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       return reply.badRequest('Invalid action');
     },
   );
+
+  // ─── Explicit review endpoints (issue #30) ───────────────────────────────
+
+  // POST /dj/scripts/:id/approve  → approve, trigger TTS, build manifest
+  app.post<{ Params: { id: string }; Body: { review_notes?: string } }>(
+    '/dj/scripts/:id/approve',
+    async (req, reply) => {
+      const { id } = req.params;
+      const { review_notes } = req.body ?? {};
+      const userId: string = (req as any).user.sub;
+
+      const script = await scriptService.approveScript(id, userId, review_notes);
+      if (!script) return reply.badRequest('Script not found or not in pending_review state');
+
+      // Kick off TTS in the background (non-blocking)
+      const pool = getPool();
+      const { rows: stRows } = await pool.query(
+        `SELECT scr.station_id, dp.tts_voice_id
+         FROM dj_scripts scr
+         LEFT JOIN dj_profiles dp ON dp.id = scr.dj_profile_id
+         WHERE scr.id = $1`,
+        [id],
+      );
+      if (stRows[0]) {
+        const { station_id, tts_voice_id } = stRows[0];
+        const providerCfg = await loadTtsProviderConfig(station_id, tts_voice_id ?? 'alloy');
+        if (providerCfg) {
+          // Fire-and-forget: generate audio then build manifest
+          generateScriptAudio(id, providerCfg)
+            .then(() => manifestService.buildManifest(id))
+            .catch((err) => console.error('[scriptRoutes] Post-approval TTS/manifest failed:', err));
+        }
+      }
+
+      return script;
+    },
+  );
+
+  // POST /dj/scripts/:id/reject  → reject and re-queue LLM rewrite
+  app.post<{ Params: { id: string }; Body: { review_notes: string; future_instructions?: string } }>(
+    '/dj/scripts/:id/reject',
+    async (req, reply) => {
+      const { id } = req.params;
+      const { review_notes, future_instructions } = req.body ?? {} as any;
+      const userId: string = (req as any).user.sub;
+
+      if (!review_notes) return reply.badRequest('review_notes is required');
+
+      const script = await scriptService.rejectScript(id, userId, review_notes);
+      if (!script) return reply.badRequest('Script not found or already finalized');
+
+      // Re-queue full LLM rewrite
+      const { rows } = await getPool().query(
+        `SELECT playlist_id, station_id, dj_profile_id FROM dj_scripts WHERE id = $1`,
+        [id],
+      );
+      if (rows[0]) {
+        await enqueueDjGeneration({
+          playlist_id: rows[0].playlist_id,
+          station_id: rows[0].station_id,
+          dj_profile_id: rows[0].dj_profile_id,
+          auto_approve: false,
+          rejection_notes: review_notes,
+        });
+      }
+
+      return { ...script, future_instructions: future_instructions ?? null };
+    },
+  );
+
+  // PUT /dj/segments/:id/text  → save human-edited text
+  app.put<{ Params: { id: string }; Body: { text: string } }>(
+    '/dj/segments/:id/text',
+    async (req, reply) => {
+      const { id } = req.params;
+      const { text } = req.body ?? {} as any;
+
+      if (!text?.trim()) return reply.badRequest('text is required');
+
+      const updated = await scriptService.saveSegmentEdit(id, text);
+      if (!updated) return reply.notFound('Segment not found');
+      return updated;
+    },
+  );
+
+  // POST /dj/segments/:id/approve  → mark a single segment as approved
+  app.post<{ Params: { id: string } }>(
+    '/dj/segments/:id/approve',
+    async (req, reply) => {
+      const { id } = req.params;
+      const updated = await scriptService.approveSegment(id);
+      if (!updated) return reply.notFound('Segment not found');
+      return updated;
+    },
+  );
+
+  // POST /dj/segments/:id/reject  → inline LLM rewrite for a single segment
+  app.post<{ Params: { id: string }; Body: { review_notes?: string } }>(
+    '/dj/segments/:id/reject',
+    async (req, reply) => {
+      const { id } = req.params;
+      const { review_notes } = req.body ?? {};
+
+      const updated = await scriptService.regenerateSegment(id, review_notes);
+      if (!updated) return reply.notFound('Segment not found or profile missing');
+      return updated;
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Regenerate TTS audio for a single segment
   app.post<{ Params: { segmentId: string } }>(

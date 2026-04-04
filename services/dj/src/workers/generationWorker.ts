@@ -193,8 +193,9 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
     }
   }
 
-  // 7. TTS pass — generate audio for each segment
-  if (ttsEnabled) {
+  // 7. TTS pass — only when auto_approve is true (review-disabled path)
+  //    When review is enabled, TTS runs after the user approves (see POST /scripts/:id/approve)
+  if (ttsEnabled && data.auto_approve) {
     for (const seg of generatedSegments) {
       try {
         await generateSegmentTts(
@@ -217,8 +218,10 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
     [script_id, position, generation_ms],
   );
 
-  // 9. Build manifest (fire-and-forget — failure does not block script)
-  buildManifest(script_id).catch((err) =>
-    console.error('[generationWorker] Manifest build failed:', err),
-  );
+  // 9. Build manifest only when auto-approved (review path builds manifest after approval)
+  if (data.auto_approve) {
+    buildManifest(script_id).catch((err) =>
+      console.error('[generationWorker] Manifest build failed:', err),
+    );
+  }
 }

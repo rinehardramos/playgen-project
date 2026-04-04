@@ -70,6 +70,43 @@ export async function generateSegmentTts(
 }
 
 /**
+ * Run TTS audio generation for all segments of a script.
+ * Called after a script is approved (review-enabled path).
+ * Silently skips segments that already have audio_url set.
+ */
+export async function generateScriptAudio(
+  scriptId: string,
+  providerCfg: TtsProviderConfig,
+): Promise<void> {
+  const pool = getPool();
+  const { rows: segments } = await pool.query<{
+    id: string;
+    position: number;
+    script_text: string;
+    edited_text: string | null;
+    audio_url: string | null;
+  }>(
+    `SELECT id, position, script_text, edited_text, audio_url
+     FROM dj_segments WHERE script_id = $1 ORDER BY position`,
+    [scriptId],
+  );
+
+  for (const seg of segments) {
+    if (seg.audio_url) continue; // already has audio
+    const text = seg.edited_text ?? seg.script_text;
+    try {
+      await generateSegmentTts(
+        { id: seg.id, position: seg.position, text, script_id: scriptId },
+        providerCfg,
+      );
+    } catch (err) {
+      console.error(`[ttsService] TTS failed for segment ${seg.id}:`, err);
+      // Continue — partial audio is better than no audio
+    }
+  }
+}
+
+/**
  * Load the effective TTS provider config for a station, falling back to
  * global env vars when station-level overrides are not set.
  *

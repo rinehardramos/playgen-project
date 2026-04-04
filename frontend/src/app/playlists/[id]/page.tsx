@@ -11,6 +11,7 @@ import { useDjPlayer } from '@/lib/DjPlayerContext';
 type PlaylistStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'exported' | 'failed';
 type DjReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'auto_approved';
 type DjSegmentType = 'show_intro' | 'song_intro' | 'song_transition' | 'show_outro' | 'station_id' | 'time_check' | 'weather_tease' | 'ad_break';
+type DjSegmentReviewStatus = 'pending' | 'approved' | 'edited' | 'rejected';
 
 interface DjSegment {
   id: string;
@@ -19,6 +20,7 @@ interface DjSegment {
   position: number;
   script_text: string;
   edited_text: string | null;
+  segment_review_status: DjSegmentReviewStatus;
   audio_url: string | null;
   audio_duration_sec: number | null;
 }
@@ -112,6 +114,9 @@ export default function PlaylistDetailPage() {
   const [editText, setEditText] = useState('');
   const [regenLoading, setRegenLoading] = useState<Record<string, boolean>>({});
   const [regenError, setRegenError] = useState<Record<string, string>>({});
+  // Per-segment action loading states
+  const [segmentApproving, setSegmentApproving] = useState<Record<string, boolean>>({});
+  const [segmentRejecting, setSegmentRejecting] = useState<Record<string, boolean>>({});
 
   const djPlayer = useDjPlayer();
 
@@ -163,10 +168,11 @@ export default function PlaylistDetailPage() {
     setReviewing(true);
     setDjError(null);
     try {
-      const body: Record<string, unknown> = { action };
-      if (action === 'reject') body.review_notes = rejectNotes;
-      const updated = await api.post<DjScript>(`/api/v1/dj/scripts/${djScript.id}/review`, body);
-      if (action === 'reject') {
+      if (action === 'approve') {
+        const updated = await api.post<DjScript>(`/api/v1/dj/scripts/${djScript.id}/approve`, {});
+        setDjScript({ ...djScript, review_status: updated.review_status });
+      } else {
+        await api.post(`/api/v1/dj/scripts/${djScript.id}/reject`, { review_notes: rejectNotes });
         // Re-generation queued, start polling
         setDjScript(null);
         setShowRejectModal(false);
@@ -183,8 +189,6 @@ export default function PlaylistDetailPage() {
           } catch { /* still generating */ }
         }, 3000);
         setTimeout(() => { clearInterval(poll); setGenerating(false); }, 120000);
-      } else {
-        setDjScript({ ...djScript, review_status: updated.review_status });
       }
     } catch (err: unknown) {
       setDjError((err as ApiError).message ?? 'Review action failed');
@@ -196,11 +200,11 @@ export default function PlaylistDetailPage() {
   async function handleSaveEdit(segmentId: string) {
     if (!djScript) return;
     try {
-      const updated = await api.post<DjScript>(`/api/v1/dj/scripts/${djScript.id}/review`, {
-        action: 'edit',
-        edited_segments: [{ id: segmentId, edited_text: editText }],
+      const updatedSeg = await api.put<DjSegment>(`/api/v1/dj/segments/${segmentId}/text`, { text: editText });
+      setDjScript({
+        ...djScript,
+        segments: djScript.segments.map((s) => (s.id === segmentId ? updatedSeg : s)),
       });
-      setDjScript(updated);
       setEditingSegment(null);
       setEditText('');
     } catch (err: unknown) {
@@ -234,6 +238,42 @@ export default function PlaylistDetailPage() {
       }));
     } finally {
       setRegenLoading((prev) => { const next = { ...prev }; delete next[segmentId]; return next; });
+    }
+  }
+
+  async function handleApproveSegment(segmentId: string) {
+    setSegmentApproving((prev) => ({ ...prev, [segmentId]: true }));
+    try {
+      const updated = await api.post<DjSegment>(`/api/v1/dj/segments/${segmentId}/approve`, {});
+      setDjScript((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          segments: prev.segments.map((s) => s.id === segmentId ? { ...s, segment_review_status: updated.segment_review_status } : s),
+        };
+      });
+    } catch (err: unknown) {
+      setDjError((err as ApiError).message ?? 'Failed to approve segment');
+    } finally {
+      setSegmentApproving((prev) => { const n = { ...prev }; delete n[segmentId]; return n; });
+    }
+  }
+
+  async function handleRejectSegment(segmentId: string) {
+    setSegmentRejecting((prev) => ({ ...prev, [segmentId]: true }));
+    try {
+      const updated = await api.post<DjSegment>(`/api/v1/dj/segments/${segmentId}/reject`, {});
+      setDjScript((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          segments: prev.segments.map((s) => s.id === segmentId ? { ...s, ...updated } : s),
+        };
+      });
+    } catch (err: unknown) {
+      setDjError((err as ApiError).message ?? 'Failed to reject segment');
+    } finally {
+      setSegmentRejecting((prev) => { const n = { ...prev }; delete n[segmentId]; return n; });
     }
   }
 
