@@ -41,6 +41,19 @@ export const scriptTemplateService = {
        ORDER BY station_id NULLS LAST LIMIT 1`,
       [stationId, segmentType]
     );
-    return rows[0]?.prompt_template || null;
+
+    if (rows[0]?.prompt_template) return rows[0].prompt_template;
+
+    // Hardcoded fallbacks
+    const fallbacks: Record<string, string> = {
+      show_open: "Good {{time_of_day}}, {{station_name}}! I'm {{dj_name}} and we're kicking things off with {{song_title}} by {{artist}}.",
+      segue: "That was {{prev_artist}} with '{{prev_song}}'. Coming up — {{artist}} with '{{song_title}}'.",
+      song_intro: "Next up, {{artist}} with '{{song_title}}'.",
+      time_check: "It's {{time}} — you're locked in with {{dj_name}} on {{station_name}}.",
+      station_id: "{{station_name}} — playing the best music all day.",
+      show_close: "That's a wrap from me, {{dj_name}}. Keep those vibes going."
+    };
+
+    return fallbacks[segmentType] || null;
   }
 };

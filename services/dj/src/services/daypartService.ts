@@ -69,6 +69,22 @@ export const daypartService = {
       [stationId]
     );
 
-    return defaults[0] || null;
+    if (defaults.length > 0) return defaults[0];
+
+    // 3. Last resort hardcoded fallback (Alex)
+    return {
+      id: '00000000-0000-0000-0000-000000000000',
+      station_id: stationId,
+      name: 'Alex',
+      tone: 'friendly',
+      energy_level: 'medium',
+      persona_prompt: 'You are Alex, a friendly AI DJ.',
+      catchphrases: ['Keep the vibes going'],
+      voice_config: { provider: 'openai', voice_id: 'nova', speed: 1.0 },
+      is_default: true,
+      is_active: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
   }
 };
