@@ -48,13 +48,13 @@ export async function generateSegmentTts(
   const result = await ttsAdapter.generate({
     voice_id: providerCfg.voiceId,
     text: segment.text,
-    output_path: outputPath,
   });
+
+  await fs.writeFile(outputPath, result.audio_data);
 
   let duration = result.duration_sec;
   if (duration === null) {
-    const stat = await fs.stat(outputPath);
-    duration = estimateMp3Duration(Buffer.alloc(stat.size));
+    duration = estimateMp3Duration(result.audio_data);
   }
 
   const audioUrl = `/dj/audio/${segment.script_id}/${segment.position}.mp3`;
