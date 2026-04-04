@@ -324,6 +324,9 @@ importers:
 
   services/station:
     dependencies:
+      '@fastify/rate-limit':
+        specifier: ^10.3.0
+        version: 10.3.0
       '@fastify/sensible':
         specifier: ^5.5.0
         version: 5.6.0

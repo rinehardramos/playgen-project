@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import sensible from '@fastify/sensible';
+import rateLimit from '@fastify/rate-limit';
 import { companyRoutes } from './routes/companies';
 import { stationRoutes } from './routes/stations';
 import { stationSettingsRoutes } from './routes/stationSettings';
@@ -15,6 +16,7 @@ const app = Fastify({
 });
 
 app.register(sensible);
+app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
 
 app.get('/health', async () => ({ status: 'ok', service: 'station-service' }));
 
