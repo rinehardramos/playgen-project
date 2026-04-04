@@ -5,6 +5,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.26] - 2026-04-05
+
+### Fixed
+- **Vercel install shameful hoist**: Pass `--shamefully-hoist` directly to the `pnpm install` command in `vercel.json` so Vercel's build environment hoists `@tailwindcss/postcss` and other devDependencies to root `node_modules/`, fixing the `Cannot find module '@tailwindcss/postcss'` error (`.npmrc`-based approach was ineffective because Vercel may override it)
+
+---
+
 ## [1.25] - 2026-04-05
 
 ### Fixed
