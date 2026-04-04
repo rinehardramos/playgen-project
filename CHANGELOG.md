@@ -10,6 +10,10 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 ### Added
 - **Dashboard Stats Endpoint**: `GET /api/v1/dashboard/stats` on analytics service returns `active_songs`, `todays_playlists`, `pending_approvals`, and `active_stations` in a single query, scoped to the caller's company; fixes 500 errors on the dashboard stats cards (#118)
 
+### Fixed
+- **Vercel CD doubled path**: Removed `working-directory: frontend` from Vercel deploy step in `cd.yml` to fix doubled `frontend/frontend` path causing deploy failures (#119)
+- **Vercel CD missing cwd**: Added `--cwd frontend` to `vercel deploy` command so the CLI resolves the correct project root after the `working-directory` removal
+
 ---
 
 ## [1.21] - 2026-04-04
