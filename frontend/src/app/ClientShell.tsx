@@ -1,12 +1,13 @@
 'use client';
 
+import type React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { getCurrentUser } from '@/lib/auth';
 import type { AuthUser } from '@/lib/auth';
 
-const NAV_LINKS = [
+const NAV_LINKS: Array<{ href: string; label: string; icon: React.ReactNode; exact?: boolean }> = [
   {
     href: '/dashboard', label: 'Dashboard',
     icon: (
@@ -48,10 +49,18 @@ const NAV_LINKS = [
     ),
   },
   {
-    href: '/dj', label: 'DJ Profiles',
+    href: '/dj', label: 'DJ Profiles', exact: true,
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+      </svg>
+    ),
+  },
+  {
+    href: '/dj/templates', label: 'Script Templates',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
       </svg>
     ),
   },
@@ -98,8 +107,8 @@ function Sidebar({ user, onClose }: { user: AuthUser | null; onClose?: () => voi
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {NAV_LINKS.map(({ href, label, icon }) => {
-          const active = pathname === href || pathname.startsWith(href + '/');
+        {NAV_LINKS.map(({ href, label, icon, exact }) => {
+          const active = pathname === href || (!exact && pathname.startsWith(href + '/'));
           return (
             <Link
               key={href}

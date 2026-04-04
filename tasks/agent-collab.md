@@ -9,6 +9,7 @@ Before starting any task, an agent MUST:
 5. When finished, move the entry to `## Recently Completed`.
 
 ## Active Work
+- [ ] Issue #20: Build script template management UI | feat/dj-template-ui-v2 | 2026-04-04
 
 ## Recently Completed
 - [x] Make AI DJ API keys configurable in Station Settings UI/Backend | @gemini-cli | 2026-04-04
