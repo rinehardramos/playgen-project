@@ -9,14 +9,19 @@ export class ElevenLabsTtsAdapter implements TtsAdapter {
 
   constructor() {
     this.apiKey = config.tts.elevenlabsApiKey;
-    if (!this.apiKey) throw new Error('ELEVENLABS_API_KEY is required for ElevenLabs TTS');
+    if (!this.apiKey) {
+      console.warn('ELEVENLABS_API_KEY is missing in config, station-specific key will be required');
+    }
   }
 
   async generate(opts: TtsOptions): Promise<TtsResult> {
+    const apiKey = opts.apiKey || this.apiKey;
+    if (!apiKey) throw new Error('ElevenLabs API key is missing');
+
     const response = await fetch(`${this.baseUrl}/text-to-speech/${opts.voice_id}`, {
       method: 'POST',
       headers: {
-        'xi-api-key': this.apiKey,
+        'xi-api-key': apiKey,
         'Content-Type': 'application/json',
         Accept: 'audio/mpeg',
       },

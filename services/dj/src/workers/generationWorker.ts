@@ -20,6 +20,9 @@ interface StationRow {
   name: string;
   timezone: string;
   company_id: string;
+  openai_api_key?: string;
+  elevenlabs_api_key?: string;
+  openrouter_api_key?: string;
 }
 
 // Determine which segment types to generate for a given playlist position
@@ -50,7 +53,8 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
 
   // 1. Load station info
   const { rows: stationRows } = await pool.query<StationRow>(
-    `SELECT id, name, timezone, company_id FROM stations WHERE id = $1`,
+    `SELECT id, name, timezone, company_id, openai_api_key, elevenlabs_api_key, openrouter_api_key 
+     FROM stations WHERE id = $1`,
     [data.station_id],
   );
   const station = stationRows[0];
@@ -156,7 +160,11 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        { model: profile.llm_model, temperature: profile.llm_temperature },
+        { 
+          model: profile.llm_model, 
+          temperature: profile.llm_temperature,
+          apiKey: station.openrouter_api_key,
+        },
       );
 
       const pos = position++;
@@ -184,10 +192,15 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
       for (const seg of generatedSegments) {
         try {
           const outputPath = path.join(audioDir, `${seg.position}.mp3`);
+          const ttsApiKey = profile!.tts_provider === 'openai' 
+            ? station.openai_api_key 
+            : station.elevenlabs_api_key;
+
           const result = await ttsAdapter.generate({
             voice_id: profile!.tts_voice_id,
             text: seg.script_text,
             output_path: outputPath,
+            apiKey: ttsApiKey,
           });
 
           // Estimate duration from file size if adapter didn't provide it

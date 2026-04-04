@@ -16,6 +16,9 @@ interface StationConfig {
   broadcast_start_hour: number;
   broadcast_end_hour: number;
   active_days: string[];
+  openai_api_key?: string;
+  elevenlabs_api_key?: string;
+  openrouter_api_key?: string;
 }
 
 interface RotationRules {
@@ -32,6 +35,9 @@ const DEFAULT_CONFIG: StationConfig = {
   broadcast_start_hour: 4,
   broadcast_end_hour: 3,
   active_days: [...ALL_DAYS],
+  openai_api_key: '',
+  elevenlabs_api_key: '',
+  openrouter_api_key: '',
 };
 
 const DEFAULT_RULES: RotationRules = {
@@ -304,6 +310,48 @@ export default function SettingsPage() {
                         {day}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-800 space-y-5">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    AI DJ API Keys
+                  </h3>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">OpenRouter API Key</label>
+                    <p className="text-xs text-gray-500 mb-2">Used for script generation (Claude, GPT-4, etc.)</p>
+                    <input
+                      type="password"
+                      value={config.openrouter_api_key || ''}
+                      onChange={(e) => setConfig((p) => ({ ...p, openrouter_api_key: e.target.value }))}
+                      className="input w-full"
+                      placeholder="sk-or-v1-..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">OpenAI API Key</label>
+                    <p className="text-xs text-gray-500 mb-2">Used for OpenAI TTS (if provider is set to OpenAI)</p>
+                    <input
+                      type="password"
+                      value={config.openai_api_key || ''}
+                      onChange={(e) => setConfig((p) => ({ ...p, openai_api_key: e.target.value }))}
+                      className="input w-full"
+                      placeholder="sk-..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">ElevenLabs API Key</label>
+                    <p className="text-xs text-gray-500 mb-2">Used for ElevenLabs TTS (if provider is set to ElevenLabs)</p>
+                    <input
+                      type="password"
+                      value={config.elevenlabs_api_key || ''}
+                      onChange={(e) => setConfig((p) => ({ ...p, elevenlabs_api_key: e.target.value }))}
+                      className="input w-full"
+                      placeholder="eleven-..."
+                    />
                   </div>
                 </div>
               </div>

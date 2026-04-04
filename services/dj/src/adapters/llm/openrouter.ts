@@ -10,11 +10,24 @@ export interface LlmOptions {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  apiKey?: string;
 }
 
 let client: OpenAI | null = null;
 
-function getClient(): OpenAI {
+function getClient(apiKey?: string): OpenAI {
+  // If a specific API key is provided, always return a new client for that key
+  if (apiKey) {
+    return new OpenAI({
+      baseURL: config.openRouter.baseUrl,
+      apiKey: apiKey,
+      defaultHeaders: {
+        'HTTP-Referer': config.openRouter.siteUrl,
+        'X-Title': config.openRouter.siteName,
+      },
+    });
+  }
+
   if (!client) {
     client = new OpenAI({
       baseURL: config.openRouter.baseUrl,
@@ -32,7 +45,7 @@ export async function llmComplete(
   messages: LlmMessage[],
   options: LlmOptions = {},
 ): Promise<string> {
-  const c = getClient();
+  const c = getClient(options.apiKey);
   const model = options.model ?? config.openRouter.defaultModel;
 
   const response = await c.chat.completions.create({
