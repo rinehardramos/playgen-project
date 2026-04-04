@@ -5,6 +5,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.23] - 2026-04-05
+
+### Fixed
+- **CD Pipeline**: Switch Vercel `installCommand` from `npm install` to `pnpm install --frozen-lockfile` and `buildCommand` to `pnpm run build` to match the pnpm monorepo setup and fix Vercel production deploy failures
+
+---
+
 ## [1.22] - 2026-04-05
 
 ### Added
