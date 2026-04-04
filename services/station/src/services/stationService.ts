@@ -1,5 +1,6 @@
 import { getPool } from '../db';
 import { Station } from '@playgen/types';
+import { seedDefaultDjProfileForStation } from './djSetupService';
 
 export async function listStations(companyId: string): Promise<Station[]> {
   const { rows } = await getPool().query<Station>(
@@ -40,6 +41,12 @@ export async function createStation(data: {
     'INSERT INTO rotation_rules (station_id) VALUES ($1) ON CONFLICT DO NOTHING',
     [rows[0].id]
   );
+
+  // Seed default DJ profile and daypart assignments for the new station
+  // This is fire-and-forget — a failure here should not block station creation
+  seedDefaultDjProfileForStation(data.company_id, rows[0].id).catch((err) => {
+    console.error('[station] Failed to seed default DJ profile:', err);
+  });
 
   return rows[0];
 }
