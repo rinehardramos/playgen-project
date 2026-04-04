@@ -11,6 +11,8 @@ Before starting any task, an agent MUST:
 ## Active Work
 
 ## Recently Completed
+- [x] DJ Personality Feature (persona_config JSONB, PersonaConfig type, prompt builder, seed, frontend form) | @claude-code | 2026-04-04
+- [x] Fix @fastify/rate-limit v10→v9 for Fastify v4 compatibility (DJ + Station services) | @claude-code | 2026-04-04
 - [x] Make AI DJ API keys configurable in Station Settings UI/Backend | @gemini-cli | 2026-04-04
 - [x] Implement and verify DJ service unit tests (TTS, Worker) | @gemini-cli | 2026-04-04
 - [x] Update Nginx gateway with DJ service routes | @gemini-cli | 2026-04-04

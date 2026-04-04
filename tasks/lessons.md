@@ -134,6 +134,25 @@ await fetch('http://localhost:1234/v1/embeddings', {
 
 ---
 
+## [deployment] @fastify/rate-limit v10 requires Fastify v5 — use v9 for Fastify v4 — 2026-04-04
+
+**Trigger**: Station and DJ services crashed in production because `@fastify/rate-limit@^10.3.0` is installed alongside `fastify@^4.27.0`. The rate-limit plugin v10 has a breaking change requiring Fastify v5's hook API.
+
+**Rule**: ALWAYS pin `@fastify/rate-limit` to `^9.0.0` when the service uses `fastify@^4.x`. Check this whenever adding rate limiting to a new service.
+
+**Why**: The `@fastify/rate-limit` v10 release dropped support for Fastify v4's hook system. Using v10 with Fastify v4 causes a crash at startup before any routes are registered.
+
+**Example**:
+```json
+// ✅ Correct — compatible with fastify@^4.27.0
+"@fastify/rate-limit": "^9.0.0"
+
+// ❌ Wrong — requires fastify@^5.x
+"@fastify/rate-limit": "^10.3.0"
+```
+
+---
+
 ## [process] When creating GitHub issues in batch, capture URLs and add to board atomically — 2026-04-04
 
 **Trigger**: Created 27 issues across multiple bash calls but forgot to add them to the project board — user saw an empty board.
