@@ -50,13 +50,12 @@ describe('stationService — dj_auto_approve toggle', () => {
     expect(values).toContain(false);
   });
 
-  it('does not update when only dj_auto_approve and nothing else is different — still returns station', async () => {
-    // When fields array is empty (no updates), getStation is called instead
+  it('returns station unchanged when no update fields are provided', async () => {
     const existing = { id: 'station-1', name: 'Test FM', dj_auto_approve: false };
     mockQuery.mockResolvedValueOnce({ rows: [existing] });
 
     const result = await stationService.updateStation('station-1', {});
-    // getStation called with SELECT
+    // When no fields are updated, getStation is called (SELECT query)
     const sql = mockQuery.mock.calls[0][0] as string;
     expect(sql).toContain('SELECT');
     expect(result).not.toBeNull();
