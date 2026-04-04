@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '@playgen/middleware';
+import { authenticate } from '@playgen/middleware';
 import * as scriptService from '../services/scriptService.js';
 import { getDefaultProfile } from '../services/profileService.js';
 import { enqueueDjGeneration } from '../queues/djQueue.js';
@@ -7,7 +7,7 @@ import type { ReviewScriptRequest, GenerateScriptRequest } from '@playgen/types'
 import { getPool } from '../db.js';
 
 export async function scriptRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('preHandler', requireAuth);
+  app.addHook('preHandler', authenticate);
 
   // Get the DJ script for a playlist (latest version)
   app.get<{ Params: { playlistId: string } }>(
@@ -39,7 +39,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       if (!station.dj_enabled) return reply.badRequest('DJ is not enabled for this station');
 
       // Resolve DJ profile
-      let dj_profile_id = req.body.dj_profile_id ?? null;
+      let dj_profile_id = (req.body as any).dj_profile_id ?? null;
       if (!dj_profile_id) {
         const defaultProfile = await getDefaultProfile(station.company_id);
         if (!defaultProfile) return reply.badRequest('No DJ profile configured for this station');
@@ -62,7 +62,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     '/dj/scripts/:id/review',
     async (req, reply) => {
       const { id } = req.params;
-      const { action, review_notes, edited_segments } = req.body;
+      const { action, review_notes, edited_segments } = req.body as any;
       const user_id: string = (req as any).user.sub;
 
       if (action === 'approve') {
