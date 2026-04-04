@@ -37,4 +37,20 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
     if (!deleted) return reply.badRequest('Cannot delete default profile or profile not found');
     return reply.code(204).send();
   });
+
+  app.get('/dj/tts/voices', async (req, reply) => {
+    // Return standard voices for supported providers
+    return [
+      { id: 'alloy', name: 'Alloy (OpenAI)', provider: 'openai' },
+      { id: 'echo', name: 'Echo (OpenAI)', provider: 'openai' },
+      { id: 'fable', name: 'Fable (OpenAI)', provider: 'openai' },
+      { id: 'onyx', name: 'Onyx (OpenAI)', provider: 'openai' },
+      { id: 'nova', name: 'Nova (OpenAI)', provider: 'openai' },
+      { id: 'shimmer', name: 'Shimmer (OpenAI)', provider: 'openai' },
+      { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (ElevenLabs)', provider: 'elevenlabs' },
+      { id: 'AZnzlk1XjtKozAtGqeoR', name: 'Nicole (ElevenLabs)', provider: 'elevenlabs' },
+      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (ElevenLabs)', provider: 'elevenlabs' },
+      { id: 'MF3mGyEYCl7XYW7Lecd_', name: 'Elli (ElevenLabs)', provider: 'elevenlabs' },
+    ];
+  });
 }
