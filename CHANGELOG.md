@@ -5,6 +5,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.29] - 2026-04-05
+
+### Fixed
+- **CD Pipeline**: Add `outputFileTracingRoot` to `next.config.js` pointing to the monorepo root (`../`); required for Next.js `output: 'standalone'` in a pnpm monorepo so file tracing works correctly in Vercel's remote build environment
+
+---
+
 ## [1.28] - 2026-04-05
 
 ### Fixed
