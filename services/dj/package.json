@@ -7,13 +7,15 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "test": "vitest run",
-    "test:unit": "vitest run tests/unit"
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration"
   },
   "dependencies": {
-    "@playgen/middleware": "workspace:*",
-    "@playgen/types": "workspace:*",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/sensible": "^5.5.0",
     "@fastify/static": "^7.0.0",
+    "@playgen/middleware": "workspace:*",
+    "@playgen/types": "workspace:*",
     "bullmq": "^5.4.0",
     "fastify": "^4.27.0",
     "jsonwebtoken": "^9.0.2",
