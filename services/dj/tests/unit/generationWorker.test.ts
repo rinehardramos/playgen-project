@@ -67,11 +67,13 @@ describe('generationWorker', () => {
   });
 
   it('runs the full generation pipeline', async () => {
+    const scriptId = 'script-1';
+
     // 1. Station info
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1' }],
     });
-    // 1b. Station settings (empty — no overrides)
+    // 1b. Station settings (loadStationSettings)
     mockQuery.mockResolvedValueOnce({ rows: [] });
     // 2. DJ profile
     mockQuery.mockResolvedValueOnce({
@@ -82,7 +84,7 @@ describe('generationWorker', () => {
         tts_voice_id: 'alloy',
       }],
     });
-    // 3. Playlist info
+    // 3. Playlist info (playlist_date)
     mockQuery.mockResolvedValueOnce({
       rows: [{ playlist_date: new Date() }],
     });
@@ -98,7 +100,7 @@ describe('generationWorker', () => {
     });
     // 5. Script insert
     mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 'script-1' }],
+      rows: [{ id: scriptId }],
     });
     
     // For 1 entry, segmentsForEntry returns ['show_intro', 'song_intro', 'show_outro']
@@ -114,6 +116,26 @@ describe('generationWorker', () => {
 
     // 8. Final script update
     mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    // 9. Build manifest mocks (auto-triggered at end of job)
+    // 9a. Get script + company
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: scriptId, playlist_id: 'play-1', station_id: 'station-1', company_id: 'company-1' }],
+    });
+    // 9b. Get segments
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        { id: 'seg-1', playlist_entry_id: 'entry-1', segment_type: 'show_intro', audio_url: '/a.mp3', audio_duration_sec: 10 }
+      ],
+    });
+    // 9c. Get entries
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'entry-1', title: 'S1', artist: 'A1', duration_sec: 180 }],
+    });
+    // 9d. Insert manifest
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'man-1' }],
+    });
 
     await runGenerationJob({
       playlist_id: 'playlist-1',

@@ -11,7 +11,7 @@ Before starting any task, an agent MUST:
 7. COMPLETION MANDATE: Before moving any ticket to "Done" or "Recently Completed", explicitly verify that ALL acceptance criteria in the issue description are met.
 
 ## Active Work
-- [ ] Build DJ profile management page (#17) | @gemini-cli | 2026-04-04
+- [ ] Build manifest builder service (#19) | @gemini-cli | 2026-04-04
 
 ## Recently Completed
 - [x] Implement storage service and audio file management (#14) | @gemini-cli | 2026-04-04

@@ -3,6 +3,7 @@ import { llmComplete } from '../adapters/llm/openrouter.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import { config } from '../config.js';
 import { generateSegmentTts } from '../services/ttsService.js';
+import { buildManifest } from '../services/manifestService.js';
 import type { DjGenerationJobData } from '../queues/djQueue.js';
 import type { DjProfile, DjSegmentType, DjScriptTemplate } from '@playgen/types';
 
@@ -214,5 +215,10 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
      SET total_segments = $2, generation_ms = $3, updated_at = NOW()
      WHERE id = $1`,
     [script_id, position, generation_ms],
+  );
+
+  // 9. Build manifest (fire-and-forget — failure does not block script)
+  buildManifest(script_id).catch((err) =>
+    console.error('[generationWorker] Manifest build failed:', err),
   );
 }

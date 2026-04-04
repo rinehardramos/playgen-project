@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@playgen/middleware';
 import * as scriptService from '../services/scriptService.js';
+import * as manifestService from '../services/manifestService.js';
 import { getDefaultProfile } from '../services/profileService.js';
 import { enqueueDjGeneration } from '../queues/djQueue.js';
 import { generateSegmentTts, loadTtsProviderConfig } from '../services/ttsService.js';
@@ -50,6 +51,32 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       const script = await scriptService.getScript(req.params.playlistId);
       if (!script) return reply.notFound('No script found for this playlist');
       return script;
+    },
+  );
+
+  // Get show manifest (ordered playback list)
+  app.get<{ Params: { id: string } }>(
+    '/dj/scripts/:id/manifest',
+    async (req, reply) => {
+      const { id } = req.params;
+      const manifestRow = await manifestService.getManifestByScript(id);
+      if (!manifestRow?.manifest_url) return reply.notFound('Manifest not found');
+
+      // Extract path from URL: /api/v1/dj/audio/...
+      const prefix = '/api/v1/dj/audio/';
+      if (!manifestRow.manifest_url.startsWith(prefix)) {
+        return reply.badRequest('Invalid manifest URL format');
+      }
+
+      const relativePath = manifestRow.manifest_url.substring(prefix.length);
+      const storage = getStorageAdapter();
+      
+      try {
+        const buffer = await storage.read(relativePath);
+        return reply.type('application/json').send(buffer);
+      } catch (err) {
+        return reply.notFound('Manifest file not found on storage');
+      }
     },
   );
 
