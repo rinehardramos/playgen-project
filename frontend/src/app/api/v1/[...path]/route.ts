@@ -7,6 +7,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 const GATEWAY = (process.env.GATEWAY_URL ?? '').replace(/\/$/, '');
 
 async function proxy(req: NextRequest, { params }: { params: { path: string[] } }) {
