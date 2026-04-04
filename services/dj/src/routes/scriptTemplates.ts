@@ -28,4 +28,13 @@ export async function scriptTemplateRoutes(app: FastifyInstance): Promise<void> 
       return template;
     },
   );
+
+  app.delete<{ Params: { stationId: string; id: string } }>(
+    '/dj/stations/:stationId/script-templates/:id',
+    async (req, reply) => {
+      const deleted = await templateService.deleteTemplate(req.params.id, req.params.stationId);
+      if (!deleted) return reply.notFound('Script template not found');
+      return reply.code(204).send();
+    },
+  );
 }
