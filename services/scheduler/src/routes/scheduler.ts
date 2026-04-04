@@ -151,6 +151,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: StationParams }>(
     '/stations/:id/generation-failures',
     {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
       schema: {
         params: {
           type: 'object',
