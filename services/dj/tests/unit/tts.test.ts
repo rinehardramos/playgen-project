@@ -1,14 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import fs from 'fs/promises';
-import path from 'path';
-
-// Mock fs/promises
-vi.mock('fs/promises', () => ({
-  default: {
-    mkdir: vi.fn().mockResolvedValue(undefined),
-    writeFile: vi.fn().mockResolvedValue(undefined),
-  },
-}));
 
 // Mock OpenAI
 vi.mock('openai', () => {
@@ -49,12 +39,10 @@ describe('TTS Adapters', () => {
       const result = await adapter.generate({
         voice_id: 'alloy',
         text: 'Hello world',
-        output_path: '/tmp/test.mp3',
       });
 
-      expect(result.audio_path).toBe('/tmp/test.mp3');
-      expect(fs.mkdir).toHaveBeenCalled();
-      expect(fs.writeFile).toHaveBeenCalled();
+      expect(result.audio_data).toBeDefined();
+      expect(result.audio_data.length).toBe(1024);
     });
   });
 
@@ -73,10 +61,9 @@ describe('TTS Adapters', () => {
       const result = await adapter.generate({
         voice_id: 'voice-id',
         text: 'Hello world',
-        output_path: '/tmp/test-el.mp3',
       });
 
-      expect(result.audio_path).toBe('/tmp/test-el.mp3');
+      expect(result.audio_data).toBeDefined();
       expect(result.duration_sec).toBeGreaterThan(0);
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('elevenlabs.io'),
@@ -95,7 +82,6 @@ describe('TTS Adapters', () => {
       await expect(adapter.generate({
         voice_id: 'voice-id',
         text: 'Hello world',
-        output_path: '/tmp/test-el.mp3',
       })).rejects.toThrow('ElevenLabs TTS failed (401): Unauthorized');
     });
   });

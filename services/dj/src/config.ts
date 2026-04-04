@@ -30,7 +30,7 @@ export const config = {
   // Storage (local for dev, s3 for prod)
   storage: {
     provider: process.env.STORAGE_PROVIDER ?? 'local',
-    localPath: process.env.STORAGE_LOCAL_PATH ?? '/tmp/playgen-dj',
+    localPath: process.env.STORAGE_LOCAL_PATH ?? (process.env.NODE_ENV === 'production' ? '/app/data/audio' : '/tmp/playgen-dj'),
     s3Bucket: process.env.S3_BUCKET ?? '',
     s3Region: process.env.S3_REGION ?? 'us-east-1',
   },
