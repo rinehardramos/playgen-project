@@ -1,7 +1,7 @@
 {
   "framework": "nextjs",
   "installCommand": "npm install",
-  "buildCommand": "rm -rf .next && npm run build",
+  "buildCommand": "echo '=== src/lib ===' && ls src/lib/ && rm -rf .next && npm run build",
   "outputDirectory": ".next",
   "git": {
     "deploymentEnabled": {
