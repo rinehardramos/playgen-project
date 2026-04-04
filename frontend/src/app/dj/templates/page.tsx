@@ -267,6 +267,19 @@ export default function DjTemplatesPage() {
           </p>
         </div>
       ) : (
+        <div className="space-y-4">
+          {/* Segment count summary */}
+          <div className="flex flex-wrap gap-2">
+            {SEGMENT_TYPES.filter((st) => templates.some((t) => t.segment_type === st)).map((st) => {
+              const count = templates.filter((t) => t.segment_type === st).length;
+              return (
+                <span key={st} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-[#1a1a28] border border-[#2a2a40] text-gray-400">
+                  <span className="font-mono text-violet-400">{st}</span>
+                  <span className="bg-[#2a2a40] text-gray-300 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{count}</span>
+                </span>
+              );
+            })}
+          </div>
         <div className="card overflow-hidden border border-[#2a2a40]">
           <table className="w-full text-sm">
             <thead>
@@ -279,6 +292,9 @@ export default function DjTemplatesPage() {
                 </th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                   Prompt Preview
+                </th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
+                  Created
                 </th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
@@ -299,6 +315,13 @@ export default function DjTemplatesPage() {
                   <td className="px-4 py-3 text-white font-medium">{t.name}</td>
                   <td className="px-4 py-3 text-gray-400 hidden md:table-cell font-mono text-xs">
                     {truncate(t.prompt_template, 80)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs hidden lg:table-cell">
+                    {new Date(t.created_at).toLocaleDateString(undefined, {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -331,6 +354,7 @@ export default function DjTemplatesPage() {
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 
