@@ -5,6 +5,25 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.21] - 2026-04-04
+
+### Added
+- **DJ Profile UI**: Full CRUD management for DJ personas — name, personality, voice, persona_config (catchphrases, energy/humor sliders, formality, backstory), TTS provider/voice, default flag (#114)
+- **DJ Script Review UI**: Enhanced script review with per-segment editing, TTS regeneration button per segment, approve/reject workflow (#115)
+- **DJ Storage & Audio**: Structured audio file management for generated segments; audio stored to `/tmp/dj-audio/:script_id/:position.mp3` with DB-backed URL tracking (#111)
+- **DJ Manifest Service**: Builds ordered show manifests from approved segments for continuous playback; integrated into generation pipeline as fire-and-forget step (#112)
+- **DJ Script Templates UI**: Manage per-station prompt templates per segment type (#116)
+- **Clone Template**: Clone a scheduling template to another station (#107)
+- **Default DJ Persona Seed**: New stations automatically get DJ "Alex" profile + 5 daypart assignments on creation (#117)
+- **Per-song Play History Timeline**: Analytics timeline view for individual song play history (#109)
+
+### Fixed
+- **All API calls broken in Next.js 15 upgrade**: `url` variable undefined in API proxy route (`/api/v1/[...path]/route.ts`) — should be `targetUrl`; this caused Generate button and all frontend API calls to fail (#110)
+- **High vulnerabilities**: Next.js 14→15, Fastify 4→5, `tar` and `esbuild` overrides; `@fastify/sensible` and `@fastify/rate-limit` upgraded for Fastify 5 compatibility (#110)
+- **Fastify 5 setErrorHandler**: `err` typed as `unknown` — added explicit `FastifyError` import and type annotation across all 7 services (#110)
+
+---
+
 ## [1.20] - 2026-04-04
 
 ### Added
