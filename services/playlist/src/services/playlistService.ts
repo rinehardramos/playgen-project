@@ -273,8 +273,8 @@ export async function regenEntry(
        AND s.category_id = $2
        AND s.is_active = TRUE
        AND (
-         NOT EXISTS (SELECT 1 FROM song_schedule_rules ssr WHERE ssr.song_id = s.id)
-         OR EXISTS (SELECT 1 FROM song_schedule_rules ssr WHERE ssr.song_id = s.id AND ssr.eligible_hour = $3)
+         NOT EXISTS (SELECT 1 FROM song_slots ss WHERE ss.song_id = s.id)
+         OR EXISTS (SELECT 1 FROM song_slots ss WHERE ss.song_id = s.id AND ss.eligible_hour = $3)
        )`,
     [stationId, requiredCategoryId, hour],
   );
