@@ -25,6 +25,13 @@ interface CandidateSong {
   artist: string;
 }
 
+interface SongWithEligibility {
+  id: string;
+  artist: string;
+  category_id: string;
+  eligible_hours: number[];
+}
+
 interface PlayHistoryEntry {
   song_id: string;
   played_at: Date;
@@ -333,27 +340,54 @@ export async function generatePlaylist(
       overridesRes.rows.map((o) => [`${o.hour}:${o.position}`, o.song_id]),
     );
 
-    // ── Step 9: Generate entries for each slot ────────────────────────────────
+    // ── Step 9a: Batch-load ALL active songs with eligibility (single query) ─
+    const allSongsRes = await pool.query<SongWithEligibility>(
+      `SELECT s.id, s.artist, s.category_id,
+              COALESCE(
+                array_agg(DISTINCT ss.eligible_hour) FILTER (WHERE ss.eligible_hour IS NOT NULL),
+                '{}'
+              ) AS eligible_hours
+       FROM songs s
+       LEFT JOIN song_slots ss ON ss.song_id = s.id
+       WHERE s.station_id = $1 AND s.is_active = true
+       GROUP BY s.id`,
+      [stationId],
+    );
+    const allSongs = allSongsRes.rows;
+
+    // Build in-memory index: categoryId -> songs[]
+    const songsByCategory = new Map<string, SongWithEligibility[]>();
+    for (const song of allSongs) {
+      const arr = songsByCategory.get(song.category_id) ?? [];
+      arr.push(song);
+      songsByCategory.set(song.category_id, arr);
+    }
+
+    // Build artist lookup for overrides (single query instead of N)
     const placedEntries: PlacedEntry[] = [];
-    // Seed with manual overrides so artist separation logic sees them
-    for (const override of overridesRes.rows) {
-      // We need the artist for the overridden song to enforce separation
-      const artistRes = await pool.query<{ artist: string }>(
-        `SELECT artist FROM songs WHERE id = $1`,
-        [override.song_id],
+    if (overridesRes.rows.length > 0) {
+      const overrideSongIds = overridesRes.rows.map((o) => o.song_id);
+      const artistRes = await pool.query<{ id: string; artist: string }>(
+        `SELECT id, artist FROM songs WHERE id = ANY($1)`,
+        [overrideSongIds],
       );
-      if (artistRes.rows.length > 0) {
-        placedEntries.push({
-          hour: override.hour,
-          position: override.position,
-          song_id: override.song_id,
-          artist: artistRes.rows[0].artist,
-        });
+      const artistMap = new Map(artistRes.rows.map((r) => [r.id, r.artist]));
+      for (const override of overridesRes.rows) {
+        const artist = artistMap.get(override.song_id);
+        if (artist) {
+          placedEntries.push({
+            hour: override.hour,
+            position: override.position,
+            song_id: override.song_id,
+            artist,
+          });
+        }
       }
     }
     // Sort placedEntries to maintain hour/position order
     placedEntries.sort((a, b) => a.hour - b.hour || a.position - b.position);
 
+    // ── Step 9b: Generate entries for each slot (in-memory filtering) ─────────
     const newEntries: Array<{ hour: number; position: number; song_id: string }> = [];
 
     for (const slot of slots) {
@@ -364,21 +398,11 @@ export async function generatePlaylist(
         continue;
       }
 
-      // Find candidate songs eligible for this hour and category
-      // If no song_slots rows exist for a song, treat as eligible for all hours
-      const candidatesRes = await pool.query<CandidateSong>(
-        `SELECT s.id, s.artist
-         FROM songs s
-         WHERE s.station_id = $1
-           AND s.category_id = $2
-           AND s.is_active = true
-           AND (
-             EXISTS (SELECT 1 FROM song_slots ss WHERE ss.song_id = s.id AND ss.eligible_hour = $3)
-             OR NOT EXISTS (SELECT 1 FROM song_slots ss2 WHERE ss2.song_id = s.id)
-           )`,
-        [stationId, slot.required_category_id, slot.hour],
-      );
-      const allCandidates = candidatesRes.rows;
+      // Filter candidates from in-memory index by category and hour eligibility
+      const categorySongs = songsByCategory.get(slot.required_category_id) ?? [];
+      const allCandidates: CandidateSong[] = categorySongs
+        .filter((s) => s.eligible_hours.length === 0 || s.eligible_hours.includes(slot.hour))
+        .map((s) => ({ id: s.id, artist: s.artist }));
 
       // Try with full rules
       let filtered = filterCandidates(
@@ -462,36 +486,35 @@ export async function generatePlaylist(
       dayPlayCounts.set(picked.id, (dayPlayCounts.get(picked.id) ?? 0) + 1);
     }
 
-    // ── Steps 10–13: Transaction for upsert + play_history ───────────────────
+    // ── Steps 10–13: Transaction for batch upsert + play_history ──────────────
     const client: PoolClient = await pool.connect();
-    let entriesCount = 0;
+    let entriesCount = newEntries.length + overridesRes.rows.length;
 
     try {
       await client.query('BEGIN');
 
-      // Upsert new entries (skip manual overrides via ON CONFLICT condition)
-      for (const entry of newEntries) {
+      // Batch upsert new entries (single query instead of N individual inserts)
+      if (newEntries.length > 0) {
+        const hours = newEntries.map((e) => e.hour);
+        const positions = newEntries.map((e) => e.position);
+        const songIds = newEntries.map((e) => e.song_id);
+
         await client.query(
           `INSERT INTO playlist_entries (playlist_id, hour, position, song_id, is_manual_override)
-           VALUES ($1, $2, $3, $4, false)
+           SELECT $1, h, p, s, false
+           FROM unnest($2::int[], $3::int[], $4::uuid[]) AS t(h, p, s)
            ON CONFLICT (playlist_id, hour, position)
            DO UPDATE SET song_id = EXCLUDED.song_id
            WHERE playlist_entries.is_manual_override = false`,
-          [playlistId, entry.hour, entry.position, entry.song_id],
+          [playlistId, hours, positions, songIds],
         );
-        entriesCount++;
-      }
 
-      // Also count manual override entries in total
-      entriesCount += overridesRes.rows.length;
-
-      // Insert play_history for all newly placed songs
-      const now = new Date();
-      for (const entry of newEntries) {
+        // Batch play_history (single query instead of N individual inserts)
+        const now = new Date();
         await client.query(
           `INSERT INTO play_history (station_id, song_id, played_at)
-           VALUES ($1, $2, $3)`,
-          [stationId, entry.song_id, now],
+           SELECT $1, s, $3 FROM unnest($2::uuid[]) AS t(s)`,
+          [stationId, songIds, now],
         );
       }
 

@@ -51,11 +51,13 @@ export async function updateStation(id: string, data: Partial<{
   broadcast_end_hour: number;
   active_days: string[];
   is_active: boolean;
+  dj_enabled: boolean;
+  dj_auto_approve: boolean;
 }>): Promise<Station | null> {
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;
-  const allowed = ['name','timezone','broadcast_start_hour','broadcast_end_hour','active_days','is_active'] as const;
+  const allowed = ['name','timezone','broadcast_start_hour','broadcast_end_hour','active_days','is_active','dj_enabled','dj_auto_approve'] as const;
   for (const key of allowed) {
     if (data[key] !== undefined) { fields.push(`${key} = $${i++}`); values.push(data[key]); }
   }

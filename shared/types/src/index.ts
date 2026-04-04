@@ -99,6 +99,8 @@ export interface Station {
   broadcast_end_hour: number;
   active_days: string[];
   is_active: boolean;
+  dj_enabled: boolean;
+  dj_auto_approve: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -240,6 +242,137 @@ export interface GenerationJob {
   started_at: Date | null;
   completed_at: Date | null;
   triggered_by: JobTrigger;
+}
+
+// ─── DJ Service ───────────────────────────────────────────────────────────────
+
+export type DjDaypart = 'morning' | 'midday' | 'afternoon' | 'evening' | 'overnight';
+export type DjSegmentType =
+  | 'show_intro'
+  | 'song_intro'
+  | 'song_transition'
+  | 'show_outro'
+  | 'station_id'
+  | 'time_check'
+  | 'weather_tease'
+  | 'ad_break';
+export type DjReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'auto_approved';
+export type ManifestStatus = 'building' | 'ready' | 'failed';
+export type TtsProvider = 'openai' | 'elevenlabs';
+export type StorageProvider = 'local' | 's3';
+
+export interface PersonaConfig {
+  catchphrases?: string[];
+  signature_greeting?: string;
+  signature_signoff?: string;
+  topics_to_avoid?: string[];
+  energy_level?: number;       // 1-10
+  humor_level?: number;        // 1-10
+  formality?: 'casual' | 'balanced' | 'formal';
+  backstory?: string;
+}
+
+export interface DjProfile {
+  id: string;
+  company_id: string;
+  name: string;
+  personality: string;
+  voice_style: string;
+  persona_config: PersonaConfig;
+  llm_model: string;
+  llm_temperature: number;
+  tts_provider: TtsProvider;
+  tts_voice_id: string;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface DjDaypartAssignment {
+  id: string;
+  station_id: string;
+  dj_profile_id: string;
+  daypart: DjDaypart;
+  start_hour: number;
+  end_hour: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface DjScriptTemplate {
+  id: string;
+  station_id: string;
+  segment_type: DjSegmentType;
+  name: string;
+  prompt_template: string;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface DjScript {
+  id: string;
+  playlist_id: string;
+  station_id: string;
+  dj_profile_id: string;
+  review_status: DjReviewStatus;
+  reviewed_by: string | null;
+  reviewed_at: Date | null;
+  review_notes: string | null;
+  llm_model: string;
+  generation_ms: number | null;
+  total_segments: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface DjSegment {
+  id: string;
+  script_id: string;
+  playlist_entry_id: string | null;
+  segment_type: DjSegmentType;
+  position: number;
+  script_text: string;
+  edited_text: string | null;
+  audio_url: string | null;
+  audio_duration_sec: number | null;
+  tts_provider: TtsProvider | null;
+  tts_voice_id: string | null;
+  tts_generated_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface DjShowManifest {
+  id: string;
+  script_id: string;
+  station_id: string;
+  status: ManifestStatus;
+  storage_provider: StorageProvider;
+  manifest_url: string | null;
+  total_duration_sec: number | null;
+  error_message: string | null;
+  built_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// Request / Response shapes used by the dj-service API
+
+export interface GenerateScriptRequest {
+  playlist_id: string;
+  dj_profile_id?: string;   // falls back to station default
+}
+
+export interface ReviewScriptRequest {
+  action: 'approve' | 'reject' | 'edit';
+  review_notes?: string;
+  edited_segments?: Array<{ id: string; edited_text: string }>;
+}
+
+export interface DjScriptWithSegments extends DjScript {
+  segments: DjSegment[];
 }
 
 // ─── API Responses ────────────────────────────────────────────────────────────
