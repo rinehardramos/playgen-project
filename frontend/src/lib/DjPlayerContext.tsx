@@ -15,6 +15,7 @@ interface DjPlayerState {
   currentSegment: DjPlayerSegment | null;
   isPlaying: boolean;
   progress: number; // 0–1
+  volume: number; // 0–1
   queue: DjPlayerSegment[];
   playSegment: (seg: DjPlayerSegment) => void;
   playQueue: (segments: DjPlayerSegment[]) => void;
@@ -22,6 +23,7 @@ interface DjPlayerState {
   resume: () => void;
   skipNext: () => void;
   stop: () => void;
+  setVolume: (v: number) => void;
 }
 
 const DjPlayerContext = createContext<DjPlayerState | null>(null);
@@ -30,10 +32,12 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
   const [currentSegment, setCurrentSegment] = useState<DjPlayerSegment | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [volume, setVolumeState] = useState(1);
   const [queue, setQueue] = useState<DjPlayerSegment[]>([]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const queueRef = useRef<DjPlayerSegment[]>([]);
+  const volumeRef = useRef(1);
 
   const stopCurrent = useCallback(() => {
     if (audioRef.current) {
@@ -45,6 +49,13 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
     }
     setProgress(0);
     setIsPlaying(false);
+  }, []);
+
+  const setVolume = useCallback((v: number) => {
+    const clamped = Math.max(0, Math.min(1, v));
+    volumeRef.current = clamped;
+    setVolumeState(clamped);
+    if (audioRef.current) audioRef.current.volume = clamped;
   }, []);
 
   const playNext = useCallback(() => {
@@ -61,6 +72,7 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
     setQueue([...rest]);
 
     const audio = new Audio(next.audioUrl);
+    audio.volume = volumeRef.current;
     audioRef.current = audio;
     setCurrentSegment(next);
     setIsPlaying(true);
@@ -82,6 +94,7 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
     setQueue([]);
 
     const audio = new Audio(seg.audioUrl);
+    audio.volume = volumeRef.current;
     audioRef.current = audio;
     setCurrentSegment(seg);
     setIsPlaying(true);
@@ -110,6 +123,7 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
     setQueue([...rest]);
 
     const audio = new Audio(first.audioUrl);
+    audio.volume = volumeRef.current;
     audioRef.current = audio;
     setCurrentSegment(first);
     setIsPlaying(true);
@@ -156,6 +170,7 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
       currentSegment,
       isPlaying,
       progress,
+      volume,
       queue,
       playSegment,
       playQueue,
@@ -163,6 +178,7 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
       resume,
       skipNext,
       stop,
+      setVolume,
     }}>
       {children}
     </DjPlayerContext.Provider>
