@@ -7,6 +7,18 @@ interface StationParams {
   id: string;
 }
 
+const SECRET_KEYS = ['openai_api_key', 'elevenlabs_api_key', 'openrouter_api_key'] as const;
+
+function maskSecrets<T extends Record<string, unknown>>(row: T): T {
+  const masked = { ...row };
+  for (const key of SECRET_KEYS) {
+    if (key in masked) {
+      (masked as Record<string, unknown>)[key] = masked[key] ? '***' : null;
+    }
+  }
+  return masked;
+}
+
 export async function configRoutes(app: FastifyInstance): Promise<void> {
 
   // ── GET /stations/:id/rotation-rules ──────────────────────────────────────
@@ -94,7 +106,7 @@ export async function configRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Station not found' } });
       }
 
-      return reply.code(200).send(res.rows[0]);
+      return reply.code(200).send(maskSecrets(res.rows[0]));
     },
   );
 
@@ -155,7 +167,7 @@ export async function configRoutes(app: FastifyInstance): Promise<void> {
           'SELECT timezone, broadcast_start_hour, broadcast_end_hour, active_days, openai_api_key, elevenlabs_api_key, openrouter_api_key FROM stations WHERE id = $1',
           [stationId],
         );
-        return reply.code(200).send(current.rows[0]);
+        return reply.code(200).send(maskSecrets(current.rows[0]));
       }
 
       fields.push('updated_at = NOW()');
@@ -179,7 +191,7 @@ export async function configRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Station not found' } });
       }
 
-      return reply.code(200).send(res.rows[0]);
+      return reply.code(200).send(maskSecrets(res.rows[0]));
     },
   );
 }
