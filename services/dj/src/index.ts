@@ -13,6 +13,12 @@ const app = Fastify({
 
 app.register(sensible);
 
+import { profileRoutes } from './routes/profiles';
+import { daypartRoutes } from './routes/dayparts';
+
+app.register(profileRoutes, { prefix: '/api/v1' });
+app.register(daypartRoutes, { prefix: '/api/v1' });
+
 app.get('/health', async () => ({ 
   status: 'ok', 
   service: 'dj-service',

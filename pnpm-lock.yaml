@@ -149,6 +149,9 @@ importers:
       '@fastify/static':
         specifier: ^7.0.0
         version: 7.0.4
+      '@playgen/middleware':
+        specifier: workspace:^
+        version: link:../../shared/middleware
       '@playgen/types':
         specifier: workspace:*
         version: link:../../shared/types
