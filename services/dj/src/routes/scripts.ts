@@ -3,6 +3,7 @@ import { authenticate } from '@playgen/middleware';
 import * as scriptService from '../services/scriptService.js';
 import { getDefaultProfile } from '../services/profileService.js';
 import { enqueueDjGeneration } from '../queues/djQueue.js';
+import { generateSegmentTts, loadTtsProviderConfig } from '../services/ttsService.js';
 import type { ReviewScriptRequest, GenerateScriptRequest } from '@playgen/types';
 import { getPool } from '../db.js';
 
@@ -100,6 +101,81 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       }
 
       return reply.badRequest('Invalid action');
+    },
+  );
+
+  // Regenerate TTS audio for a single segment
+  app.post<{ Params: { segmentId: string } }>(
+    '/dj/segments/:segmentId/regenerate-tts',
+    async (req, reply) => {
+      const { segmentId } = req.params;
+      const pool = getPool();
+
+      // Fetch segment + join to verify ownership via company
+      const { rows: segRows } = await pool.query(
+        `SELECT
+           seg.id,
+           seg.script_id,
+           seg.position,
+           seg.script_text,
+           seg.edited_text,
+           scr.station_id,
+           st.company_id,
+           dp.tts_voice_id
+         FROM dj_segments seg
+         JOIN dj_scripts scr ON scr.id = seg.script_id
+         JOIN stations st ON st.id = scr.station_id
+         LEFT JOIN dj_profiles dp ON dp.id = scr.dj_profile_id
+         WHERE seg.id = $1`,
+        [segmentId],
+      );
+
+      const seg = segRows[0];
+      if (!seg) return reply.notFound('Segment not found');
+
+      // Verify the calling user belongs to the same company as the station
+      const userId: string = (req as any).user.sub;
+      const { rows: userRows } = await pool.query(
+        `SELECT company_id FROM users WHERE id = $1`,
+        [userId],
+      );
+      const userCompanyId = userRows[0]?.company_id;
+      if (!userCompanyId || userCompanyId !== seg.company_id) {
+        return reply.forbidden('Access denied');
+      }
+
+      // Resolve TTS config: station settings override env vars
+      const fallbackVoiceId = seg.tts_voice_id ?? 'alloy';
+      const providerCfg = await loadTtsProviderConfig(seg.station_id, fallbackVoiceId);
+      if (!providerCfg) {
+        return reply.badRequest('TTS is not configured for this station');
+      }
+
+      // Use edited_text if present, otherwise fall back to script_text
+      const textToSynth: string = seg.edited_text ?? seg.script_text;
+
+      try {
+        const { audio_url, audio_duration_sec } = await generateSegmentTts(
+          {
+            id: seg.id,
+            position: seg.position,
+            text: textToSynth,
+            script_id: seg.script_id,
+          },
+          providerCfg,
+        );
+
+        // Return the updated segment row
+        const { rows: updatedRows } = await pool.query(
+          `SELECT * FROM dj_segments WHERE id = $1`,
+          [segmentId],
+        );
+
+        return { ...updatedRows[0], audio_url, audio_duration_sec };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'TTS generation failed';
+        return reply.internalServerError(message);
+      }
     },
   );
 }

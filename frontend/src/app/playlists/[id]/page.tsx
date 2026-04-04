@@ -109,6 +109,8 @@ export default function PlaylistDetailPage() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [editingSegment, setEditingSegment] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [regenLoading, setRegenLoading] = useState<Record<string, boolean>>({});
+  const [regenError, setRegenError] = useState<Record<string, string>>({});
 
   const djPlayer = useDjPlayer();
 
@@ -202,6 +204,35 @@ export default function PlaylistDetailPage() {
       setEditText('');
     } catch (err: unknown) {
       setDjError((err as ApiError).message ?? 'Failed to save edit');
+    }
+  }
+
+  async function handleRegenTts(segmentId: string) {
+    setRegenLoading((prev) => ({ ...prev, [segmentId]: true }));
+    setRegenError((prev) => { const next = { ...prev }; delete next[segmentId]; return next; });
+    try {
+      const updated = await api.post<DjSegment>(
+        `/api/v1/dj/segments/${segmentId}/regenerate-tts`,
+        {},
+      );
+      setDjScript((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          segments: prev.segments.map((s) =>
+            s.id === segmentId
+              ? { ...s, audio_url: updated.audio_url, audio_duration_sec: updated.audio_duration_sec }
+              : s,
+          ),
+        };
+      });
+    } catch (err: unknown) {
+      setRegenError((prev) => ({
+        ...prev,
+        [segmentId]: (err as ApiError).message ?? 'Failed to regenerate audio',
+      }));
+    } finally {
+      setRegenLoading((prev) => { const next = { ...prev }; delete next[segmentId]; return next; });
     }
   }
 
@@ -633,7 +664,31 @@ export default function PlaylistDetailPage() {
                     )}
 
                     {seg.edited_text && (
-                      <p className="mt-1 text-xs text-gray-600 italic">Edited</p>
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <p className="text-xs text-gray-600 italic">Edited</p>
+                        <button
+                          onClick={() => handleRegenTts(seg.id)}
+                          disabled={!!regenLoading[seg.id]}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-violet-600/20 hover:bg-violet-600/40 text-violet-400 text-xs font-medium transition-colors disabled:opacity-50"
+                        >
+                          {regenLoading[seg.id] ? (
+                            <>
+                              <span className="w-3 h-3 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                              Regenerating…
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              Regenerate Audio
+                            </>
+                          )}
+                        </button>
+                        {regenError[seg.id] && (
+                          <span className="text-xs text-red-400">{regenError[seg.id]}</span>
+                        )}
+                      </div>
                     )}
                   </div>
                 ))}
