@@ -222,6 +222,12 @@ export default function StationsPage() {
                         Edit
                       </button>
                       <button
+                        onClick={() => router.push(`/stations/${station.id}/settings`)}
+                        className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+                      >
+                        Settings
+                      </button>
+                      <button
                         onClick={() => handleDeactivate(station)}
                         className="text-xs text-gray-400 hover:text-gray-300 font-medium"
                       >

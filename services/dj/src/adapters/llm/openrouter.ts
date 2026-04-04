@@ -10,26 +10,26 @@ export interface LlmOptions {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  /** Override the OpenRouter API key (e.g. read from station_settings). */
   apiKey?: string;
 }
 
-let client: OpenAI | null = null;
+let defaultClient: OpenAI | null = null;
 
 function getClient(apiKey?: string): OpenAI {
-  // If a specific API key is provided, always return a new client for that key
+  // If a per-station API key is provided, create a one-off client; otherwise share the default.
   if (apiKey) {
     return new OpenAI({
       baseURL: config.openRouter.baseUrl,
-      apiKey: apiKey,
+      apiKey,
       defaultHeaders: {
         'HTTP-Referer': config.openRouter.siteUrl,
         'X-Title': config.openRouter.siteName,
       },
     });
   }
-
-  if (!client) {
-    client = new OpenAI({
+  if (!defaultClient) {
+    defaultClient = new OpenAI({
       baseURL: config.openRouter.baseUrl,
       apiKey: config.openRouter.apiKey,
       defaultHeaders: {
@@ -38,7 +38,7 @@ function getClient(apiKey?: string): OpenAI {
       },
     });
   }
-  return client;
+  return defaultClient;
 }
 
 export async function llmComplete(

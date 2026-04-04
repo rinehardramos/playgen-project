@@ -6,6 +6,15 @@ import { config } from '../config.js';
 import type { DjGenerationJobData } from '../queues/djQueue.js';
 import type { DjProfile, DjSegmentType, DjScriptTemplate } from '@playgen/types';
 
+/** Fetch all station_settings for a given station into a key→value map (real values, un-masked). */
+async function loadStationSettings(stationId: string): Promise<Record<string, string>> {
+  const { rows } = await getPool().query<{ key: string; value: string }>(
+    `SELECT key, value FROM station_settings WHERE station_id = $1`,
+    [stationId],
+  );
+  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+}
+
 interface PlaylistEntryRow {
   id: string;
   hour: number;
@@ -20,9 +29,6 @@ interface StationRow {
   name: string;
   timezone: string;
   company_id: string;
-  openai_api_key?: string;
-  elevenlabs_api_key?: string;
-  openrouter_api_key?: string;
 }
 
 // Determine which segment types to generate for a given playlist position
@@ -53,12 +59,14 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
 
   // 1. Load station info
   const { rows: stationRows } = await pool.query<StationRow>(
-    `SELECT id, name, timezone, company_id, openai_api_key, elevenlabs_api_key, openrouter_api_key 
-     FROM stations WHERE id = $1`,
+    `SELECT id, name, timezone, company_id FROM stations WHERE id = $1`,
     [data.station_id],
   );
   const station = stationRows[0];
   if (!station) throw new Error(`Station ${data.station_id} not found`);
+
+  // 1b. Load per-station settings (API key overrides, model, TTS provider, etc.)
+  const stationSettings = await loadStationSettings(data.station_id);
 
   // 2. Load DJ profile
   let profile: DjProfile | null = null;
@@ -116,7 +124,16 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   // 6. Generate segments
   const currentDate = new Date().toISOString().split('T')[0];
   let position = 0;
-  const ttsEnabled = !!(config.tts.openaiApiKey || config.tts.elevenlabsApiKey);
+
+  // Resolve effective TTS / LLM config: station setting overrides fall back to env vars.
+  const effectiveTtsProvider = stationSettings['tts_provider'] ?? config.tts.provider;
+  const effectiveTtsApiKey   = stationSettings['tts_api_key']
+    ?? (effectiveTtsProvider === 'elevenlabs' ? config.tts.elevenlabsApiKey : config.tts.openaiApiKey);
+  const effectiveTtsVoiceId  = stationSettings['tts_voice_id'] ?? profile.tts_voice_id;
+  const effectiveLlmModel    = stationSettings['llm_model'] ?? profile.llm_model;
+  const effectiveLlmApiKey   = stationSettings['llm_api_key'] ?? undefined;
+
+  const ttsEnabled = !!(effectiveTtsApiKey);
 
   // Collect all generated segments for TTS pass
   const generatedSegments: Array<{
@@ -160,10 +177,10 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        { 
-          model: profile.llm_model, 
+        {
+          model: effectiveLlmModel,
           temperature: profile.llm_temperature,
-          apiKey: station.openrouter_api_key,
+          apiKey: effectiveLlmApiKey,
         },
       );
 
@@ -183,7 +200,10 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   // 7. TTS pass — generate audio for each segment
   if (ttsEnabled) {
     try {
-      const ttsAdapter = getTtsAdapter();
+      const ttsAdapter = getTtsAdapter({
+        provider: effectiveTtsProvider,
+        apiKey: effectiveTtsApiKey,
+      });
       const fs = await import('fs/promises');
       const path = await import('path');
       const audioDir = path.join('/tmp', 'dj-audio', script_id);
@@ -192,15 +212,10 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
       for (const seg of generatedSegments) {
         try {
           const outputPath = path.join(audioDir, `${seg.position}.mp3`);
-          const ttsApiKey = profile!.tts_provider === 'openai' 
-            ? station.openai_api_key 
-            : station.elevenlabs_api_key;
-
           const result = await ttsAdapter.generate({
-            voice_id: profile!.tts_voice_id,
+            voice_id: effectiveTtsVoiceId,
             text: seg.script_text,
             output_path: outputPath,
-            apiKey: ttsApiKey,
           });
 
           // Estimate duration from file size if adapter didn't provide it
