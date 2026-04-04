@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "installCommand": "pnpm install --frozen-lockfile --shamefully-hoist",
+  "installCommand": "NODE_ENV=development pnpm install --frozen-lockfile --shamefully-hoist",
   "buildCommand": "pnpm run build",
   "outputDirectory": ".next",
   "git": {

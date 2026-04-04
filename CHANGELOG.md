@@ -5,6 +5,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.29] - 2026-04-05
+
+### Fixed
+- **Vercel build skips devDeps**: Prefix `installCommand` in `vercel.json` with `NODE_ENV=development` so pnpm installs all devDependencies (typescript, @types/*) needed for `next build`'s TypeScript compilation during Vercel production deploy
+
+---
+
 ## [1.28] - 2026-04-05
 
 ### Fixed
