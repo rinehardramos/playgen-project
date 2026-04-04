@@ -5,7 +5,35 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth';
 import { api } from '@/lib/api';
-import type { ApiError, DjProfile, TtsProvider, PersonaConfig } from '@playgen/types';
+import type { ApiError } from '@/lib/api';
+
+type TtsProvider = 'openai' | 'elevenlabs';
+
+interface PersonaConfig {
+  catchphrases?: string[];
+  signature_greeting?: string;
+  signature_signoff?: string;
+  topics_to_avoid?: string[];
+  energy_level?: number;
+  humor_level?: number;
+  formality?: 'casual' | 'balanced' | 'formal';
+  backstory?: string;
+}
+
+interface DjProfile {
+  id: string;
+  company_id: string;
+  name: string;
+  personality: string;
+  voice_style: string;
+  persona_config: PersonaConfig;
+  llm_model: string;
+  llm_temperature: number;
+  tts_provider: TtsProvider;
+  tts_voice_id: string;
+  is_default: boolean;
+  is_active: boolean;
+}
 
 interface Voice {
   id: string;
