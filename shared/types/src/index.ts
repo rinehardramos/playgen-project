@@ -242,6 +242,112 @@ export interface GenerationJob {
   triggered_by: JobTrigger;
 }
 
+// ─── DJ Service ──────────────────────────────────────────────────────────────
+
+export type ScriptSegmentType =
+  | 'show_open'
+  | 'show_close'
+  | 'segue'
+  | 'song_intro'
+  | 'song_outro'
+  | 'time_check'
+  | 'station_id';
+
+export type DJJobStatus =
+  | 'queued'
+  | 'generating_scripts'
+  | 'generating_audio'
+  | 'completed'
+  | 'failed';
+
+export interface TTSVoiceConfig {
+  provider: string;
+  voice_id: string;
+  speed?: number;
+  pitch?: number;
+  extra?: Record<string, unknown>;
+}
+
+export interface DJProfile {
+  id: string;
+  station_id: string;
+  name: string;
+  persona_prompt: string;
+  tone: string;
+  energy_level: string;
+  catchphrases: string[];
+  voice_config: TTSVoiceConfig;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface DJDaypartAssignment {
+  id: string;
+  station_id: string;
+  dj_profile_id: string;
+  start_hour: number;
+  end_hour: number;
+  days_of_week: string[];
+  priority: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface DJScriptTemplate {
+  id: string;
+  station_id: string | null;
+  segment_type: ScriptSegmentType;
+  prompt_template: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface DJScript {
+  id: string;
+  station_id: string;
+  playlist_id: string;
+  status: DJJobStatus;
+  error_message: string | null;
+  created_at: Date;
+  updated_at: Date;
+  completed_at: Date | null;
+}
+
+export interface DJSegment {
+  id: string;
+  dj_script_id: string;
+  dj_profile_id: string;
+  segment_type: ScriptSegmentType;
+  script_text: string | null;
+  audio_file_path: string | null;
+  audio_duration_ms: number | null;
+  before_song_id: string | null;
+  after_song_id: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface DJShowManifestItem {
+  type: 'song' | 'dj_segment';
+  id: string;
+  hour: number;
+  position: number;
+  duration_ms: number;
+  title?: string;
+  artist?: string;
+  file_path?: string;
+}
+
+export interface DJShowManifest {
+  id: string;
+  dj_script_id: string;
+  manifest: DJShowManifestItem[];
+  created_at: Date;
+  updated_at: Date;
+}
+
 // ─── API Responses ────────────────────────────────────────────────────────────
 
 export interface ApiError {
