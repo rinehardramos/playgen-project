@@ -209,11 +209,3 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     </Suspense>
   );
 }
-
-export default function ClientLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-500"></div></div>}>
-      <ClientLayoutContent>{children}</ClientLayoutContent>
-    </Suspense>
-  );
-}
