@@ -4,6 +4,8 @@ import './globals.css';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { DjPlayerProvider } from '@/lib/DjPlayerContext';
+import DjPlayer from '@/components/DjPlayer';
 import { getCurrentUser } from '@/lib/auth';
 
 const NAV_LINKS = [
@@ -136,50 +138,53 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="bg-[#0b0b10] text-white min-h-screen">
-        {showNav ? (
-          <div className="flex h-screen overflow-hidden">
-            {/* Desktop sidebar */}
-            <aside className="hidden md:flex md:w-56 lg:w-60 flex-shrink-0 flex-col">
-              <Sidebar />
-            </aside>
+        <DjPlayerProvider>
+          {showNav ? (
+            <div className="flex h-screen overflow-hidden">
+              {/* Desktop sidebar */}
+              <aside className="hidden md:flex md:w-56 lg:w-60 flex-shrink-0 flex-col">
+                <Sidebar />
+              </aside>
 
-            {/* Mobile sidebar overlay */}
-            {mobileOpen && (
-              <div className="fixed inset-0 z-50 md:hidden">
-                <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
-                <aside className="relative w-64 h-full">
-                  <Sidebar onClose={() => setMobileOpen(false)} />
-                </aside>
-              </div>
-            )}
-
-            {/* Main */}
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-              {/* Mobile top bar */}
-              <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-[#13131a] border-b border-[#2a2a40]">
-                <button onClick={() => setMobileOpen(true)} className="text-gray-400 hover:text-white">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/>
-                  </svg>
-                </button>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-violet-600 rounded-md flex items-center justify-center">
-                    <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                    </svg>
-                  </div>
-                  <span className="text-white font-bold text-base">PlayGen</span>
+              {/* Mobile sidebar overlay */}
+              {mobileOpen && (
+                <div className="fixed inset-0 z-50 md:hidden">
+                  <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
+                  <aside className="relative w-64 h-full">
+                    <Sidebar onClose={() => setMobileOpen(false)} />
+                  </aside>
                 </div>
-              </div>
+              )}
 
-              <main className="flex-1 overflow-y-auto">
-                {children}
-              </main>
+              {/* Main */}
+              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                {/* Mobile top bar */}
+                <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-[#13131a] border-b border-[#2a2a40]">
+                  <button onClick={() => setMobileOpen(true)} className="text-gray-400 hover:text-white">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-violet-600 rounded-md flex items-center justify-center">
+                      <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                      </svg>
+                    </div>
+                    <span className="text-white font-bold text-base">PlayGen</span>
+                  </div>
+                </div>
+
+                <main className="flex-1 overflow-y-auto">
+                  {children}
+                </main>
+              </div>
             </div>
-          </div>
-        ) : (
-          <main className="min-h-screen">{children}</main>
-        )}
+          ) : (
+            <main className="min-h-screen">{children}</main>
+          )}
+          <DjPlayer />
+        </DjPlayerProvider>
       </body>
     </html>
   );
