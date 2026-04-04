@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate, requirePermission } from '@playgen/middleware';
 import * as userService from '../services/userService';
+import * as inviteService from '../services/inviteService';
 
 export async function userRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate);
@@ -74,5 +75,15 @@ export async function userRoutes(app: FastifyInstance) {
   app.get('/companies/:id/roles', { onRequest: [requirePermission('users:read')] }, async (req) => {
     const { id } = req.params as { id: string };
     return userService.listRoles(id);
+  });
+
+  // ─── Invites ────────────────────────────────────────────────────────────────
+
+  app.post('/companies/:id/invites', { onRequest: [requirePermission('users:write')] }, async (req, reply) => {
+    const { id: companyId } = req.params as { id: string };
+    const body = req.body as { email: string; role_id: string; station_ids?: string[] };
+    if (!body.email || !body.role_id) return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'email and role_id are required' } });
+    const invite = await inviteService.createInvite({ companyId, invitedBy: req.user.sub, email: body.email, roleId: body.role_id, stationIds: body.station_ids ?? [] });
+    return reply.code(201).send(invite);
   });
 }
