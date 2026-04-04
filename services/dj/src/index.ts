@@ -1,5 +1,6 @@
 import path from 'path';
 import Fastify from 'fastify';
+import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
@@ -43,7 +44,7 @@ app.register(scriptRoutes,         { prefix: '/api/v1' });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 
-app.setErrorHandler((err, _req, reply) => {
+app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);
   if (err.validation) {
     return reply.code(400).send({

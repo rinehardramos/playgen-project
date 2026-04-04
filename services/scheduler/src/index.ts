@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import { schedulerRoutes } from './routes/scheduler';
 import { configRoutes } from './routes/config';
@@ -27,7 +28,7 @@ app.register(configRoutes, { prefix: '/api/v1' });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 
-app.setErrorHandler((err, req, reply) => {
+app.setErrorHandler((err: FastifyError, req, reply) => {
   app.log.error(err);
   if (err.validation) {
     return reply.code(400).send({

@@ -13,8 +13,8 @@
     "@playgen/types": "workspace:*",
     "@playgen/middleware": "workspace:*",
     "exceljs": "^4.4.0",
-    "fastify": "^4.27.0",
-    "@fastify/sensible": "^5.5.0",
+    "fastify": "^5.8.4",
+    "@fastify/sensible": "^6.0.0",
     "@fastify/multipart": "^8.3.0",
     "pg": "^8.11.0"
   },

@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import { playlistRoutes } from './routes/playlists';
 
@@ -17,7 +18,7 @@ app.get('/health', async () => ({ status: 'ok', service: 'playlist-service' }));
 
 app.register(playlistRoutes, { prefix: '/api/v1' });
 
-app.setErrorHandler((err, _req, reply) => {
+app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);
   if (err.validation) {
     return reply.code(400).send({

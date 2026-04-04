@@ -11,20 +11,22 @@ export const dynamic = 'force-dynamic';
 
 const GATEWAY = (process.env.GATEWAY_URL ?? '').replace(/\/$/, '');
 
-async function proxy(req: NextRequest, { params }: { params: { path: string[] } }) {
+async function proxy(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const { path } = await props.params;
   if (!GATEWAY) {
     return NextResponse.json({ error: 'GATEWAY_URL not configured' }, { status: 503 });
   }
 
-  const { path } = params;
-  const url = `${GATEWAY}/api/v1/${path.join('/')}${req.nextUrl.search}`;
+  const pathStr = path.join('/');
+  const search = req.nextUrl.search ?? '';
+  const targetUrl = `${GATEWAY}/api/v1/${pathStr}${search}`;
 
   const headers = new Headers(req.headers);
   headers.delete('host');
   headers.delete('connection');
 
   try {
-    const res = await fetch(url, {
+    const res = await fetch(targetUrl, {
       method: req.method,
       headers,
       body: req.method !== 'GET' && req.method !== 'HEAD' ? await req.blob() : undefined,
@@ -42,7 +44,7 @@ async function proxy(req: NextRequest, { params }: { params: { path: string[] } 
       headers: responseHeaders,
     });
   } catch (err) {
-    console.error(`Proxy error [${req.method} ${url}]:`, err);
+    console.error(`Proxy error [${req.method} ${targetUrl}]:`, err);
     return NextResponse.json({ error: 'Gateway unreachable' }, { status: 502 });
   }
 }

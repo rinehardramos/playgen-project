@@ -8,17 +8,16 @@ Before starting any task, an agent MUST:
 4. Update this file in the SAME commit as the work (start and finish).
 5. When finished, move the entry to `## Recently Completed`.
 6. SECURITY MANDATE: Detect and categorize vulnerabilities (High -> TODO, Medium/Low -> Backlog). Fix easy High ones first. Notify user if unfixable.
-7. COMPLETION MANDATE: Before moving any ticket to "Done" or "Recently Completed", explicitly verify that ALL acceptance criteria in the issue description are met.
+7. PR MERGE MANDATE: Before merging any PR, verify `mergeable_state` is clean. Rebase onto `origin/main` locally, resolve conflicts manually (never blindly `-X theirs`), verify `pnpm run typecheck` passes, then force-push and wait for CI to go green before merging.
 
 ## Active Work
-- [ ] Build manifest builder service (#19) | @gemini-cli | 2026-04-04
+- [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
 
 ## Recently Completed
-- [x] Implement storage service and audio file management (#14) | @gemini-cli | 2026-04-04
-- [x] Resolve all High vulnerabilities: Next.js 15, Fastify 5, tar & esbuild overrides (PR #110) | @gemini-cli | 2026-04-04
+- [x] Add DJ link to sidebar navigation (issue #103, feat/dj-sidebar-nav) | @claude-code | 2026-04-04
 - [x] DJ Personality Feature (persona_config JSONB, PersonaConfig type, prompt builder, seed, frontend form) | @claude-code | 2026-04-04
 - [x] Fix @fastify/rate-limit v10→v9 for Fastify v4 compatibility (DJ + Station services) | @claude-code | 2026-04-04
-- [x] Implement per-song play history timeline (PR #109) | @gemini-cli | 2026-04-04
+- [x] Implement per-song play history timeline (feat/song-play-history) | @gemini-cli | 2026-04-04
 - [x] Clone template to another station functionality (PR #107) | @gemini-cli | 2026-04-04
 - [x] Create station settings service and UI (PR #96) | @previous-agent | 2026-04-04
 - [x] Implement duplicate detection on song import (PR #99) | @gemini-cli | 2026-04-04
