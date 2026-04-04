@@ -84,8 +84,6 @@ const NAV_LINKS = [
 
 function Sidebar({ user, onClose }: { user: any; onClose?: () => void }) {
   const pathname = usePathname();
-  const [user, setUser] = useState<any>(null);
-  useEffect(() => { setUser(getCurrentUser()); }, []);
 
   return (
     <div className="flex flex-col h-full bg-[#13131a] border-r border-[#2a2a40]">
@@ -149,6 +147,7 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => { setUser(getCurrentUser()); }, []);
   const isLoginPage = pathname === '/login' || pathname === '/';
   const showNav = !isLoginPage;
 
