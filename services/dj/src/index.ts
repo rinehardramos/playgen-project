@@ -15,9 +15,11 @@ app.register(sensible);
 
 import { profileRoutes } from './routes/profiles';
 import { daypartRoutes } from './routes/dayparts';
+import { llmRoutes } from './routes/llm';
 
 app.register(profileRoutes, { prefix: '/api/v1' });
 app.register(daypartRoutes, { prefix: '/api/v1' });
+app.register(llmRoutes, { prefix: '/api/v1' });
 
 app.get('/health', async () => ({ 
   status: 'ok', 
