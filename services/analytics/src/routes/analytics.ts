@@ -50,4 +50,12 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const limit = query.limit ? parseInt(query.limit, 10) : 30;
     return analyticsService.getSongHistory(id, limit);
   });
+
+  // ── GET /dashboard/stats ──────────────────────────────────────────────────
+  app.get('/dashboard/stats', {
+    onRequest: [requirePermission('analytics:read')],
+  }, async (req) => {
+    const { company_id } = req.user;
+    return analyticsService.getDashboardStats(company_id);
+  });
 }

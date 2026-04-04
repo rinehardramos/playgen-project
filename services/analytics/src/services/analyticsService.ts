@@ -2,6 +2,13 @@ import { getPool } from '../db';
 
 // ─── Return types ─────────────────────────────────────────────────────────────
 
+export interface DashboardStats {
+  active_songs: number;
+  todays_playlists: number;
+  pending_approvals: number;
+  active_stations: number;
+}
+
 export interface HeatmapRow {
   song_id: string;
   title: string;
@@ -264,6 +271,68 @@ export async function getCategoryDistribution(
     total_plays: r.total_plays,
     percentage: Number(r.percentage),
   }));
+}
+
+// ─── getDashboardStats ────────────────────────────────────────────────────────
+
+/**
+ * Returns aggregate stats for the dashboard scoped to a company.
+ *
+ * - active_songs:       total active songs across all stations in the company
+ * - todays_playlists:   playlists generated for today (any status)
+ * - pending_approvals:  playlists in 'ready' status awaiting approval
+ * - active_stations:    stations with is_active = true in the company
+ */
+export async function getDashboardStats(companyId: string): Promise<DashboardStats> {
+  const pool = getPool();
+
+  const sql = `
+    SELECT
+      (
+        SELECT COUNT(*)::int
+        FROM songs
+        WHERE company_id = $1
+          AND is_active = TRUE
+      ) AS active_songs,
+
+      (
+        SELECT COUNT(*)::int
+        FROM playlists pl
+        JOIN stations st ON st.id = pl.station_id
+        WHERE st.company_id = $1
+          AND pl.date = CURRENT_DATE
+      ) AS todays_playlists,
+
+      (
+        SELECT COUNT(*)::int
+        FROM playlists pl
+        JOIN stations st ON st.id = pl.station_id
+        WHERE st.company_id = $1
+          AND pl.status = 'ready'
+      ) AS pending_approvals,
+
+      (
+        SELECT COUNT(*)::int
+        FROM stations
+        WHERE company_id = $1
+          AND is_active = TRUE
+      ) AS active_stations
+  `;
+
+  const { rows } = await pool.query<{
+    active_songs: number;
+    todays_playlists: number;
+    pending_approvals: number;
+    active_stations: number;
+  }>(sql, [companyId]);
+
+  const row = rows[0];
+  return {
+    active_songs: row.active_songs,
+    todays_playlists: row.todays_playlists,
+    pending_approvals: row.pending_approvals,
+    active_stations: row.active_stations,
+  };
 }
 
 // ─── getSongHistory ───────────────────────────────────────────────────────────

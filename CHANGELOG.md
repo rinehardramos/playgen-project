@@ -5,6 +5,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.22] - 2026-04-05
+
+### Added
+- **Dashboard Stats Endpoint**: `GET /api/v1/dashboard/stats` on analytics service returns `active_songs`, `todays_playlists`, `pending_approvals`, and `active_stations` in a single query, scoped to the caller's company; fixes 500 errors on the dashboard stats cards (#118)
+
+---
+
 ## [1.21] - 2026-04-04
 
 ### Added
