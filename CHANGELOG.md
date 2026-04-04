@@ -5,6 +5,13 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.27] - 2026-04-05
+
+### Fixed
+- **Vercel Tailwind CSS build error**: Moved `tailwindcss`, `@tailwindcss/postcss`, `postcss`, and `autoprefixer` from `devDependencies` to `dependencies` in `frontend/package.json` (and updated lockfile); these CSS build packages must be in `dependencies` so pnpm correctly exposes them in the workspace's `node_modules` scope for Next.js/PostCSS to resolve during Vercel's production build
+
+---
+
 ## [1.26] - 2026-04-05
 
 ### Fixed
