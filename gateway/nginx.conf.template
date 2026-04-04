@@ -118,7 +118,7 @@ server {
     }
 
     # ─── Station: catch-all ───────────────────────────────────────
-    location ~ ^/api/v1/stations/ {
+    location ~ ^/api/v1/stations {
         set $svc http://${STATION_HOST}:3002;
         proxy_pass $svc;
         proxy_set_header Host $host;
