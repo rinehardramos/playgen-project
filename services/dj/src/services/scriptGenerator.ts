@@ -94,12 +94,64 @@ export const scriptGenerator = {
         }
       }
 
-      await scriptService.updateScriptStatus(scriptId, 'completed');
+      await scriptService.updateScriptStatus(scriptId, 'pending_review');
     } catch (err: any) {
       console.error('Script generation failed:', err);
       await scriptService.updateScriptStatus(scriptId, 'failed', err.message);
       throw err;
     }
+  },
+
+  async regenerateSegment(segmentId: string): Promise<string> {
+    const segment = await scriptService.getSegment(segmentId);
+    if (!segment) throw new Error('Segment not found');
+
+    const script = await scriptService.getScript(segment.dj_script_id);
+    if (!script) throw new Error('Script not found');
+
+    const { rows: stations } = await getPool().query('SELECT name FROM stations WHERE id = $1', [script.station_id]);
+    const stationName = stations[0]?.name || 'PlayGen FM';
+
+    const profile = await profileService.get(segment.dj_profile_id);
+    if (!profile) throw new Error('Profile not found');
+
+    const template = await scriptTemplateService.getTemplateForSegment(script.station_id, segment.segment_type);
+    if (!template) throw new Error('Template not found');
+
+    // Fetch context again
+    // For simplicity in this segment-only regeneration, we'll try to get context from surrounding songs if they exist
+    const currentSong = segment.before_song_id ? await this.getEntrySongInfo(segment.before_song_id) : undefined;
+    const prevSong = segment.after_song_id ? await this.getEntrySongInfo(segment.after_song_id) : undefined;
+
+    const context: PromptContext = {
+      djProfile: profile,
+      stationName,
+      hour: 0, // Fallback
+      timeOfDay: 'day',
+      date: '2026-04-04',
+      time: 'now',
+      currentSong,
+      prevSong,
+    };
+
+    const systemPrompt = promptBuilder.buildSystemPrompt(profile);
+    const userPrompt = promptBuilder.buildUserPrompt(template, context);
+
+    const adapter = getLLMAdapter();
+    const response = await adapter.generateText({ prompt: userPrompt, systemPrompt });
+
+    await scriptService.updateSegmentText(segmentId, response.text);
+    return response.text;
+  },
+
+  async getEntrySongInfo(entryId: string) {
+    const { rows } = await getPool().query(
+      `SELECT s.title, s.artist FROM playlist_entries pe
+       JOIN songs s ON pe.song_id = s.id
+       WHERE pe.id = $1`,
+      [entryId]
+    );
+    return rows[0];
   },
 
   async getSongInfo(songId: string) {

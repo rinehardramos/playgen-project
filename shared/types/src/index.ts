@@ -256,9 +256,12 @@ export type ScriptSegmentType =
 export type DJJobStatus =
   | 'queued'
   | 'generating_scripts'
+  | 'pending_review'
   | 'generating_audio'
   | 'completed'
   | 'failed';
+
+export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'edited';
 
 export interface TTSVoiceConfig {
   provider: string;
@@ -310,6 +313,10 @@ export interface DJScript {
   playlist_id: string;
   status: DJJobStatus;
   error_message: string | null;
+  review_status: 'pending' | 'approved' | 'rejected';
+  review_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: Date | null;
   created_at: Date;
   updated_at: Date;
   completed_at: Date | null;
@@ -325,6 +332,7 @@ export interface DJSegment {
   audio_duration_ms: number | null;
   before_song_id: string | null;
   after_song_id: string | null;
+  review_status: ReviewStatus;
   created_at: Date;
   updated_at: Date;
 }

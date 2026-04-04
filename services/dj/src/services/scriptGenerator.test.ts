@@ -61,6 +61,6 @@ describe('scriptGenerator', () => {
       script_text: 'Generated Text',
       segment_type: 'show_open'
     }));
-    expect(scriptService.updateScriptStatus).toHaveBeenCalledWith(scriptId, 'completed');
+    expect(scriptService.updateScriptStatus).toHaveBeenCalledWith(scriptId, 'pending_review');
   });
 });
