@@ -14,7 +14,7 @@
     "@playgen/middleware": "workspace:*",
     "@playgen/types": "workspace:*",
     "@fastify/sensible": "^6.0.0",
-    "bullmq": "^5.4.0",
+    "bullmq": "^5.73.0",
     "fastify": "^5.8.4",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
