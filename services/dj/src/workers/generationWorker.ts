@@ -255,6 +255,8 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
           console.error(`[generationWorker] TTS failed for segment ${seg.id}:`, ttsErr);
         }
       }
+    } catch (ttsSetupErr) {
+      console.error('[generationWorker] TTS setup failed:', ttsSetupErr);
     }
   }
 
