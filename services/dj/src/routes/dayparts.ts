@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '@playgen/middleware';
+import { authenticate } from '@playgen/middleware';
 import * as daypartService from '../services/daypartService.js';
 import type { DjDaypart } from '@playgen/types';
 
 export async function daypartRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('preHandler', requireAuth);
+  app.addHook('preHandler', authenticate);
 
   app.get<{ Params: { stationId: string } }>('/dj/stations/:stationId/dayparts', async (req) => {
     return daypartService.listDayparts(req.params.stationId);
