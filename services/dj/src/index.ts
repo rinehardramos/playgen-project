@@ -17,11 +17,17 @@ import { profileRoutes } from './routes/profiles';
 import { daypartRoutes } from './routes/dayparts';
 import { llmRoutes } from './routes/llm';
 import { scriptTemplateRoutes } from './routes/scriptTemplates';
+import { scriptRoutes } from './routes/scripts';
+import { startWorker } from './queue/worker';
 
 app.register(profileRoutes, { prefix: '/api/v1' });
 app.register(daypartRoutes, { prefix: '/api/v1' });
 app.register(llmRoutes, { prefix: '/api/v1' });
 app.register(scriptTemplateRoutes, { prefix: '/api/v1' });
+app.register(scriptRoutes, { prefix: '/api/v1' });
+
+// Start BullMQ worker
+startWorker();
 
 app.get('/health', async () => ({ 
   status: 'ok', 
@@ -57,13 +63,16 @@ const start = async () => {
   }
 };
 
+import { djQueue, connection } from './queue/djQueue';
+
 // Graceful shutdown
 const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
 signals.forEach((signal) => {
   process.on(signal, async () => {
     app.log.info(`Received ${signal}, shutting down...`);
     await app.close();
-    // TODO: Close BullMQ connections when implemented
+    await djQueue.close();
+    await connection.quit();
     process.exit(0);
   });
 });
