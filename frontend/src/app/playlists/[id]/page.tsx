@@ -7,6 +7,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { api } from '@/lib/api';
 import type { ApiError } from '@/lib/api';
 import { useDjPlayer } from '@/lib/DjPlayerContext';
+import MusicWidget from '@/components/MusicWidget';
 
 type PlaylistStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'exported' | 'failed';
 type DjReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'auto_approved';
@@ -53,6 +54,8 @@ interface PlaylistEntry {
   song_artist: string;
   category_label: string;
   is_manual_override: boolean;
+  spotify_id?: string | null;
+  apple_music_id?: string | null;
 }
 
 interface PlaylistWithEntries extends Playlist {
@@ -113,6 +116,7 @@ export default function PlaylistDetailPage() {
   const [editText, setEditText] = useState('');
   const [regenLoading, setRegenLoading] = useState<Record<string, boolean>>({});
   const [regenError, setRegenError] = useState<Record<string, string>>({});
+  const [musicWidgetEntryId, setMusicWidgetEntryId] = useState<string | null>(null);
 
   const djPlayer = useDjPlayer();
 
@@ -804,45 +808,80 @@ export default function PlaylistDetailPage() {
                 const hourEntries = (byHour.get(hour) ?? []).sort((a, b) => a.position - b.position);
                 return (
                   <Fragment key={hour}>
-                    {hourEntries.map((entry, idx) => (
-                      <tr
-                        key={entry.id}
-                        className={`border-b border-[#2a2a40] hover:bg-[#24243a] ${entry.is_manual_override ? 'bg-yellow-900/10' : ''}`}
-                      >
-                        {idx === 0 ? (
-                          <td
-                            rowSpan={hourEntries.length}
-                            className="px-4 py-3 font-medium text-gray-400 align-top border-r border-[#2a2a40] whitespace-nowrap"
+                    {hourEntries.map((entry, idx) => {
+                      const hasMusicWidget = !!(entry.spotify_id || entry.apple_music_id);
+                      const isWidgetOpen = musicWidgetEntryId === entry.id;
+                      return (
+                        <Fragment key={entry.id}>
+                          <tr
+                            className={`border-b border-[#2a2a40] hover:bg-[#24243a] ${entry.is_manual_override ? 'bg-yellow-900/10' : ''}`}
                           >
-                            {hour}:00
-                          </td>
-                        ) : null}
-                        <td className="px-4 py-3 text-gray-500">{entry.position}</td>
-                        <td className="px-4 py-3 text-gray-400">{entry.category_label}</td>
-                        <td className="px-4 py-3 font-medium text-white">{entry.song_title}</td>
-                        <td className="px-4 py-3 text-gray-400">{entry.song_artist}</td>
-                        <td className="px-4 py-3">
-                          {entry.is_manual_override && (
-                            <span className="badge bg-yellow-900/30 text-yellow-400">Override</span>
+                            {idx === 0 ? (
+                              <td
+                                rowSpan={hourEntries.length}
+                                className="px-4 py-3 font-medium text-gray-400 align-top border-r border-[#2a2a40] whitespace-nowrap"
+                              >
+                                {hour}:00
+                              </td>
+                            ) : null}
+                            <td className="px-4 py-3 text-gray-500">{entry.position}</td>
+                            <td className="px-4 py-3 text-gray-400">{entry.category_label}</td>
+                            <td className="px-4 py-3 font-medium text-white">
+                              <div className="flex items-center gap-1.5">
+                                {entry.song_title}
+                                {hasMusicWidget && (
+                                  <button
+                                    onClick={() => setMusicWidgetEntryId(isWidgetOpen ? null : entry.id)}
+                                    title={isWidgetOpen ? 'Hide music preview' : 'Show music preview'}
+                                    className={`flex-shrink-0 w-5 h-5 flex items-center justify-center rounded transition-colors ${
+                                      isWidgetOpen
+                                        ? 'text-green-400 bg-green-900/20'
+                                        : 'text-gray-600 hover:text-green-400'
+                                    }`}
+                                  >
+                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-gray-400">{entry.song_artist}</td>
+                            <td className="px-4 py-3">
+                              {entry.is_manual_override && (
+                                <span className="badge bg-yellow-900/30 text-yellow-400">Override</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {playlist?.status !== 'approved' && playlist?.status !== 'exported' && (
+                                <button
+                                  onClick={() => {
+                                    setOverrideEntry(entry);
+                                    setSearchQuery('');
+                                    setSearchResults([]);
+                                    setOverrideError(null);
+                                  }}
+                                  className="text-xs text-violet-400 hover:text-violet-300 font-medium"
+                                >
+                                  Override
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                          {/* Music widget expansion row */}
+                          {isWidgetOpen && hasMusicWidget && (
+                            <tr className="border-b border-[#2a2a40] bg-[#0f0f1a]">
+                              <td colSpan={7} className="px-4 py-3">
+                                <MusicWidget
+                                  spotifyId={entry.spotify_id}
+                                  appleMusicId={entry.apple_music_id}
+                                />
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {playlist?.status !== 'approved' && playlist?.status !== 'exported' && (
-                            <button
-                              onClick={() => {
-                                setOverrideEntry(entry);
-                                setSearchQuery('');
-                                setSearchResults([]);
-                                setOverrideError(null);
-                              }}
-                              className="text-xs text-violet-400 hover:text-violet-300 font-medium"
-                            >
-                              Override
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                        </Fragment>
+                      );
+                    })}
                   </Fragment>
                 );
               })
