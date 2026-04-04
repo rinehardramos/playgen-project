@@ -5,19 +5,21 @@ import { config } from '../../config.js';
 import { ElevenLabsTtsAdapter } from './elevenlabs.js';
 import type { TtsAdapter, TtsOptions, TtsResult } from './interface.js';
 
-export class OpenAiTtsAdapter implements TtsAdapter {
-  private defaultClient: OpenAI;
+export interface TtsAdapterOverrides {
+  provider?: string;
+  apiKey?: string;
+  voiceId?: string;
+}
 
-  constructor() {
-    this.defaultClient = new OpenAI({ apiKey: config.tts.openaiApiKey });
+export class OpenAiTtsAdapter implements TtsAdapter {
+  private client: OpenAI;
+
+  constructor(apiKey?: string) {
+    this.client = new OpenAI({ apiKey: apiKey ?? config.tts.openaiApiKey });
   }
 
   async generate(opts: TtsOptions): Promise<TtsResult> {
-    const client = opts.apiKey 
-      ? new OpenAI({ apiKey: opts.apiKey })
-      : this.defaultClient;
-
-    const response = await client.audio.speech.create({
+    const response = await this.client.audio.speech.create({
       model: 'tts-1',
       voice: opts.voice_id as 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer',
       input: opts.text,
@@ -32,10 +34,11 @@ export class OpenAiTtsAdapter implements TtsAdapter {
   }
 }
 
-export function getTtsAdapter(): TtsAdapter {
-  if (config.tts.provider === 'openai') return new OpenAiTtsAdapter();
-  if (config.tts.provider === 'elevenlabs') {
-    return new ElevenLabsTtsAdapter();
+export function getTtsAdapter(overrides?: TtsAdapterOverrides): TtsAdapter {
+  const provider = overrides?.provider ?? config.tts.provider;
+  if (provider === 'openai') return new OpenAiTtsAdapter(overrides?.apiKey);
+  if (provider === 'elevenlabs') {
+    return new ElevenLabsTtsAdapter(overrides?.apiKey);
   }
-  throw new Error(`TTS provider "${config.tts.provider}" not yet implemented`);
+  throw new Error(`TTS provider "${provider}" not yet implemented`);
 }

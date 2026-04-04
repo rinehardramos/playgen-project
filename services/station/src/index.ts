@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import sensible from '@fastify/sensible';
 import { companyRoutes } from './routes/companies';
 import { stationRoutes } from './routes/stations';
+import { stationSettingsRoutes } from './routes/stationSettings';
 import { userRoutes } from './routes/users';
 
 const app = Fastify({
@@ -17,9 +18,10 @@ app.register(sensible);
 
 app.get('/health', async () => ({ status: 'ok', service: 'station-service' }));
 
-app.register(companyRoutes, { prefix: '/api/v1' });
-app.register(stationRoutes, { prefix: '/api/v1' });
-app.register(userRoutes, { prefix: '/api/v1' });
+app.register(companyRoutes,        { prefix: '/api/v1' });
+app.register(stationRoutes,        { prefix: '/api/v1' });
+app.register(stationSettingsRoutes, { prefix: '/api/v1' });
+app.register(userRoutes,           { prefix: '/api/v1' });
 
 app.setErrorHandler((err, _req, reply) => {
   app.log.error(err);

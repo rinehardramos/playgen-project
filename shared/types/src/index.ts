@@ -101,9 +101,6 @@ export interface Station {
   is_active: boolean;
   dj_enabled: boolean;
   dj_auto_approve: boolean;
-  openai_api_key?: string;
-  elevenlabs_api_key?: string;
-  openrouter_api_key?: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -376,6 +373,27 @@ export interface ReviewScriptRequest {
 
 export interface DjScriptWithSegments extends DjScript {
   segments: DjSegment[];
+}
+
+// ─── Station Settings ─────────────────────────────────────────────────────────
+
+/** Known per-station setting keys managed via the settings UI. */
+export type StationSettingKey =
+  | 'tts_provider'
+  | 'tts_api_key'
+  | 'tts_voice_id'
+  | 'llm_model'
+  | 'llm_api_key';
+
+export interface StationSetting {
+  id: string;
+  station_id: string;
+  key: string;
+  /** The real value — or "***" when is_secret=true in GET responses. */
+  value: string;
+  is_secret: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 // ─── API Responses ────────────────────────────────────────────────────────────
