@@ -15,7 +15,7 @@
     "@fastify/sensible": "^5.5.0",
     "@fastify/static": "^7.0.0",
     "bullmq": "^5.4.0",
-    "fastify": "^4.27.0",
+    "fastify": "^5.8.3",
     "jsonwebtoken": "^9.0.2",
     "openai": "^4.73.0",
     "pg": "^8.11.0"
