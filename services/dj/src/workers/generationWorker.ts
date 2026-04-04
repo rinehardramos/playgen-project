@@ -2,7 +2,9 @@ import { getPool } from '../db.js';
 import { llmComplete } from '../adapters/llm/openrouter.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import { config } from '../config.js';
-import { generateSegmentTts } from '../services/ttsService.js';
+import { getStorageAdapter } from '../lib/storage/index.js';
+import { buildAudioPath } from '../utils/audioPath.js';
+import { buildManifest } from '../services/manifestService.js';
 import type { DjGenerationJobData } from '../queues/djQueue.js';
 import type { DjProfile, DjSegmentType, DjScriptTemplate } from '@playgen/types';
 
@@ -79,6 +81,13 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   if (!profile) throw new Error('No DJ profile found for station');
 
   // 3. Load playlist entries with song data
+  const { rows: playlistRows } = await pool.query<{ playlist_date: Date }>(
+    'SELECT playlist_date FROM playlists WHERE id = $1',
+    [data.playlist_id],
+  );
+  if (!playlistRows[0]) throw new Error(`Playlist ${data.playlist_id} not found`);
+  const playlistDate = playlistRows[0].playlist_date.toISOString().split('T')[0];
+
   const { rows: entries } = await pool.query<PlaylistEntryRow>(
     `SELECT pe.id, pe.hour, pe.position,
             s.title AS song_title, s.artist AS song_artist, s.duration_sec
@@ -135,6 +144,8 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
     id: string;
     script_text: string;
     position: number;
+    segment_type: DjSegmentType;
+    hour: number;
   }> = [];
 
   for (let i = 0; i < entries.length; i++) {
@@ -188,21 +199,62 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
         [script_id, entry.id, segment_type, pos, script_text],
       );
 
-      generatedSegments.push({ id: segRows[0].id, script_text, position: pos });
+      generatedSegments.push({ 
+        id: segRows[0].id, 
+        script_text, 
+        position: pos,
+        segment_type,
+        hour: entry.hour
+      });
     }
   }
 
   // 7. TTS pass — generate audio for each segment
   if (ttsEnabled) {
-    for (const seg of generatedSegments) {
-      try {
-        await generateSegmentTts(
-          { id: seg.id, position: seg.position, text: seg.script_text, script_id },
-          { provider: effectiveTtsProvider, apiKey: effectiveTtsApiKey, voiceId: effectiveTtsVoiceId },
-        );
-      } catch (ttsErr) {
-        console.error(`[generationWorker] TTS failed for segment ${seg.id}:`, ttsErr);
-        // Continue — text is still saved even if TTS fails
+    try {
+      const ttsAdapter = getTtsAdapter({
+        provider: effectiveTtsProvider,
+        apiKey: effectiveTtsApiKey,
+      });
+      const storage = getStorageAdapter();
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      for (const seg of generatedSegments) {
+        try {
+          const relativePath = buildAudioPath({
+            companyId: station.company_id,
+            stationId: station.id,
+            playlistDate,
+            scriptId: script_id,
+            type: seg.segment_type,
+            hour: seg.hour,
+            position: seg.position,
+          });
+
+          const result = await ttsAdapter.generate({
+            voice_id: effectiveTtsVoiceId,
+            text: seg.script_text,
+          });
+
+          // Estimate duration if adapter didn't provide it
+          let duration = result.duration_sec;
+          if (duration === null) {
+            duration = estimateMp3Duration(result.audio_data);
+          }
+
+          // Use storage adapter to write the file
+          await storage.write(relativePath, result.audio_data);
+
+          // Store public audio URL from storage adapter
+          const audioUrl = storage.getPublicUrl(relativePath);
+          await pool.query(
+            `UPDATE dj_segments SET audio_url = $1, audio_duration_sec = $2 WHERE id = $3`,
+            [audioUrl, duration, seg.id],
+          );
+        } catch (ttsErr) {
+          console.error(`[generationWorker] TTS failed for segment ${seg.id}:`, ttsErr);
+        }
       }
     }
   }
@@ -215,4 +267,11 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
      WHERE id = $1`,
     [script_id, position, generation_ms],
   );
+
+  // 9. Auto-build manifest
+  try {
+    await buildManifest(script_id);
+  } catch (manifestErr) {
+    console.error(`[generationWorker] Failed to build manifest for script ${script_id}:`, manifestErr);
+  }
 }
