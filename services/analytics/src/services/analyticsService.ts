@@ -366,3 +366,61 @@ export async function getSongHistory(
     playlist_id: r.playlist_id,
   }));
 }
+
+// ─── getCategoryDistributionByDate ────────────────────────────────────────────
+
+/**
+ * Returns the percentage breakdown of scheduled songs by category for a
+ * specific date. Uses playlist_entries (planned schedule) rather than
+ * play_history, so it works even before songs have aired.
+ */
+export async function getCategoryDistributionByDate(
+  stationId: string,
+  date: string,
+): Promise<CategoryDistributionRow[]> {
+  const pool = getPool();
+
+  const sql = `
+    WITH slot_counts AS (
+      SELECT
+        COALESCE(c.code,  'UNCATEGORISED') AS category_code,
+        COALESCE(c.label, 'Uncategorised') AS category_label,
+        COUNT(*)::int                      AS total_plays
+      FROM playlist_entries pe
+      JOIN playlists         pl ON pl.id = pe.playlist_id
+      JOIN songs             s  ON s.id  = pe.song_id
+      LEFT JOIN categories   c  ON c.id  = s.category_id
+      WHERE pl.station_id = $1
+        AND pl.date       = $2
+      GROUP BY c.code, c.label
+    ),
+    grand_total AS (
+      SELECT SUM(total_plays) AS grand FROM slot_counts
+    )
+    SELECT
+      sc.category_code,
+      sc.category_label,
+      sc.total_plays,
+      CASE
+        WHEN gt.grand = 0 THEN 0
+        ELSE ROUND(sc.total_plays::numeric * 100 / gt.grand, 2)
+      END AS percentage
+    FROM slot_counts sc
+    CROSS JOIN grand_total gt
+    ORDER BY sc.total_plays DESC
+  `;
+
+  const { rows } = await pool.query<{
+    category_code: string;
+    category_label: string;
+    total_plays: number;
+    percentage: string;
+  }>(sql, [stationId, date]);
+
+  return rows.map((r) => ({
+    category_code: r.category_code,
+    category_label: r.category_label,
+    total_plays: r.total_plays,
+    percentage: Number(r.percentage),
+  }));
+}
