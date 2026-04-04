@@ -99,6 +99,8 @@ export interface Station {
   broadcast_end_hour: number;
   active_days: string[];
   is_active: boolean;
+  dj_enabled: boolean;
+  dj_auto_approve: boolean;
   created_at: Date;
   updated_at: Date;
 }

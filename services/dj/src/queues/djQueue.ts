@@ -7,6 +7,7 @@ export interface DjGenerationJobData {
   station_id: string;
   dj_profile_id: string;
   auto_approve: boolean;
+  rejection_notes?: string;
 }
 
 const QUEUE_NAME = 'dj-generation' as const;

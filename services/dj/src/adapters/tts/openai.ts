@@ -28,7 +28,11 @@ export class OpenAiTtsAdapter implements TtsAdapter {
 }
 
 export function getTtsAdapter(): TtsAdapter {
-  // Pluggable: swap provider via config
   if (config.tts.provider === 'openai') return new OpenAiTtsAdapter();
+  if (config.tts.provider === 'elevenlabs') {
+    // Dynamic import to avoid loading ElevenLabs when not needed
+    const { ElevenLabsTtsAdapter } = require('./elevenlabs.js');
+    return new ElevenLabsTtsAdapter();
+  }
   throw new Error(`TTS provider "${config.tts.provider}" not yet implemented`);
 }

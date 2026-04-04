@@ -1,5 +1,7 @@
+import path from 'path';
 import Fastify from 'fastify';
 import sensible from '@fastify/sensible';
+import fastifyStatic from '@fastify/static';
 import { config } from './config.js';
 import { profileRoutes } from './routes/profiles.js';
 import { daypartRoutes } from './routes/dayparts.js';
@@ -17,6 +19,14 @@ const app = Fastify({
 });
 
 app.register(sensible);
+
+// ── Static file serving for TTS audio ────────────────────────────────────────
+
+app.register(fastifyStatic, {
+  root: path.join('/tmp', 'dj-audio'),
+  prefix: '/api/v1/dj/audio/',
+  decorateReply: false,
+});
 
 // ── Health check ──────────────────────────────────────────────────────────────
 

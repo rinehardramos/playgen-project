@@ -87,6 +87,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
             station_id: rows[0].station_id,
             dj_profile_id: rows[0].dj_profile_id,
             auto_approve: false,
+            rejection_notes: review_notes,
           });
         }
         return script;

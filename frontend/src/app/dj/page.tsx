@@ -88,7 +88,7 @@ export default function DjProfilesPage() {
     setError(null);
     try {
       if (editingId) {
-        await api.post(`/api/v1/dj/profiles/${editingId}`, form);
+        await api.patch(`/api/v1/dj/profiles/${editingId}`, form);
       } else {
         await api.post('/api/v1/dj/profiles', form);
       }

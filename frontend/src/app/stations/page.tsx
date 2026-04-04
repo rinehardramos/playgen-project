@@ -15,6 +15,8 @@ interface Station {
   broadcast_end_hour: number;
   active_days: string[];
   is_active: boolean;
+  dj_enabled: boolean;
+  dj_auto_approve: boolean;
 }
 
 interface StationFormData {
@@ -23,6 +25,8 @@ interface StationFormData {
   broadcast_start_hour: number;
   broadcast_end_hour: number;
   active_days: string[];
+  dj_enabled: boolean;
+  dj_auto_approve: boolean;
 }
 
 const ALL_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -33,6 +37,8 @@ const EMPTY_FORM: StationFormData = {
   broadcast_start_hour: 6,
   broadcast_end_hour: 22,
   active_days: ['MON', 'TUE', 'WED', 'THU', 'FRI'],
+  dj_enabled: false,
+  dj_auto_approve: false,
 };
 
 export default function StationsPage() {
@@ -88,6 +94,8 @@ export default function StationsPage() {
       broadcast_start_hour: station.broadcast_start_hour,
       broadcast_end_hour: station.broadcast_end_hour,
       active_days: station.active_days,
+      dj_enabled: station.dj_enabled ?? false,
+      dj_auto_approve: station.dj_auto_approve ?? false,
     });
     setFormError(null);
     setModalOpen(true);
@@ -156,7 +164,7 @@ export default function StationsPage() {
           <table className="min-w-full divide-y divide-[#2a2a40] text-sm">
             <thead className="bg-[#13131a]">
               <tr>
-                {['Name', 'Timezone', 'Broadcast Hours', 'Active Days', 'Status', 'Actions'].map(
+                {['Name', 'Timezone', 'Broadcast Hours', 'Active Days', 'DJ', 'Status', 'Actions'].map(
                   (h) => (
                     <th
                       key={h}
@@ -171,7 +179,7 @@ export default function StationsPage() {
             <tbody className="divide-y divide-[#2a2a40]">
               {stations.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-gray-600">
+                  <td colSpan={7} className="px-4 py-12 text-center text-gray-600">
                     No stations found. Add your first station to get started.
                   </td>
                 </tr>
@@ -185,6 +193,15 @@ export default function StationsPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-400">
                       {station.active_days.join(', ') || '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {station.dj_enabled ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-900/30 text-violet-400">
+                          AI DJ{station.dj_auto_approve ? ' (Auto)' : ''}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-600">Off</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -289,6 +306,39 @@ export default function StationsPage() {
                     }
                     className="input w-full"
                   />
+                </div>
+              </div>
+
+              {/* AI DJ Settings */}
+              <div className="border-t border-[#2a2a40] pt-4">
+                <label className="block text-sm text-gray-400 mb-3">AI DJ</label>
+                <div className="flex flex-col gap-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.dj_enabled}
+                      onChange={(e) => setForm((p) => ({ ...p, dj_enabled: e.target.checked }))}
+                      className="rounded border-gray-600 w-4 h-4"
+                    />
+                    <div>
+                      <span className="text-sm text-gray-300">Enable AI DJ</span>
+                      <p className="text-xs text-gray-600">Allow AI-generated DJ scripts for this station</p>
+                    </div>
+                  </label>
+                  {form.dj_enabled && (
+                    <label className="flex items-center gap-3 cursor-pointer ml-7">
+                      <input
+                        type="checkbox"
+                        checked={form.dj_auto_approve}
+                        onChange={(e) => setForm((p) => ({ ...p, dj_auto_approve: e.target.checked }))}
+                        className="rounded border-gray-600 w-4 h-4"
+                      />
+                      <div>
+                        <span className="text-sm text-gray-300">Auto-approve scripts</span>
+                        <p className="text-xs text-gray-600">Skip manual review — scripts go straight to approved</p>
+                      </div>
+                    </label>
+                  )}
                 </div>
               </div>
 
