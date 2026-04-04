@@ -1,9 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate, requirePermission, requireStationAccess } from '@playgen/middleware';
+import type { JwtPayload } from '@playgen/types';
 import * as analyticsService from '../services/analyticsService';
 
 export async function analyticsRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate);
+
+  // ── GET /dashboard/stats ──────────────────────────────────────────────────
+  app.get('/dashboard/stats', {
+    onRequest: [requirePermission('analytics:read')],
+  }, async (req) => {
+    const { company_id } = req.user as JwtPayload;
+    return analyticsService.getDashboardStats(company_id);
+  });
 
   // ── GET /stations/:id/analytics/heatmap?days=14 ───────────────────────────
   app.get('/stations/:id/analytics/heatmap', {

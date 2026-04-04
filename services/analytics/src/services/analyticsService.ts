@@ -266,6 +266,73 @@ export async function getCategoryDistribution(
   }));
 }
 
+// ─── getDashboardStats ────────────────────────────────────────────────────────
+
+export interface DashboardStats {
+  active_songs: number;
+  todays_playlists: number;
+  pending_approvals: number;
+  active_stations: number;
+}
+
+/**
+ * Returns aggregate dashboard stats scoped to a company.
+ *
+ * - active_songs:      count of is_active songs across all company stations
+ * - todays_playlists:  count of playlists with date = today (UTC) across all company stations
+ * - pending_approvals: count of playlists with status = 'ready' (generated but not yet approved)
+ * - active_stations:   count of is_active stations for the company
+ */
+export async function getDashboardStats(companyId: string): Promise<DashboardStats> {
+  const pool = getPool();
+
+  const sql = `
+    SELECT
+      (
+        SELECT COUNT(*)::int
+        FROM songs s
+        JOIN stations st ON st.id = s.station_id
+        WHERE st.company_id = $1
+          AND s.is_active = TRUE
+      ) AS active_songs,
+      (
+        SELECT COUNT(*)::int
+        FROM playlists p
+        JOIN stations st ON st.id = p.station_id
+        WHERE st.company_id = $1
+          AND p.date = CURRENT_DATE
+      ) AS todays_playlists,
+      (
+        SELECT COUNT(*)::int
+        FROM playlists p
+        JOIN stations st ON st.id = p.station_id
+        WHERE st.company_id = $1
+          AND p.status = 'ready'
+      ) AS pending_approvals,
+      (
+        SELECT COUNT(*)::int
+        FROM stations st
+        WHERE st.company_id = $1
+          AND st.is_active = TRUE
+      ) AS active_stations
+  `;
+
+  const { rows } = await pool.query<{
+    active_songs: number;
+    todays_playlists: number;
+    pending_approvals: number;
+    active_stations: number;
+  }>(sql, [companyId]);
+
+  const row = rows[0];
+  return {
+    active_songs: row.active_songs,
+    todays_playlists: row.todays_playlists,
+    pending_approvals: row.pending_approvals,
+    active_stations: row.active_stations,
+  };
+}
+
 // ─── getSongHistory ───────────────────────────────────────────────────────────
 
 /**

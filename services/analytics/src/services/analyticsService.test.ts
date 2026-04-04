@@ -5,6 +5,7 @@ import {
   getUnderplayedSongs,
   getCategoryDistribution,
   getSongHistory,
+  getDashboardStats,
 } from './analyticsService';
 
 const mockQuery = vi.fn();
@@ -169,6 +170,54 @@ describe('getCategoryDistribution', () => {
     const result = await getCategoryDistribution('station-1', 7);
 
     expect(result).toEqual([]);
+  });
+});
+
+describe('getDashboardStats', () => {
+  it('returns all four stat counters for a company', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          active_songs: 42,
+          todays_playlists: 3,
+          pending_approvals: 1,
+          active_stations: 5,
+        },
+      ],
+    });
+
+    const result = await getDashboardStats('company-1');
+
+    expect(result).toEqual({
+      active_songs: 42,
+      todays_playlists: 3,
+      pending_approvals: 1,
+      active_stations: 5,
+    });
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('company_id = $1'),
+      ['company-1'],
+    );
+  });
+
+  it('returns zeroes when the company has no data', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          active_songs: 0,
+          todays_playlists: 0,
+          pending_approvals: 0,
+          active_stations: 0,
+        },
+      ],
+    });
+
+    const result = await getDashboardStats('company-empty');
+
+    expect(result.active_songs).toBe(0);
+    expect(result.todays_playlists).toBe(0);
+    expect(result.pending_approvals).toBe(0);
+    expect(result.active_stations).toBe(0);
   });
 });
 

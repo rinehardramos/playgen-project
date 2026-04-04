@@ -232,6 +232,21 @@ fi
 echo ""
 echo "── Analytics ────────────────"
 
+DASH_RESP=$(body -H "Authorization: Bearer $ACCESS_TOKEN" \
+  "$GATEWAY/api/v1/dashboard/stats")
+if echo "$DASH_RESP" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert isinstance(d.get('active_songs'), int)
+assert isinstance(d.get('todays_playlists'), int)
+assert isinstance(d.get('pending_approvals'), int)
+assert isinstance(d.get('active_stations'), int)
+" 2>/dev/null; then
+  pass "GET /api/v1/dashboard/stats → valid stats object"
+else
+  fail "GET /api/v1/dashboard/stats" "${DASH_RESP:0:120}"
+fi
+
 if [ -n "$STATION_ID" ]; then
   ANA_RESP=$(body -H "Authorization: Bearer $ACCESS_TOKEN" \
     "$GATEWAY/api/v1/stations/$STATION_ID/analytics/heatmap")
