@@ -27,6 +27,13 @@ interface GenerateJob {
   job_id: string;
 }
 
+interface GenerationFailure {
+  id: string;
+  error_message: string | null;
+  queued_at: string;
+  triggered_by: string;
+}
+
 const STATUS_STYLES: Record<PlaylistStatus, string> = {
   draft: 'bg-gray-800 text-gray-400',
   generating: 'bg-blue-900/30 text-blue-400 animate-pulse',
@@ -72,6 +79,10 @@ export default function PlaylistsPage() {
   // Per-day generation state: date -> 'pending' | 'done' | 'failed'
   const [dayGenerating, setDayGenerating] = useState<Record<string, boolean>>({});
 
+  // Generation failure alerting
+  const [failures, setFailures] = useState<GenerationFailure[]>([]);
+  const [failuresDismissed, setFailuresDismissed] = useState(false);
+
   // Polling ref
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeJobsRef = useRef<GenerateJob[]>([]);
@@ -91,6 +102,11 @@ export default function PlaylistsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStation, selectedMonth]);
 
+  useEffect(() => {
+    if (selectedStation) fetchFailures();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStation]);
+
   async function fetchStations() {
     try {
       const data = await api.get<Station[]>(`/api/v1/companies/${companyId}/stations`);
@@ -98,6 +114,18 @@ export default function PlaylistsPage() {
       if (data.length > 0) setSelectedStation(data[0].id);
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to load stations');
+    }
+  }
+
+  async function fetchFailures() {
+    try {
+      const res = await api.get<{ data: GenerationFailure[]; count: number }>(
+        `/api/v1/stations/${selectedStation}/generation-failures`
+      );
+      setFailures(res.data);
+      setFailuresDismissed(false);
+    } catch {
+      // Non-critical — silently ignore failures here
     }
   }
 
@@ -224,12 +252,13 @@ export default function PlaylistsPage() {
       setDayGenerating((prev) => ({ ...prev, ...cleared }));
 
       if (pendingDates.length === 0) {
-        // All done
+        // All done — refresh failure alerts in case any job failed
         stopPolling();
         activeJobsRef.current = [];
         setGenerating(false);
         setBatchProgress(null);
         setDayGenerating({});
+        void fetchFailures();
       } else {
         activeJobsRef.current = pendingDates;
       }
@@ -309,6 +338,38 @@ export default function PlaylistsPage() {
               className="bg-violet-500 h-1.5 rounded-full transition-all duration-500"
               style={{ width: `${batchProgress.total > 0 ? (batchProgress.done / batchProgress.total) * 100 : 0}%` }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Generation failure alert banner */}
+      {failures.length > 0 && !failuresDismissed && (
+        <div className="mb-4 rounded-lg bg-red-900/20 border border-red-700/50 px-4 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-xs font-bold flex-shrink-0 mt-0.5">
+                {failures.length}
+              </span>
+              <div>
+                <p className="text-sm font-medium text-red-400">
+                  {failures.length === 1
+                    ? '1 playlist generation failed in the last 30 days'
+                    : `${failures.length} playlist generations failed in the last 30 days`}
+                </p>
+                {failures[0]?.error_message && (
+                  <p className="text-xs text-red-500/80 mt-0.5 truncate max-w-md">
+                    Latest: {failures[0].error_message}
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setFailuresDismissed(true)}
+              className="text-xs text-red-500/70 hover:text-red-400 transition-colors flex-shrink-0"
+              aria-label="Dismiss failure alerts"
+            >
+              Dismiss
+            </button>
           </div>
         </div>
       )}

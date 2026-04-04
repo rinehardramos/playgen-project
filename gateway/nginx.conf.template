@@ -102,6 +102,15 @@ server {
         proxy_set_header X-Request-ID $request_id;
     }
 
+    # ─── Scheduler: generation-failures ────────────────────────
+    location ~ ^/api/v1/stations/[^/]+/generation-failures {
+        set $svc http://${SCHEDULER_HOST}:3004;
+        proxy_pass $svc;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Request-ID $request_id;
+    }
+
     # ─── Scheduler: station-level jobs ───────────────────────────
     location ~ ^/api/v1/stations/[^/]+/jobs {
         set $svc http://${SCHEDULER_HOST}:3004;
