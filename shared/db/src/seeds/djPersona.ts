@@ -83,7 +83,7 @@ export async function seedDjPersona(pool: Pool): Promise<void> {
       ['morning',     6, 12],
       ['midday',     12, 15],
       ['afternoon',  15, 19],
-      ['evening',    19, 24],
+      ['evening',    19, 23],
     ] as const;
 
     for (const [daypart, start_hour, end_hour] of dayparts) {

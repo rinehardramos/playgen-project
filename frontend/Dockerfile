@@ -1,8 +1,8 @@
 # ── Stage 1: deps ─────────────────────────────────────────────────────────────
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json ./
+RUN npm install
 
 # ── Stage 2: builder ───────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder

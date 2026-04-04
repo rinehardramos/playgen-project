@@ -2,6 +2,7 @@ import path from 'path';
 import Fastify from 'fastify';
 import sensible from '@fastify/sensible';
 import fastifyStatic from '@fastify/static';
+import rateLimit from '@fastify/rate-limit';
 import { config } from './config.js';
 import { profileRoutes } from './routes/profiles.js';
 import { daypartRoutes } from './routes/dayparts.js';
@@ -19,6 +20,7 @@ const app = Fastify({
 });
 
 app.register(sensible);
+app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
 
 // ── Static file serving for TTS audio ────────────────────────────────────────
 
