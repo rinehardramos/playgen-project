@@ -4,6 +4,7 @@ import {
   getOverplayedSongs,
   getUnderplayedSongs,
   getCategoryDistribution,
+  getSongHistory,
 } from './analyticsService';
 
 const mockQuery = vi.fn();
@@ -168,5 +169,30 @@ describe('getCategoryDistribution', () => {
     const result = await getCategoryDistribution('station-1', 7);
 
     expect(result).toEqual([]);
+  });
+});
+
+describe('getSongHistory', () => {
+  it('returns recent play history for a song', async () => {
+    const songId = 'song-123';
+    const playedAt = new Date('2026-04-04T10:00:00Z');
+    
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        { played_at: playedAt, playlist_id: 'play-1' },
+      ],
+    });
+
+    const result = await getSongHistory(songId);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      played_at: playedAt.toISOString(),
+      playlist_id: 'play-1',
+    });
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE song_id = $1'),
+      [songId, 30]
+    );
   });
 });

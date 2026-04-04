@@ -33,6 +33,11 @@ interface SongFormData {
   eligible_hours: string;
 }
 
+interface SongHistoryEntry {
+  played_at: string;
+  playlist_id: string | null;
+}
+
 const EMPTY_SONG_FORM: SongFormData = {
   title: '',
   artist: '',
@@ -65,6 +70,12 @@ export default function LibraryPage() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // History modal
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historySong, setHistorySong] = useState<Song | null>(null);
+  const [songHistory, setSongHistory] = useState<SongHistoryEntry[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const companyId = currentUser?.company_id ?? '';
 
@@ -169,6 +180,20 @@ export default function LibraryPage() {
       setSongs((prev) => prev.map((s) => (s.id === songId ? { ...s, is_active: false } : s)));
     } catch (err: unknown) {
       alert((err as ApiError).message ?? 'Failed to deactivate song');
+    }
+  }
+
+  async function fetchSongHistory(song: Song) {
+    setHistorySong(song);
+    setHistoryModalOpen(true);
+    setLoadingHistory(true);
+    try {
+      const data = await api.get<SongHistoryEntry[]>(`/api/v1/songs/${song.id}/history`);
+      setSongHistory(data);
+    } catch (err: unknown) {
+      console.error('Failed to load song history:', err);
+    } finally {
+      setLoadingHistory(false);
     }
   }
 
@@ -299,14 +324,22 @@ export default function LibraryPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {song.is_active && (
+                      <div className="flex items-center gap-3">
+                        {song.is_active && (
+                          <button
+                            onClick={() => deactivateSong(song.id)}
+                            className="text-xs text-red-400 hover:text-red-300 font-medium"
+                          >
+                            Deactivate
+                          </button>
+                        )}
                         <button
-                          onClick={() => deactivateSong(song.id)}
-                          className="text-xs text-red-400 hover:text-red-300 font-medium"
+                          onClick={() => fetchSongHistory(song)}
+                          className="text-xs text-violet-400 hover:text-violet-300 font-medium"
                         >
-                          Deactivate
+                          History
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -439,6 +472,53 @@ export default function LibraryPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Song History Modal */}
+      {historyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md bg-[#16161f] border border-[#2a2a40] rounded-2xl shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-white">Play History</h2>
+              <button onClick={() => setHistoryModalOpen(false)} className="text-gray-500 hover:text-white">✕</button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm font-medium text-white">{historySong?.title}</p>
+              <p className="text-xs text-gray-500">{historySong?.artist}</p>
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
+              {loadingHistory ? (
+                <div className="flex justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : songHistory.length === 0 ? (
+                <p className="text-center py-8 text-gray-600 text-sm italic">No play history found.</p>
+              ) : (
+                songHistory.map((h, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-[#0f0f1a] border border-[#2a2a40] rounded-lg text-xs">
+                    <span className="text-gray-300">
+                      {new Date(h.played_at).toLocaleString()}
+                    </span>
+                    <span className="text-gray-500 uppercase font-mono">
+                      {h.playlist_id ? 'Scheduled' : 'External'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end pt-4">
+              <button
+                onClick={() => setHistoryModalOpen(false)}
+                className="btn-secondary"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
