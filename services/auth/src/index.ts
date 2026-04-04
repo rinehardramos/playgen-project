@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import { authRoutes } from './routes/auth';
 
@@ -17,7 +18,7 @@ app.get('/health', async () => ({ status: 'ok', service: 'auth-service' }));
 
 app.register(authRoutes, { prefix: '/api/v1' });
 
-app.setErrorHandler((err, req, reply) => {
+app.setErrorHandler((err: FastifyError, req, reply) => {
   app.log.error(err);
   if (err.validation) {
     return reply.code(400).send({

@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import { analyticsRoutes } from './routes/analytics';
 
@@ -17,7 +18,7 @@ app.get('/health', async () => ({ status: 'ok', service: 'analytics-service' }))
 
 app.register(analyticsRoutes, { prefix: '/api/v1' });
 
-app.setErrorHandler((err, _req, reply) => {
+app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);
   if (err.validation) {
     return reply.code(400).send({
