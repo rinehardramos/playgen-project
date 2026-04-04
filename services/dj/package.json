@@ -11,7 +11,7 @@
     "test:integration": "vitest run tests/integration"
   },
   "dependencies": {
-    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/rate-limit": "^9.0.0",
     "@fastify/sensible": "^5.5.0",
     "@fastify/static": "^7.0.0",
     "@playgen/middleware": "workspace:*",
