@@ -204,4 +204,38 @@ export async function playlistRoutes(app: FastifyInstance) {
       return reply.send(csv);
     }
   );
+
+  // POST /playlists/:id/entries/:hour/:position/regen — regenerate one slot
+  app.post(
+    '/playlists/:id/entries/:hour/:position/regen',
+    { onRequest: [requirePermission('playlist:write')] },
+    async (req, reply) => {
+      const { id, hour, position } = req.params as {
+        id: string; hour: string; position: string;
+      };
+
+      const hourNum = Number(hour);
+      const posNum = Number(position);
+
+      if (!Number.isInteger(hourNum) || hourNum < 0 || hourNum > 23) {
+        return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'hour must be an integer 0-23' } });
+      }
+      if (!Number.isInteger(posNum) || posNum < 1 || posNum > 4) {
+        return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'position must be an integer 1-4' } });
+      }
+
+      const userId = req.user.sub;
+
+      try {
+        const entry = await playlistService.regenEntry(id, hourNum, posNum, userId);
+        if (!entry) {
+          return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Playlist or entry not found' } });
+        }
+        return reply.code(200).send(entry);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Regen failed';
+        return reply.code(500).send({ error: { code: 'INTERNAL_ERROR', message } });
+      }
+    }
+  );
 }
