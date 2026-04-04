@@ -101,6 +101,9 @@ export interface Station {
   is_active: boolean;
   dj_enabled: boolean;
   dj_auto_approve: boolean;
+  openai_api_key?: string;
+  elevenlabs_api_key?: string;
+  openrouter_api_key?: string;
   created_at: Date;
   updated_at: Date;
 }

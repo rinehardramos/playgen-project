@@ -153,6 +153,15 @@ server {
         proxy_set_header X-Request-ID $request_id;
     }
 
+    # ─── DJ: profiles, dayparts, scripts, audio ──────────────────
+    location /api/v1/dj/ {
+        set $svc http://${DJ_HOST}:3007;
+        proxy_pass $svc;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Request-ID $request_id;
+    }
+
     # ─── Playlist: playlist + entry resource routes ───────────────
     location ~ ^/api/v1/playlists/ {
         set $svc http://${PLAYLIST_HOST}:3005;

@@ -2,6 +2,18 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate, requirePermission, requireStationAccess } from '@playgen/middleware';
 import * as stationService from '../services/stationService';
 
+const SECRET_KEYS = ['openai_api_key', 'elevenlabs_api_key', 'openrouter_api_key'] as const;
+
+function maskSecrets<T extends Record<string, unknown>>(row: T): T {
+  const masked = { ...row };
+  for (const key of SECRET_KEYS) {
+    if (key in masked) {
+      (masked as Record<string, unknown>)[key] = masked[key] ? '***' : null;
+    }
+  }
+  return masked;
+}
+
 export async function stationRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate);
 
@@ -29,7 +41,7 @@ export async function stationRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const station = await stationService.getStation(id);
     if (!station) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Station not found' } });
-    return station;
+    return maskSecrets(station as unknown as Record<string, unknown>);
   });
 
   app.put('/stations/:id', {
@@ -38,7 +50,7 @@ export async function stationRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const station = await stationService.updateStation(id, req.body as Parameters<typeof stationService.updateStation>[1]);
     if (!station) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Station not found' } });
-    return station;
+    return maskSecrets(station as unknown as Record<string, unknown>);
   });
 
   app.delete('/stations/:id', {

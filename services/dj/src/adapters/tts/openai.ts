@@ -6,14 +6,18 @@ import { ElevenLabsTtsAdapter } from './elevenlabs.js';
 import type { TtsAdapter, TtsOptions, TtsResult } from './interface.js';
 
 export class OpenAiTtsAdapter implements TtsAdapter {
-  private client: OpenAI;
+  private defaultClient: OpenAI;
 
   constructor() {
-    this.client = new OpenAI({ apiKey: config.tts.openaiApiKey });
+    this.defaultClient = new OpenAI({ apiKey: config.tts.openaiApiKey });
   }
 
   async generate(opts: TtsOptions): Promise<TtsResult> {
-    const response = await this.client.audio.speech.create({
+    const client = opts.apiKey 
+      ? new OpenAI({ apiKey: opts.apiKey })
+      : this.defaultClient;
+
+    const response = await client.audio.speech.create({
       model: 'tts-1',
       voice: opts.voice_id as 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer',
       input: opts.text,
