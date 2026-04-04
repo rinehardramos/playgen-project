@@ -521,177 +521,207 @@ export default function PlaylistDetailPage() {
           {djScript && !generating && (
             <>
               {/* Script header */}
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-[#13131a] p-4 rounded-xl border border-[#2a2a40] sticky top-0 z-10 shadow-lg">
                 <div className="flex items-center gap-3">
-                  <span className={`badge capitalize ${
-                    djScript.review_status === 'approved' || djScript.review_status === 'auto_approved'
-                      ? 'bg-green-900/30 text-green-400'
-                      : djScript.review_status === 'rejected'
-                      ? 'bg-red-900/30 text-red-400'
-                      : 'bg-yellow-900/30 text-yellow-400'
-                  }`}>
-                    {djScript.review_status.replace('_', ' ')}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {djScript.total_segments} segments
-                    {djScript.generation_ms ? ` | ${(djScript.generation_ms / 1000).toFixed(1)}s` : ''}
-                    {` | ${djScript.llm_model}`}
-                  </span>
+                  <div className="flex flex-col">
+                    <span className={`text-xs font-bold uppercase tracking-wider ${
+                      djScript.review_status === 'approved' || djScript.review_status === 'auto_approved'
+                        ? 'text-green-400'
+                        : djScript.review_status === 'rejected'
+                        ? 'text-red-400'
+                        : 'text-yellow-400'
+                    }`}>
+                      {djScript.review_status.replace('_', ' ')}
+                    </span>
+                    <span className="text-[10px] text-gray-500 mt-0.5">
+                      {djScript.total_segments} segments
+                      {djScript.generation_ms ? ` • ${(djScript.generation_ms / 1000).toFixed(1)}s` : ''}
+                      {` • ${djScript.llm_model}`}
+                    </span>
+                  </div>
                 </div>
 
-                {djScript.review_status === 'pending_review' && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleReviewAction('approve')}
-                      disabled={reviewing}
-                      className="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-semibold disabled:opacity-50 transition-colors"
-                    >
-                      {reviewing ? 'Approving...' : 'Approve Script'}
-                    </button>
-                    <button
-                      onClick={() => setShowRejectModal(true)}
-                      disabled={reviewing}
-                      className="px-4 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm font-semibold disabled:opacity-50 transition-colors"
-                    >
-                      Reject & Rewrite
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  {djScript.review_status === 'pending_review' && (
+                    <>
+                      <button
+                        onClick={() => handleReviewAction('approve')}
+                        disabled={reviewing}
+                        className="btn-primary text-xs flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                        {reviewing ? 'Approve All…' : 'Approve All'}
+                      </button>
+                      <button
+                        onClick={() => setShowRejectModal(true)}
+                        disabled={reviewing}
+                        className="btn-secondary text-xs border-red-900/50 hover:bg-red-900/20 text-red-400 flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Reject All
+                      </button>
+                    </>
+                  )}
 
-                {(djScript.review_status === 'approved' || djScript.review_status === 'auto_approved') && (
-                  <button
-                    onClick={handleGenerateScript}
-                    className="btn-secondary text-sm"
-                  >
-                    Regenerate
-                  </button>
-                )}
+                  {(djScript.review_status === 'approved' || djScript.review_status === 'auto_approved' || djScript.review_status === 'rejected') && (
+                    <button
+                      onClick={handleGenerateScript}
+                      className="btn-secondary text-xs flex items-center gap-1.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Regenerate
+                    </button>
+                  )}
 
-                {/* Play All button — shown when any segment has audio */}
-                {djScript.segments.some((s) => s.audio_url) && (
-                  <button
-                    onClick={playAllSegments}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                    Play All
-                  </button>
-                )}
+                  {/* Play All button */}
+                  {djScript.segments.some((s) => s.audio_url) && (
+                    <button
+                      onClick={playAllSegments}
+                      className="btn-secondary text-xs flex items-center gap-1.5 bg-violet-600/10 border-violet-500/20 text-violet-300 hover:bg-violet-600/20"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      Preview Show
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Segments list */}
-              <div className="space-y-3">
-                {djScript.segments.map((seg) => (
-                  <div
-                    key={seg.id}
-                    className="card p-4 border border-[#2a2a40] hover:border-[#3a3a50] transition-colors"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs font-mono text-violet-400 bg-violet-900/20 px-2 py-0.5 rounded">
-                        {seg.segment_type.replace(/_/g, ' ')}
-                      </span>
-                      <span className="text-xs text-gray-600">#{seg.position + 1}</span>
-                      {seg.audio_duration_sec != null && (
-                        <span className="text-xs text-gray-600">{seg.audio_duration_sec}s</span>
-                      )}
-                      {seg.audio_url && (() => {
-                        const isThisPlaying = djPlayer.currentSegment?.id === seg.id && djPlayer.isPlaying;
-                        return (
-                          <button
-                            onClick={() => playSegment(seg)}
-                            className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded-md bg-violet-600/20 hover:bg-violet-600/40 text-violet-400 text-xs font-medium transition-colors"
-                          >
-                            {isThisPlaying ? (
-                              <>
-                                <span className="w-3 h-3 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-                                Playing
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M8 5v14l11-7z" />
-                                </svg>
-                                Play
-                              </>
-                            )}
-                          </button>
-                        );
-                      })()}
-                    </div>
-
-                    {editingSegment === seg.id ? (
-                      <div>
-                        <textarea
-                          value={editText}
-                          onChange={(e) => setEditText(e.target.value)}
-                          rows={3}
-                          className="input w-full mb-2 text-sm"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleSaveEdit(seg.id)}
-                            className="btn-primary text-xs px-3 py-1.5"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => { setEditingSegment(null); setEditText(''); }}
-                            className="btn-secondary text-xs px-3 py-1.5"
-                          >
-                            Cancel
-                          </button>
+              <div className="space-y-4">
+                {djScript.segments.map((seg) => {
+                  const entry = entries.find(e => e.id === seg.playlist_entry_id);
+                  const isApproved = djScript.review_status === 'approved' || djScript.review_status === 'auto_approved';
+                  const isPending = djScript.review_status === 'pending_review';
+                  
+                  return (
+                    <div
+                      key={seg.id}
+                      className={`card p-5 border-l-4 transition-all ${
+                        isApproved ? 'border-l-green-500 border-green-900/20' : 
+                        seg.edited_text ? 'border-l-blue-500 border-blue-900/20' :
+                        isPending ? 'border-l-gray-600 border-[#2a2a40]' :
+                        'border-l-red-500 border-red-900/20'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400 bg-violet-900/20 px-2 py-0.5 rounded border border-violet-500/10">
+                            {seg.segment_type.replace(/_/g, ' ')}
+                          </span>
+                          {entry && (
+                            <span className="text-xs text-gray-500 flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                              </svg>
+                              {entry.song_title}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {seg.audio_duration_sec != null && (
+                            <span className="text-[10px] font-mono text-gray-600">{seg.audio_duration_sec}s</span>
+                          )}
+                          {seg.audio_url && (() => {
+                            const isThisPlaying = djPlayer.currentSegment?.id === seg.id && djPlayer.isPlaying;
+                            return (
+                              <button
+                                onClick={() => playSegment(seg)}
+                                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors ${
+                                  isThisPlaying 
+                                    ? 'bg-violet-500 text-white' 
+                                    : 'text-violet-400 bg-violet-500/10 hover:bg-violet-500/20'
+                                }`}
+                              >
+                                {isThisPlaying ? 'Playing' : 'Preview'}
+                              </button>
+                            );
+                          })()}
                         </div>
                       </div>
-                    ) : (
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-                          {seg.edited_text ?? seg.script_text}
-                        </p>
-                        {djScript.review_status === 'pending_review' && (
-                          <button
-                            onClick={() => {
-                              setEditingSegment(seg.id);
-                              setEditText(seg.edited_text ?? seg.script_text);
-                            }}
-                            className="text-xs text-violet-400 hover:text-violet-300 font-medium flex-shrink-0"
-                          >
-                            Edit
-                          </button>
-                        )}
-                      </div>
-                    )}
 
-                    {seg.edited_text && (
-                      <div className="mt-2 flex items-center gap-2 flex-wrap">
-                        <p className="text-xs text-gray-600 italic">Edited</p>
-                        <button
-                          onClick={() => handleRegenTts(seg.id)}
-                          disabled={!!regenLoading[seg.id]}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-violet-600/20 hover:bg-violet-600/40 text-violet-400 text-xs font-medium transition-colors disabled:opacity-50"
-                        >
-                          {regenLoading[seg.id] ? (
-                            <>
-                              <span className="w-3 h-3 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-                              Regenerating…
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                              Regenerate Audio
-                            </>
+                      {editingSegment === seg.id ? (
+                        <div className="space-y-3">
+                          <textarea
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            rows={4}
+                            className="input w-full text-sm leading-relaxed"
+                            autoFocus
+                          />
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => handleSaveEdit(seg.id)}
+                              className="btn-primary text-xs py-1.5"
+                            >
+                              Apply Changes
+                            </button>
+                            <button
+                              onClick={() => { setEditingSegment(null); setEditText(''); }}
+                              className="btn-secondary text-xs py-1.5"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="group relative">
+                          <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap pr-12">
+                            {seg.edited_text ?? seg.script_text}
+                          </p>
+                          
+                          {isPending && (
+                            <div className="absolute top-0 right-0 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => {
+                                  setEditingSegment(seg.id);
+                                  setEditText(seg.edited_text ?? seg.script_text);
+                                }}
+                                className="p-1.5 rounded-lg bg-[#24243a] text-violet-400 hover:text-violet-300 border border-[#3a3a50] shadow-xl"
+                                title="Edit text"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                            </div>
                           )}
-                        </button>
-                        {regenError[seg.id] && (
-                          <span className="text-xs text-red-400">{regenError[seg.id]}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                        </div>
+                      )}
+
+                      {(seg.edited_text || isApproved) && (
+                        <div className="mt-3 flex items-center gap-2">
+                          <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-tight ${
+                            isApproved ? 'text-green-500' : 'text-blue-400'
+                          }`}>
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            {isApproved ? 'Approved' : 'Edited'}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {isPending && (
+                        <div className="mt-4 pt-4 border-t border-[#2a2a40] flex items-center gap-4">
+                           <button className="text-[10px] font-bold uppercase text-gray-500 hover:text-gray-300 flex items-center gap-1 transition-colors">
+                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                             </svg>
+                             Add Instruction
+                           </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}

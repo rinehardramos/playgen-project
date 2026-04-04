@@ -9,14 +9,16 @@ Before starting any task, an agent MUST:
 5. When finished, move the entry to `## Recently Completed`.
 
 ## Active Work
-- [ ] Add configurable script review toggle (#33) | @gemini-cli | 2026-04-04
+- [ ] Build script review UI (#31) | @gemini-cli | 2026-04-04
 
 ## Recently Completed
+- [x] DJ Personality Feature (persona_config JSONB, PersonaConfig type, prompt builder, seed, frontend form) | @claude-code | 2026-04-04
+- [x] Fix @fastify/rate-limit v10→v9 for Fastify v4 compatibility (DJ + Station services) | @claude-code | 2026-04-04
 - [x] Clone template to another station functionality (feat/clone-template) | @gemini-cli | 2026-04-04
 - [x] Create station settings service and UI (PR #96) | @previous-agent | 2026-04-04
 - [x] Implement duplicate detection on song import (feat/duplicate-detection-import) | @gemini-cli | 2026-04-04
 - [x] Implement self-service profile management and fix frontend Tailwind v4 build (PR #98) | @gemini-cli | 2026-04-04
-- [x] Make AI DJ API keys configurable in Station Settings UI/Backend (PR #96 - Note: duplicate ref, but kept for context) | @gemini-cli | 2026-04-04
+- [x] Make AI DJ API keys configurable in Station Settings UI/Backend | @gemini-cli | 2026-04-04
 - [x] Implement and verify DJ service unit tests (TTS, Worker) | @gemini-cli | 2026-04-04
 - [x] Update Nginx gateway with DJ service routes | @gemini-cli | 2026-04-04
 - [x] Initial DJ Service Scaffold (Implicitly completed by previous agent)
