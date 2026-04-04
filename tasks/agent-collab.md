@@ -16,7 +16,7 @@ Before starting any task, an agent MUST:
 - **No untracked work**: Every feature/bug/task must have a GitHub issue.
 
 ## Active Work
-- [ ] Build Daypart Assignment UI (issue #18) | @claude-sonnet | 2026-04-04 | feat/dj-daypart-ui
+- [ ] Segment-level TTS regeneration API + frontend button (feat/dj-segment-tts-regen) | @claude-code | 2026-04-04
 
 ## Recently Completed
 - [x] Add DJ link to sidebar navigation (issue #103, feat/dj-sidebar-nav) | @claude-code | 2026-04-04

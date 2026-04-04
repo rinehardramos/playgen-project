@@ -1,8 +1,8 @@
 import { getPool } from '../db.js';
 import { llmComplete } from '../adapters/llm/openrouter.js';
-import { getTtsAdapter } from '../adapters/tts/openai.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import { config } from '../config.js';
+import { generateSegmentTts } from '../services/ttsService.js';
 import type { DjGenerationJobData } from '../queues/djQueue.js';
 import type { DjProfile, DjSegmentType, DjScriptTemplate } from '@playgen/types';
 
@@ -46,11 +46,6 @@ function segmentsForEntry(
   if (isLast) types.push('show_outro');
 
   return types;
-}
-
-// Estimate MP3 duration from buffer size (assumes 128kbps bitrate)
-function estimateMp3Duration(buffer: Buffer): number {
-  return Math.round((buffer.length / (128000 / 8)) * 10) / 10;
 }
 
 export async function runGenerationJob(data: DjGenerationJobData): Promise<void> {
@@ -199,45 +194,16 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
 
   // 7. TTS pass — generate audio for each segment
   if (ttsEnabled) {
-    try {
-      const ttsAdapter = getTtsAdapter({
-        provider: effectiveTtsProvider,
-        apiKey: effectiveTtsApiKey,
-      });
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      const audioDir = path.join('/tmp', 'dj-audio', script_id);
-      await fs.mkdir(audioDir, { recursive: true });
-
-      for (const seg of generatedSegments) {
-        try {
-          const outputPath = path.join(audioDir, `${seg.position}.mp3`);
-          const result = await ttsAdapter.generate({
-            voice_id: effectiveTtsVoiceId,
-            text: seg.script_text,
-            output_path: outputPath,
-          });
-
-          // Estimate duration from file size if adapter didn't provide it
-          let duration = result.duration_sec;
-          if (duration === null) {
-            const stat = await fs.stat(outputPath);
-            duration = estimateMp3Duration(Buffer.alloc(stat.size));
-          }
-
-          // Store relative audio URL for serving via static route
-          const audioUrl = `/dj/audio/${script_id}/${seg.position}.mp3`;
-          await pool.query(
-            `UPDATE dj_segments SET audio_url = $1, audio_duration_sec = $2 WHERE id = $3`,
-            [audioUrl, duration, seg.id],
-          );
-        } catch (ttsErr) {
-          console.error(`[generationWorker] TTS failed for segment ${seg.id}:`, ttsErr);
-          // Continue — text is still saved even if TTS fails
-        }
+    for (const seg of generatedSegments) {
+      try {
+        await generateSegmentTts(
+          { id: seg.id, position: seg.position, text: seg.script_text, script_id },
+          { provider: effectiveTtsProvider, apiKey: effectiveTtsApiKey, voiceId: effectiveTtsVoiceId },
+        );
+      } catch (ttsErr) {
+        console.error(`[generationWorker] TTS failed for segment ${seg.id}:`, ttsErr);
+        // Continue — text is still saved even if TTS fails
       }
-    } catch (ttsSetupErr) {
-      console.error('[generationWorker] TTS adapter initialization failed:', ttsSetupErr);
     }
   }
 
