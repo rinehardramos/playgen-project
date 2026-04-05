@@ -29,6 +29,13 @@ interface RotationRules {
   artist_separation_slots: number;
 }
 
+interface DjSettings {
+  llm_provider: string;
+  llm_model: string;
+  tts_provider: string;
+  tts_voice_id: string;
+}
+
 const ALL_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 const DEFAULT_CONFIG: StationConfig = {
@@ -47,6 +54,13 @@ const DEFAULT_RULES: RotationRules = {
   min_gap_hours: 2,
   max_same_artist_per_hour: 1,
   artist_separation_slots: 3,
+};
+
+const DEFAULT_DJ: DjSettings = {
+  llm_provider: 'openrouter',
+  llm_model: '',
+  tts_provider: 'openai',
+  tts_voice_id: '',
 };
 
 export default function SettingsPage() {
@@ -71,8 +85,12 @@ export default function SettingsPage() {
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [rulesSuccess, setRulesSuccess] = useState(false);
 
-  // DJ provider setting (stored in station_settings)
-  const [djLlmProvider, setDjLlmProvider] = useState<string>('openrouter');
+  // AI DJ settings state (from station_settings table)
+  const [dj, setDj] = useState<DjSettings>(DEFAULT_DJ);
+  const [djLoading, setDjLoading] = useState(false);
+  const [djSaving, setDjSaving] = useState(false);
+  const [djError, setDjError] = useState<string | null>(null);
+  const [djSuccess, setDjSuccess] = useState(false);
 
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -104,18 +122,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function fetchDjSettings(stationId: string) {
-    try {
-      const data = await api.get<Array<{ key: string; value: string }>>(
-        `/api/v1/stations/${stationId}/settings`,
-      );
-      const map = Object.fromEntries(data.map((s) => [s.key, s.value]));
-      if (map['llm_provider']) setDjLlmProvider(map['llm_provider']);
-    } catch {
-      // ignore — defaults to openrouter
-    }
-  }
-
   async function fetchConfig(stationId: string) {
     setConfigLoading(true);
     setConfigError(null);
@@ -144,20 +150,36 @@ export default function SettingsPage() {
     }
   }
 
+  async function fetchDjSettings(stationId: string) {
+    setDjLoading(true);
+    try {
+      const data = await api.get<Array<{ key: string; value: string }>>(
+        `/api/v1/stations/${stationId}/settings`,
+      );
+      const map = Object.fromEntries(data.map((s) => [s.key, s.value]));
+      setDj({
+        llm_provider: map['llm_provider'] ?? DEFAULT_DJ.llm_provider,
+        llm_model:    map['llm_model']    ?? DEFAULT_DJ.llm_model,
+        tts_provider: map['tts_provider'] ?? DEFAULT_DJ.tts_provider,
+        tts_voice_id: map['tts_voice_id'] ?? DEFAULT_DJ.tts_voice_id,
+      });
+    } catch {
+      setDj(DEFAULT_DJ);
+    } finally {
+      setDjLoading(false);
+    }
+  }
+
   async function handleConfigSave(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setConfigError(null);
     setConfigSuccess(false);
     setConfigSaving(true);
     try {
-      const [updated] = await Promise.all([
-        api.put<StationConfig>(`/api/v1/stations/${selectedStation}/config`, config),
-        api.put(`/api/v1/stations/${selectedStation}/settings`, {
-          key: 'llm_provider',
-          value: djLlmProvider,
-          is_secret: false,
-        }),
-      ]);
+      const updated = await api.put<StationConfig>(
+        `/api/v1/stations/${selectedStation}/config`,
+        config,
+      );
       setConfig(updated);
       setConfigSuccess(true);
       setTimeout(() => setConfigSuccess(false), 3000);
@@ -184,6 +206,37 @@ export default function SettingsPage() {
       setRulesError((err as ApiError).message ?? 'Failed to save rotation rules');
     } finally {
       setRulesSaving(false);
+    }
+  }
+
+  async function handleDjSave(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setDjError(null);
+    setDjSuccess(false);
+    setDjSaving(true);
+    try {
+      // Save each DJ setting key individually to station_settings
+      const settingsToSave: Array<{ key: keyof DjSettings; is_secret: boolean }> = [
+        { key: 'llm_provider', is_secret: false },
+        { key: 'llm_model',    is_secret: false },
+        { key: 'tts_provider', is_secret: false },
+        { key: 'tts_voice_id', is_secret: false },
+      ];
+      await Promise.all(
+        settingsToSave.map(({ key, is_secret }) =>
+          api.put(`/api/v1/stations/${selectedStation}/settings`, {
+            key,
+            value: dj[key],
+            is_secret,
+          }),
+        ),
+      );
+      setDjSuccess(true);
+      setTimeout(() => setDjSuccess(false), 3000);
+    } catch (err: unknown) {
+      setDjError((err as ApiError).message ?? 'Failed to save DJ settings');
+    } finally {
+      setDjSaving(false);
     }
   }
 
@@ -335,28 +388,15 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
+                {/* API Keys */}
                 <div className="pt-4 border-t border-gray-800 space-y-5">
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    AI DJ Script Generation
+                    API Keys
                   </h3>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-0.5">LLM Provider</label>
-                    <p className="text-xs text-gray-500 mb-2">AI provider used for DJ script generation.</p>
-                    <select
-                      value={djLlmProvider}
-                      onChange={(e) => setDjLlmProvider(e.target.value)}
-                      className="input w-full"
-                    >
-                      <option value="openrouter">OpenRouter (default — routes to any model)</option>
-                      <option value="anthropic">Anthropic (direct — use Anthropic API Key)</option>
-                      <option value="openai">OpenAI (direct — use OpenAI API Key)</option>
-                    </select>
-                  </div>
-
-                  <div>
                     <label className="block text-sm font-medium text-gray-300 mb-0.5">OpenRouter API Key</label>
-                    <p className="text-xs text-gray-500 mb-2">Used when provider is OpenRouter (e.g. anthropic/claude-sonnet-4-5, openai/gpt-4o)</p>
+                    <p className="text-xs text-gray-500 mb-2">Used when LLM Provider is set to OpenRouter</p>
                     <input
                       type="password"
                       value={config.openrouter_api_key || ''}
@@ -367,8 +407,20 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">Anthropic API Key</label>
+                    <p className="text-xs text-gray-500 mb-2">Used when LLM Provider is set to Anthropic</p>
+                    <input
+                      type="password"
+                      value={config.anthropic_api_key || ''}
+                      onChange={(e) => setConfig((p) => ({ ...p, anthropic_api_key: e.target.value }))}
+                      className="input w-full"
+                      placeholder="sk-ant-..."
+                    />
+                  </div>
+
+                  <div>
                     <label className="block text-sm font-medium text-gray-300 mb-0.5">OpenAI API Key</label>
-                    <p className="text-xs text-gray-500 mb-2">Used for OpenAI TTS (if provider is set to OpenAI)</p>
+                    <p className="text-xs text-gray-500 mb-2">Used for OpenAI TTS or when LLM Provider is set to OpenAI</p>
                     <input
                       type="password"
                       value={config.openai_api_key || ''}
@@ -380,25 +432,13 @@ export default function SettingsPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-0.5">ElevenLabs API Key</label>
-                    <p className="text-xs text-gray-500 mb-2">Used for ElevenLabs TTS (if provider is set to ElevenLabs)</p>
+                    <p className="text-xs text-gray-500 mb-2">Used when TTS Provider is set to ElevenLabs</p>
                     <input
                       type="password"
                       value={config.elevenlabs_api_key || ''}
                       onChange={(e) => setConfig((p) => ({ ...p, elevenlabs_api_key: e.target.value }))}
                       className="input w-full"
                       placeholder="eleven-..."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-0.5">Anthropic API Key</label>
-                    <p className="text-xs text-gray-500 mb-2">Used for direct Anthropic script generation (if provider is set to Anthropic)</p>
-                    <input
-                      type="password"
-                      value={config.anthropic_api_key || ''}
-                      onChange={(e) => setConfig((p) => ({ ...p, anthropic_api_key: e.target.value }))}
-                      className="input w-full"
-                      placeholder="sk-ant-..."
                     />
                   </div>
                 </div>
@@ -418,6 +458,128 @@ export default function SettingsPage() {
               <div className="mt-4 flex justify-end">
                 <button type="submit" disabled={configSaving} className="btn-primary disabled:opacity-50">
                   {configSaving ? 'Saving…' : 'Save Config'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ── DJ Settings ──────────────────────────────────────────────── */}
+          {djLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="w-6 h-6 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <form onSubmit={handleDjSave}>
+              <div className="card p-6 space-y-5">
+                <div>
+                  <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+                    DJ Settings
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Configure the LLM and TTS providers for DJ script generation.
+                  </p>
+                </div>
+
+                {/* Script Generation */}
+                <div className="space-y-4">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Script Generation (LLM)
+                  </h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">LLM Provider</label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      AI provider for generating DJ scripts. Make sure the matching API key is set above.
+                    </p>
+                    <select
+                      value={dj.llm_provider}
+                      onChange={(e) => setDj((p) => ({ ...p, llm_provider: e.target.value }))}
+                      className="input w-full"
+                    >
+                      <option value="openrouter">OpenRouter (routes to any model via OpenRouter key)</option>
+                      <option value="anthropic">Anthropic (direct — uses Anthropic API Key)</option>
+                      <option value="openai">OpenAI (direct — uses OpenAI API Key)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">LLM Model</label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      {dj.llm_provider === 'openrouter'
+                        ? 'OpenRouter model ID, e.g. anthropic/claude-sonnet-4-5 or openai/gpt-4o'
+                        : dj.llm_provider === 'anthropic'
+                        ? 'Anthropic model ID, e.g. claude-sonnet-4-5 or claude-3-5-haiku-20241022'
+                        : 'OpenAI model ID, e.g. gpt-4o or gpt-4o-mini'}
+                    </p>
+                    <input
+                      type="text"
+                      value={dj.llm_model}
+                      onChange={(e) => setDj((p) => ({ ...p, llm_model: e.target.value }))}
+                      className="input w-full"
+                      placeholder={
+                        dj.llm_provider === 'openrouter'
+                          ? 'anthropic/claude-sonnet-4-5'
+                          : dj.llm_provider === 'anthropic'
+                          ? 'claude-sonnet-4-5'
+                          : 'gpt-4o'
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Text-to-Speech */}
+                <div className="pt-4 border-t border-gray-800 space-y-4">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Text-to-Speech (TTS)
+                  </h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">TTS Provider</label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Audio synthesis provider. Make sure the matching API key is set above.
+                    </p>
+                    <select
+                      value={dj.tts_provider}
+                      onChange={(e) => setDj((p) => ({ ...p, tts_provider: e.target.value }))}
+                      className="input w-full"
+                    >
+                      <option value="openai">OpenAI (uses OpenAI API Key)</option>
+                      <option value="elevenlabs">ElevenLabs (uses ElevenLabs API Key)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">TTS Voice ID</label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      {dj.tts_provider === 'elevenlabs'
+                        ? 'ElevenLabs voice ID (e.g. EXAVITQu4vr4xnSDxMaL)'
+                        : 'OpenAI voice name: alloy, echo, fable, nova, onyx, shimmer'}
+                    </p>
+                    <input
+                      type="text"
+                      value={dj.tts_voice_id}
+                      onChange={(e) => setDj((p) => ({ ...p, tts_voice_id: e.target.value }))}
+                      className="input w-full"
+                      placeholder={dj.tts_provider === 'elevenlabs' ? 'EXAVITQu4vr4xnSDxMaL' : 'alloy'}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {djError && (
+                <div className="mt-3 rounded-md bg-red-900/30 border border-red-700/50 px-4 py-3">
+                  <p className="text-sm text-red-400">{djError}</p>
+                </div>
+              )}
+              {djSuccess && (
+                <div className="mt-3 rounded-md bg-green-900/30 border border-green-700/50 px-4 py-3">
+                  <p className="text-sm text-green-400">AI DJ settings saved.</p>
+                </div>
+              )}
+
+              <div className="mt-4 flex justify-end">
+                <button type="submit" disabled={djSaving} className="btn-primary disabled:opacity-50">
+                  {djSaving ? 'Saving…' : 'Save DJ Settings'}
                 </button>
               </div>
             </form>
