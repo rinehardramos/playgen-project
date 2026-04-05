@@ -61,6 +61,10 @@ export async function llmComplete(
     const { geminiLlmComplete } = await import('./gemini.js');
     return geminiLlmComplete(messages, options);
   }
+  if (provider === 'mistral') {
+    const { mistralLlmComplete } = await import('./mistral.js');
+    return mistralLlmComplete(messages, options);
+  }
 
   const c = getClient(options.apiKey);
   const model = options.model ?? config.openRouter.defaultModel;

@@ -21,6 +21,7 @@ interface StationConfig {
   openrouter_api_key?: string;
   anthropic_api_key?: string;
   gemini_api_key?: string;
+  mistral_api_key?: string;
 }
 
 interface RotationRules {
@@ -49,6 +50,7 @@ const DEFAULT_CONFIG: StationConfig = {
   openrouter_api_key: '',
   anthropic_api_key: '',
   gemini_api_key: '',
+  mistral_api_key: '',
 };
 
 const DEFAULT_RULES: RotationRules = {
@@ -445,13 +447,25 @@ export default function SettingsPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-0.5">Gemini API Key</label>
-                    <p className="text-xs text-gray-500 mb-2">Used when LLM Provider is set to Gemini (Google AI Studio)</p>
+                    <p className="text-xs text-gray-500 mb-2">Used for Gemini LLM, Google TTS, and Gemini native TTS (Google AI Studio)</p>
                     <input
                       type="password"
                       value={config.gemini_api_key || ''}
                       onChange={(e) => setConfig((p) => ({ ...p, gemini_api_key: e.target.value }))}
                       className="input w-full"
                       placeholder="AIza..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">Mistral API Key</label>
+                    <p className="text-xs text-gray-500 mb-2">Used for Mistral LLM and Voxtral TTS (La Plateforme)</p>
+                    <input
+                      type="password"
+                      value={config.mistral_api_key || ''}
+                      onChange={(e) => setConfig((p) => ({ ...p, mistral_api_key: e.target.value }))}
+                      className="input w-full"
+                      placeholder="..."
                     />
                   </div>
                 </div>
@@ -513,6 +527,7 @@ export default function SettingsPage() {
                       <option value="anthropic">Anthropic (direct — uses Anthropic API Key)</option>
                       <option value="openai">OpenAI (direct — uses OpenAI API Key)</option>
                       <option value="gemini">Gemini (direct — uses Gemini API Key)</option>
+                      <option value="mistral">Mistral (direct — uses Mistral API Key)</option>
                     </select>
                   </div>
 
@@ -525,6 +540,8 @@ export default function SettingsPage() {
                         ? 'Anthropic model ID, e.g. claude-sonnet-4-5 or claude-3-5-haiku-20241022'
                         : dj.llm_provider === 'gemini'
                         ? 'Gemini model ID, e.g. gemini-2.0-flash or gemini-1.5-flash'
+                        : dj.llm_provider === 'mistral'
+                        ? 'Mistral model ID, e.g. mistral-large-latest or mistral-small-latest'
                         : 'OpenAI model ID, e.g. gpt-4o or gpt-4o-mini'}
                     </p>
                     <input
@@ -539,6 +556,8 @@ export default function SettingsPage() {
                           ? 'claude-sonnet-4-5'
                           : dj.llm_provider === 'gemini'
                           ? 'gemini-2.0-flash'
+                          : dj.llm_provider === 'mistral'
+                          ? 'mistral-large-latest'
                           : 'gpt-4o'
                       }
                     />
@@ -564,6 +583,8 @@ export default function SettingsPage() {
                       <option value="openai">OpenAI (uses OpenAI API Key)</option>
                       <option value="elevenlabs">ElevenLabs (uses ElevenLabs API Key)</option>
                       <option value="google">Google TTS (uses Gemini API Key)</option>
+                      <option value="gemini_tts">Gemini Native TTS (uses Gemini API Key — higher quality)</option>
+                      <option value="mistral">Mistral Voxtral (uses Mistral API Key)</option>
                     </select>
                   </div>
 
@@ -574,6 +595,10 @@ export default function SettingsPage() {
                         ? 'ElevenLabs voice ID (e.g. EXAVITQu4vr4xnSDxMaL)'
                         : dj.tts_provider === 'google'
                         ? 'Google voice name, e.g. en-US-Neural2-D (Male), en-US-Neural2-F (Female), en-GB-Neural2-B (UK Male)'
+                        : dj.tts_provider === 'gemini_tts'
+                        ? 'Gemini voice name, e.g. Kore (firm), Aoede (breezy), Fenrir (excitable), Puck (upbeat), Zephyr (bright), Charon (informational)'
+                        : dj.tts_provider === 'mistral'
+                        ? 'Mistral preset voice: casual_male, casual_female, cheerful_female, neutral_male, neutral_female, energetic_male, calm_female'
                         : 'OpenAI voice name: alloy, echo, fable, nova, onyx, shimmer'}
                     </p>
                     <input
@@ -586,6 +611,10 @@ export default function SettingsPage() {
                           ? 'EXAVITQu4vr4xnSDxMaL'
                           : dj.tts_provider === 'google'
                           ? 'en-US-Neural2-D'
+                          : dj.tts_provider === 'gemini_tts'
+                          ? 'Kore'
+                          : dj.tts_provider === 'mistral'
+                          ? 'neutral_male'
                           : 'alloy'
                       }
                     />

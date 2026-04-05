@@ -35,6 +35,7 @@ interface StationRow {
   elevenlabs_api_key: string | null;
   anthropic_api_key: string | null;
   gemini_api_key: string | null;
+  mistral_api_key: string | null;
 }
 
 // Determine which segment types to generate for a given playlist position
@@ -61,7 +62,7 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   // 1. Load station info (including API key columns saved via Settings page)
   const { rows: stationRows } = await pool.query<StationRow>(
     `SELECT id, name, timezone, company_id,
-            openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, gemini_api_key
+            openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, gemini_api_key, mistral_api_key
      FROM stations WHERE id = $1`,
     [data.station_id],
   );
@@ -144,6 +145,8 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
       ? station.gemini_api_key
       : effectiveLlmProvider === 'openai'
       ? station.openai_api_key
+      : effectiveLlmProvider === 'mistral'
+      ? station.mistral_api_key
       : station.openrouter_api_key)
     ?? undefined;
 
@@ -152,11 +155,19 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
       ? station.elevenlabs_api_key
       : effectiveTtsProvider === 'google'
       ? station.gemini_api_key   // Google TTS uses the same Google/Gemini API key
+      : effectiveTtsProvider === 'gemini_tts'
+      ? station.gemini_api_key   // Gemini native TTS also uses the Gemini API key
+      : effectiveTtsProvider === 'mistral'
+      ? station.mistral_api_key
       : station.openai_api_key)
     ?? (effectiveTtsProvider === 'elevenlabs'
       ? config.tts.elevenlabsApiKey
       : effectiveTtsProvider === 'google'
       ? config.tts.googleApiKey
+      : effectiveTtsProvider === 'gemini_tts'
+      ? config.tts.geminiApiKey
+      : effectiveTtsProvider === 'mistral'
+      ? config.tts.mistralApiKey
       : config.tts.openaiApiKey);
 
   const ttsEnabled = !!(effectiveTtsApiKey);
