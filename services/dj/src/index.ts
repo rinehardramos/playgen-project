@@ -44,16 +44,19 @@ app.register(scriptRoutes,         { prefix: '/api/v1' });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 
-app.setErrorHandler((err: FastifyError, _req, reply) => {
-  app.log.error(err);
+app.setErrorHandler((err: FastifyError, req, reply) => {
+  app.log.error({ err, url: req.url }, 'unhandled error');
   if (err.validation) {
-    return reply.code(400).send({
-      error: { code: 'VALIDATION_ERROR', message: err.message, details: err.validation },
-    });
+    return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: err.message, details: err.validation } });
   }
-  return reply
-    .code(500)
-    .send({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
+  if ((err as NodeJS.ErrnoException).code === '23505') {
+    return reply.code(409).send({ error: { code: 'CONFLICT', message: 'Resource already exists' } });
+  }
+  const statusCode = err.statusCode ?? 500;
+  const isExposed = statusCode < 500;
+  return reply.code(statusCode).send({
+    error: { code: err.code ?? 'INTERNAL_ERROR', message: isExposed ? err.message : 'Internal server error' },
+  });
 });
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@
 #   --board-number N         GitHub Project board number (default: 1)
 #   --board-owner OWNER      GitHub Projects owner (default: repo owner)
 #   --no-docker              Skip Docker build and start
+#   --help-board-ids         Print GitHub Projects board_id and field IDs, then exit
 #   --help                   Show this help
 #
 # What it does:
@@ -22,6 +23,7 @@
 #   4. Generates project.config.json from args + interactive prompts
 #   5. Builds docker images and starts daemon + tg-agent
 #   6. Prints a summary
+#   9. Creates tasks/TODO.md stub with phase structure
 
 set -euo pipefail
 
