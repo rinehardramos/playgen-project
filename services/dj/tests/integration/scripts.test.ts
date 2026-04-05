@@ -26,8 +26,8 @@ vi.mock('../../src/queues/djQueue.js', () => ({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const COMPANY_ID = 'integ-test-company-scripts';
-const STATION_ID = 'integ-test-station-scripts';
+const COMPANY_ID = '00000000-2222-0000-0000-000000000001';
+const STATION_ID = '00000000-3333-0000-0000-000000000001';
 const TOKEN = makeTestToken({
   company_id: COMPANY_ID,
   station_ids: [STATION_ID],
