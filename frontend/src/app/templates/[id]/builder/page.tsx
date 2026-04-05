@@ -33,6 +33,17 @@ interface TemplateWithSlots extends Template {
   slots: TemplateSlot[];
 }
 
+const DAYS_OF_WEEK = [
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+] as const;
+type DayKey = typeof DAYS_OF_WEEK[number];
+type DayOverrides = Record<DayKey, string | null>;
+
+const EMPTY_OVERRIDES: DayOverrides = {
+  monday: null, tuesday: null, wednesday: null, thursday: null,
+  friday: null, saturday: null, sunday: null,
+};
+
 const CATEGORY_COLORS = [
   'bg-violet-900/40 text-violet-300 border-violet-500/30',
   'bg-blue-900/40 text-blue-300 border-blue-500/30',
@@ -75,6 +86,12 @@ export default function TemplateBuilderPage() {
 
   const [openCell, setOpenCell] = useState<string | null>(null);
 
+  // Day-of-week overrides state
+  const [dayOverrides, setDayOverrides] = useState<DayOverrides>(EMPTY_OVERRIDES);
+  const [stationTemplates, setStationTemplates] = useState<Template[]>([]);
+  const [overridesSaving, setOverridesSaving] = useState(false);
+  const [overridesSaved, setOverridesSaved] = useState(false);
+
   const categoryColorMap = new Map<string, string>();
   categories.forEach((c, idx) => {
     categoryColorMap.set(c.id, CATEGORY_COLORS[idx % CATEGORY_COLORS.length]);
@@ -98,8 +115,14 @@ export default function TemplateBuilderPage() {
       const { slots: rawSlots, ...tpl } = tplWithSlots;
       setTemplate(tpl);
 
-      const cats = await api.get<Category[]>(`/api/v1/stations/${tpl.station_id}/categories`);
+      const [cats, allTpls, overridesRes] = await Promise.all([
+        api.get<Category[]>(`/api/v1/stations/${tpl.station_id}/categories`),
+        api.get<Template[]>(`/api/v1/stations/${tpl.station_id}/templates`),
+        api.get<{ overrides: DayOverrides }>(`/api/v1/templates/${templateId}/day-overrides`),
+      ]);
       setCategories(cats);
+      setStationTemplates(allTpls.filter((t) => t.id !== templateId));
+      setDayOverrides({ ...EMPTY_OVERRIDES, ...overridesRes.overrides });
 
       const map = new Map<string, string | null>();
       rawSlots.forEach((slot) => {
@@ -144,6 +167,21 @@ export default function TemplateBuilderPage() {
       setError((err as ApiError).message ?? 'Failed to save template');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveOverrides() {
+    setOverridesSaving(true);
+    setOverridesSaved(false);
+    setError(null);
+    try {
+      await api.put<{ overrides: DayOverrides }>(`/api/v1/templates/${templateId}/day-overrides`, dayOverrides);
+      setOverridesSaved(true);
+      setTimeout(() => setOverridesSaved(false), 3000);
+    } catch (err: unknown) {
+      setError((err as ApiError).message ?? 'Failed to save day overrides');
+    } finally {
+      setOverridesSaving(false);
     }
   }
 
@@ -205,12 +243,58 @@ export default function TemplateBuilderPage() {
         </div>
       )}
 
-      {/* Grid */}
-      <div className="card overflow-x-auto">
-        <table className="min-w-full text-sm border-collapse">
+      {/* Day-of-week overrides section */}
+      <div className="mb-6 bg-[#16161f] border border-[#2a2a40] rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Day-of-Week Overrides</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Assign a different template to use on specific days. Leave blank to use this template.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {overridesSaved && <span className="text-xs text-green-400">Saved!</span>}
+            <button
+              onClick={handleSaveOverrides}
+              disabled={overridesSaving}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-50 transition-colors"
+            >
+              {overridesSaving ? 'Saving…' : 'Save Overrides'}
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {DAYS_OF_WEEK.map((day) => (
+            <div key={day} className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-400 capitalize">{day.slice(0, 3)}</label>
+              <select
+                value={dayOverrides[day] ?? ''}
+                onChange={(e) =>
+                  setDayOverrides((prev) => ({
+                    ...prev,
+                    [day]: e.target.value === '' ? null : e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg bg-[#1c1c28] border border-[#2a2a40] text-gray-300 text-xs px-2 py-1.5 focus:outline-none focus:border-violet-500"
+              >
+                <option value="">— this template —</option>
+                {stationTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Slot grid */}
+      <div className="overflow-x-auto rounded-xl border border-[#2a2a40]">
+        <table className="w-full text-sm text-left">
           <thead>
-            <tr className="bg-[#13131a]">
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase w-20 border-b border-[#2a2a40]">
+            <tr className="border-b border-[#2a2a40] bg-[#16161f]">
+              <th className="px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase border-b border-[#2a2a40]">
                 Hour
               </th>
               {POSITIONS.map((p) => (
