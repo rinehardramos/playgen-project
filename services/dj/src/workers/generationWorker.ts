@@ -233,7 +233,7 @@ export async function runGenerationJob(
       ? config.tts.mistralApiKey
       : config.tts.openaiApiKey);
 
-  const ttsEnabled = !!(effectiveTtsApiKey);
+  const _ttsEnabled = !!(effectiveTtsApiKey);
 
   // Collect all generated segments for TTS pass + variety context
   const generatedSegments: Array<{

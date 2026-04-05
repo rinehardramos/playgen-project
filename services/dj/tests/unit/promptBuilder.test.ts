@@ -158,4 +158,61 @@ describe('buildUserPrompt', () => {
     expect(prompt).toBeDefined();
     expect(prompt.length).toBeGreaterThan(0);
   });
+
+  it('interpolates news headlines in current_events', () => {
+    const prompt = buildUserPrompt({
+      station_name: 'Test FM',
+      station_timezone: 'Asia/Manila',
+      current_date: '2026-04-06',
+      current_hour: 9,
+      dj_profile: mockProfile,
+      segment_type: 'current_events',
+      news_headlines: [
+        { title: 'City opens new park', source: 'Local News' },
+        { title: 'Weekend rain expected', source: 'Weather' },
+      ],
+    });
+    expect(prompt).toContain('City opens new park');
+    expect(prompt).toContain('Local News');
+  });
+
+  it('falls back gracefully for current_events with no headlines', () => {
+    const prompt = buildUserPrompt({
+      station_name: 'Test FM',
+      station_timezone: 'Asia/Manila',
+      current_date: '2026-04-06',
+      current_hour: 9,
+      dj_profile: mockProfile,
+      segment_type: 'current_events',
+    });
+    expect(prompt).toContain('no current headlines available');
+  });
+
+  it('interpolates listener shoutout in listener_activity', () => {
+    const prompt = buildUserPrompt({
+      station_name: 'Test FM',
+      station_timezone: 'Asia/Manila',
+      current_date: '2026-04-06',
+      current_hour: 10,
+      dj_profile: mockProfile,
+      segment_type: 'listener_activity',
+      shoutout: { listener_name: 'Maria from Manila', listener_message: 'Love the show!' },
+    });
+    expect(prompt).toContain('Maria from Manila');
+    expect(prompt).toContain('Love the show!');
+  });
+
+  it('uses fallback name for listener_activity when name is missing', () => {
+    const prompt = buildUserPrompt({
+      station_name: 'Test FM',
+      station_timezone: 'Asia/Manila',
+      current_date: '2026-04-06',
+      current_hour: 10,
+      dj_profile: mockProfile,
+      segment_type: 'listener_activity',
+      shoutout: { listener_name: null, listener_message: 'Great tunes!' },
+    });
+    expect(prompt).toContain('a listener');
+    expect(prompt).toContain('Great tunes!');
+  });
 });

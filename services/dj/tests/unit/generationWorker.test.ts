@@ -174,13 +174,13 @@ describe('generationWorker', () => {
     // 5. Script insert
     mockQuery.mockResolvedValueOnce({ rows: [{ id: scriptId }] });
 
-    // 6. Segment inserts: show_intro, listener_activity (shoutout), song_intro, show_outro
-    mockQuery.mockResolvedValueOnce({ rows: [] }); // show_intro insert
-    mockQuery.mockResolvedValueOnce({ rows: [] }); // listener_activity insert
+    // 6. Segment inserts (main loop uses RETURNING id; shoutout INSERT does not)
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-1' }] }); // show_intro RETURNING id
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // listener_activity insert (no RETURNING id)
     // 6b. Mark shoutout as used
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    mockQuery.mockResolvedValueOnce({ rows: [] }); // song_intro insert
-    mockQuery.mockResolvedValueOnce({ rows: [] }); // show_outro insert
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-2' }] }); // song_intro RETURNING id
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-3' }] }); // show_outro RETURNING id
 
     // 7. Final script update
     mockQuery.mockResolvedValueOnce({ rows: [] });
