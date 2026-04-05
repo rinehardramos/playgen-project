@@ -57,7 +57,7 @@ export async function generateSegmentTts(
     duration = estimateMp3Duration(result.audio_data);
   }
 
-  const audioUrl = `/dj/audio/${segment.script_id}/${segment.position}.mp3`;
+  const audioUrl = `/api/v1/dj/audio/${segment.script_id}/${segment.position}.mp3`;
 
   await getPool().query(
     `UPDATE dj_segments

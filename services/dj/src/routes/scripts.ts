@@ -182,9 +182,15 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { id } = req.params;
       const { reason } = req.body ?? {};
-      const updated = await scriptService.regenerateSegment(id, reason);
-      if (!updated) return reply.notFound('Segment not found or profile missing');
-      return updated;
+      try {
+        const updated = await scriptService.regenerateSegment(id, reason);
+        if (!updated) return reply.notFound('Segment not found or profile missing');
+        return updated;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'LLM regeneration failed';
+        req.log.error({ err }, '[reject] regenerateSegment failed');
+        return reply.internalServerError(message);
+      }
     },
   );
 

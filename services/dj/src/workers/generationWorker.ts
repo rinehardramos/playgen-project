@@ -125,7 +125,7 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   const effectiveTtsProvider = stationSettings['tts_provider'] ?? config.tts.provider;
   const effectiveTtsApiKey   = stationSettings['tts_api_key']
     ?? (effectiveTtsProvider === 'elevenlabs' ? config.tts.elevenlabsApiKey : config.tts.openaiApiKey);
-  const effectiveTtsVoiceId  = stationSettings['tts_voice_id'] ?? profile.tts_voice_id;
+  const effectiveTtsVoiceId  = stationSettings['tts_voice_id'] ?? profile.tts_voice_id ?? config.tts.defaultVoice;
   const effectiveLlmModel    = stationSettings['llm_model'] ?? profile.llm_model;
   const effectiveLlmApiKey   = stationSettings['llm_api_key'] ?? undefined;
 
