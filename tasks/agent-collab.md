@@ -13,14 +13,16 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
-- [ ] Deployment monitoring agent — Vercel + Railway error alerting (issue #166, feat/issue-166-deployment-monitor) | @claude-code | 2026-04-05
-- [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
-- [ ] Script review UI (issue #31, feat/issue-31-script-review-ui) | @claude-code | 2026-04-05
-- [ ] Re-generate single playlist slot (issue #132, feat/issue-132-slot-regen) | @claude-code | 2026-04-05
-- [ ] Generation failure alerting — endpoint + UI red badge (issue #133, feat/issue-133-generation-failure-alerting) | @claude-code | 2026-04-05
-- [ ] Category distribution report by date + chart (issue #134, feat/issue-134-category-distribution-by-date) | @claude-code | 2026-04-05
 
 ## Recently Completed
+- [x] Agent workflow improvements — P0 daemon fixes + CLAUDE.md rules (issue #158, feat/issue-158-workflow-improvements) | @claude-code | 2026-04-05
+- [x] Chatbox for directed script rewrite instructions (issue #32, PR #180) | @claude-code | 2026-04-05
+- [x] Deployment monitoring agent — Vercel + Railway (issue #166, PR #169) | @claude-code | 2026-04-05
+- [x] Script review UI (issue #31, PR #173) | @claude-code | 2026-04-05
+- [x] Re-generate single slot (issue #132, PR #140) | @claude-code | 2026-04-04
+- [x] Generation failure alerting — endpoint + UI red badge (issue #133, PRs #163/#167) | @claude-code | 2026-04-05
+- [x] Category distribution report by date + chart (issue #134, PR #172) | @claude-code | 2026-04-05
+- [x] Fix high vulnerabilities (Next.js 15 / Fastify 5 / tar override, PR #110) | @gemini-cli | 2026-04-04
 - [x] S3 storage adapter + audio cleanup job (issue #24, PR #176) | @claude-code | 2026-04-05
 - [x] Script template management UI (issue #20, PR #150) | @claude-code | 2026-04-05
 - [x] DJ Show Player with volume control (issue #21, PR #151) | @claude-code | 2026-04-05
