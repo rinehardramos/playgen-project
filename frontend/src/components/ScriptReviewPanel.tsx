@@ -294,9 +294,46 @@ export default function ScriptReviewPanel({
     }
   }
 
+  // ── Retry (for failed generations with 0 segments) ─────────────────────
+
+  async function handleRetry() {
+    setReviewing(true);
+    setError(null);
+    try {
+      await api.post(`/api/v1/dj/scripts/${script.id}/reject`, {
+        review_notes: 'Retrying generation — previous attempt produced 0 segments.',
+      });
+      onScriptChange(null);
+      onGenerating(true);
+
+      const poll = setInterval(async () => {
+        try {
+          const refreshed = await api.get<ReviewPanelScript>(
+            `/api/v1/dj/playlists/${playlistId}/script`,
+          );
+          if (
+            refreshed &&
+            refreshed.total_segments > 0 &&
+            refreshed.id !== script.id
+          ) {
+            onScriptChange(refreshed);
+            onGenerating(false);
+            clearInterval(poll);
+          }
+        } catch { /* still generating */ }
+      }, 3000);
+      setTimeout(() => { clearInterval(poll); onGenerating(false); }, 120000);
+    } catch (err: unknown) {
+      setError((err as ApiError).message ?? 'Retry failed');
+    } finally {
+      setReviewing(false);
+    }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────
 
   const isPending = script.review_status === 'pending_review';
+  const isFailed = isPending && script.total_segments === 0;
 
   return (
     <div>
@@ -306,32 +343,53 @@ export default function ScriptReviewPanel({
         </div>
       )}
 
+      {/* Generation failed banner */}
+      {isFailed && (
+        <div className="mb-4 bg-red-900/20 border border-red-700/40 px-4 py-3 rounded-lg flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-red-400">Generation failed</p>
+            <p className="text-xs text-red-500/80 mt-0.5">
+              No segments were produced. Check that your LLM Provider and API key are correctly set in Settings, then retry.
+            </p>
+          </div>
+          <button
+            onClick={handleRetry}
+            disabled={reviewing}
+            className="btn-secondary text-xs border-red-700/50 text-red-400 hover:bg-red-900/30 shrink-0"
+          >
+            {reviewing ? 'Retrying…' : '↺ Retry Generation'}
+          </button>
+        </div>
+      )}
+
       {/* Sticky header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-[#13131a] p-4 rounded-xl border border-[#2a2a40] sticky top-0 z-10 shadow-lg">
         <div className="flex flex-col">
           <span
             className={`text-xs font-bold uppercase tracking-wider ${
-              script.review_status === 'approved' || script.review_status === 'auto_approved'
+              isFailed
+                ? 'text-red-400'
+                : script.review_status === 'approved' || script.review_status === 'auto_approved'
                 ? 'text-green-400'
                 : script.review_status === 'rejected'
                 ? 'text-red-400'
                 : 'text-yellow-400'
             }`}
           >
-            {script.review_status.replace(/_/g, ' ')}
+            {isFailed ? 'generation failed' : script.review_status.replace(/_/g, ' ')}
           </span>
           <span className="text-[10px] text-gray-500 mt-0.5">
             {script.total_segments} segments
             {script.generation_ms ? ` • ${(script.generation_ms / 1000).toFixed(1)}s` : ''}
             {` • ${script.llm_model}`}
-            {isPending && !script.generation_ms ? ' • Audio generated after approval' : ''}
+            {isPending && !isFailed && !script.generation_ms ? ' • Audio generated after approval' : ''}
           </span>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {isPending && (
+          {isPending && !isFailed && (
             <>
-              {/* Approve & Generate */}
+              {/* Approve All */}
               <button
                 onClick={handleApproveAll}
                 disabled={bulkApproving}
