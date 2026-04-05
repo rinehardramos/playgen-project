@@ -67,6 +67,25 @@ async function consumeState(state: string, platform: string): Promise<StateRow |
   return rows[0] ?? null;
 }
 
+
+// ─── Tenant ownership check ───────────────────────────────────────────────────
+
+/**
+ * Verify that station_id belongs to the requesting user's company.
+ * Returns null on success, or a Fastify reply shorthand (throw immediately) on failure.
+ */
+async function assertStationOwner(
+  stationId: string,
+  userCompanyId: string,
+  pool: ReturnType<typeof getPool>,
+): Promise<boolean> {
+  const { rows } = await pool.query<{ company_id: string }>(
+    `SELECT company_id FROM stations WHERE id = $1`,
+    [stationId],
+  );
+  return rows[0]?.company_id === userCompanyId;
+}
+
 // ─── Main route plugin ────────────────────────────────────────────────────────
 
 export async function socialAuthRoutes(app: FastifyInstance): Promise<void> {
@@ -80,7 +99,11 @@ export async function socialAuthRoutes(app: FastifyInstance): Promise<void> {
       const { station_id } = req.query;
       if (!station_id) return reply.badRequest('station_id is required');
 
+      const user = (req as any).user;
       const pool = getPool();
+      if (!await assertStationOwner(station_id, user.cid, pool)) {
+        return reply.forbidden('Access denied to this station');
+      }
       const { rows } = await pool.query<{
         platform: string;
         external_account_name: string | null;
@@ -116,7 +139,12 @@ export async function socialAuthRoutes(app: FastifyInstance): Promise<void> {
       if (!station_id) return reply.badRequest('station_id is required');
       if (!['facebook', 'twitter'].includes(platform)) return reply.badRequest('Invalid platform');
 
-      await getPool().query(
+      const disconnUser = (req as any).user;
+      const disconnPool = getPool();
+      if (!await assertStationOwner(station_id, disconnUser.cid, disconnPool)) {
+        return reply.forbidden('Access denied to this station');
+      }
+      await disconnPool.query(
         `DELETE FROM station_social_tokens WHERE station_id = $1 AND platform = $2`,
         [station_id, platform],
       );
@@ -138,6 +166,9 @@ export async function socialAuthRoutes(app: FastifyInstance): Promise<void> {
       if (!appId) return reply.internalServerError('FACEBOOK_APP_ID is not configured');
 
       const user = (req as any).user;
+      if (!await assertStationOwner(station_id, user.cid, getPool())) {
+        return reply.forbidden('Access denied to this station');
+      }
       const state = await storeState(station_id, user.sub, 'facebook');
 
       const redirectUri = `${config.social.callbackBaseUrl}/dj/social/facebook/callback`;
@@ -263,6 +294,9 @@ export async function socialAuthRoutes(app: FastifyInstance): Promise<void> {
       if (!clientId) return reply.internalServerError('TWITTER_CLIENT_ID is not configured');
 
       const user = (req as any).user;
+      if (!await assertStationOwner(station_id, user.cid, getPool())) {
+        return reply.forbidden('Access denied to this station');
+      }
       const verifier = generateCodeVerifier();
       const challenge = codeChallenge(verifier);
       const state = await storeState(station_id, user.sub, 'twitter', verifier);
