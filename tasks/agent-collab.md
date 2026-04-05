@@ -1,20 +1,5 @@
 # Agent Collaboration Protocol
 
-## Next Recommended Tickets — 2026-04-06
-
-**For ticket-bug workers (P0/P1 bugs):**
-> No open bugs currently. Monitor for regressions on new PRs (#201, #188, #187, #191).
-
-**For ticket-feat workers:**
-1. **#200** `feat(auth): Google OAuth login` — P1, open PR #201 in Review. Needs reviewer.
-2. **#202** `feat(station): Station Details page — locale, callsign, social handles` — P1, Todo.
-3. **#203** `feat(dj): Time Check segment — localized to station timezone` — P1, Todo.
-
-**PRs awaiting review (open >24h):** #201, #191, #188, #187
-**No stale Active Work claims** (Active Work section is empty)
-
----
-
 This file is used to coordinate work between different AI agents working on the same repository.
 Before starting any task, an agent MUST:
 1. Read this file to check `## Active Work`.
@@ -28,6 +13,8 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
+- [ ] Fix DJ Script generation INTERNAL_ERROR — missing API key validation + unmasked LLM errors (issue #183, fix/issue-183) | @claude-code | 2026-04-05
+- [ ] arch: Program as higher-tier entity — programs + program_episodes (issue #210, feat/issue-210-program-entity) | @claude-code | 2026-04-06 | Migration: 034-035
 
 ## Recently Completed
 - [x] Google OAuth login (issue #200, feat/issue-200-google-oauth) | @claude-code | 2026-04-05
