@@ -56,4 +56,15 @@ export const config = {
 
   // JWT (shared secret with auth-service)
   jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
+
+  // Social media OAuth (issues #211 Facebook, #212 Twitter)
+  social: {
+    encryptionKey:       process.env.SOCIAL_TOKEN_ENCRYPTION_KEY ?? '',
+    facebookAppId:       process.env.FACEBOOK_APP_ID ?? '',
+    facebookAppSecret:   process.env.FACEBOOK_APP_SECRET ?? '',
+    twitterClientId:     process.env.TWITTER_CLIENT_ID ?? '',
+    twitterClientSecret: process.env.TWITTER_CLIENT_SECRET ?? '',
+    callbackBaseUrl:     process.env.SOCIAL_CALLBACK_BASE_URL ?? 'http://localhost:3007/api/v1',
+    frontendBaseUrl:     process.env.FRONTEND_BASE_URL ?? 'http://localhost:3000',
+  },
 };

@@ -28,6 +28,8 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
+- [ ] feat(dj): Listener Activity — Facebook Graph API integration (issue #211, feat/issue-211-212-social-adapters) | @claude-code | 2026-04-06 | Migration: 040-041
+- [ ] feat(dj): Listener Activity — X/Twitter API v2 integration (issue #212, feat/issue-211-212-social-adapters) | @claude-code | 2026-04-06 | Migration: 040-041
 
 ## Recently Completed
 - [x] feat(dj): Time Check segment — localized time_check injection (issue #203, feat/issue-203-204-dj-segments) | @claude-code | 2026-04-06

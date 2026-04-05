@@ -97,6 +97,15 @@ export default function StationSettingsPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  // Social connections state
+  const [socialStatus, setSocialStatus] = useState<SocialStatus | null>(null);
+  const [socialToast, setSocialToast] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState<Record<string, boolean>>({});
+
+  interface SocialPlatformStatus { connected: boolean; account_name: string | null; connected_at: string | null; }
+  interface SocialStatus { facebook: SocialPlatformStatus; twitter: SocialPlatformStatus; }
+
+
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -105,6 +114,14 @@ export default function StationSettingsPage() {
       return;
     }
     fetchSettings();
+    fetchSocialStatus();
+    const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const socialParam = sp?.get('social'); const statusParam = sp?.get('status');
+    if (socialParam && statusParam) {
+      const pName = socialParam === 'facebook' ? 'Facebook' : 'X / Twitter';
+      setSocialToast(statusParam === 'connected' ? `${pName} connected!` : `Failed to connect ${pName}.`);
+      setTimeout(() => setSocialToast(null), 5000);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stationId]);
 
@@ -191,6 +208,23 @@ export default function StationSettingsPage() {
     }
   }
 
+
+  async function fetchSocialStatus() {
+    try {
+      const data = await api.get<SocialStatus>(`/api/v1/dj/social/status?station_id=${stationId}`);
+      setSocialStatus(data);
+    } catch { /* non-critical */ }
+  }
+
+  async function disconnectSocial(platform: 'facebook' | 'twitter') {
+    setDisconnecting((prev) => ({ ...prev, [platform]: true }));
+    try {
+      await api.post(`/api/v1/dj/social/${platform}/disconnect`, { station_id: stationId });
+      await fetchSocialStatus();
+    } catch { /* ignore */ }
+    finally { setDisconnecting((prev) => ({ ...prev, [platform]: false })); }
+  }
+
   function toggleReveal(key: string) {
     setRevealed((prev) => ({ ...prev, [key]: !prev[key] }));
   }
@@ -208,6 +242,13 @@ export default function StationSettingsPage() {
         </button>
         <h1 className="text-xl font-bold text-white">Station Settings</h1>
       </div>
+
+
+      {socialToast && (
+        <div className={`mb-4 rounded-md px-4 py-3 border ${socialToast.includes('connected') ? 'bg-green-900/30 border-green-700/50' : 'bg-red-900/30 border-red-700/50'}`}>
+          <p className={`text-sm ${socialToast.includes('connected') ? 'text-green-400' : 'text-red-400'}`}>{socialToast}</p>
+        </div>
+      )}
 
       {loadError && (
         <div className="mb-4 rounded-md bg-red-900/30 border border-red-700/50 px-4 py-3">
@@ -272,6 +313,44 @@ export default function StationSettingsPage() {
                   onToggleReveal={() => toggleReveal(field.key)}
                 />
               ))}
+            </div>
+          </section>
+
+
+          {/* Social Connections */}
+          <section className="card p-5">
+            <h2 className="text-sm font-semibold text-violet-400 uppercase tracking-wider mb-1">Social Connections</h2>
+            <p className="text-xs text-gray-500 mb-4">Connect social accounts to auto-pull listener posts into DJ shoutout segments.</p>
+            <div className="space-y-4">
+              {/* Facebook */}
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Facebook Page</p>
+                  {socialStatus?.facebook?.connected
+                    ? <p className="text-xs text-green-400">Connected as <span className="font-medium">{socialStatus.facebook.account_name ?? 'Unknown Page'}</span></p>
+                    : <p className="text-xs text-gray-500">Not connected</p>}
+                </div>
+                {socialStatus?.facebook?.connected
+                  ? <button onClick={() => disconnectSocial('facebook')} disabled={disconnecting['facebook']} className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-50">{disconnecting['facebook'] ? 'Disconnecting…' : 'Disconnect'}</button>
+                  : <a href={`/api/v1/dj/social/facebook/connect?station_id=${stationId}`} className="btn-primary text-xs px-3 py-1.5">Connect Facebook</a>}
+              </div>
+              {/* Twitter / X */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-white">X / Twitter</p>
+                    {socialStatus?.twitter?.connected
+                      ? <p className="text-xs text-green-400">Connected as <span className="font-medium">{socialStatus.twitter.account_name ?? 'Unknown'}</span></p>
+                      : <p className="text-xs text-gray-500">Not connected</p>}
+                  </div>
+                  {socialStatus?.twitter?.connected
+                    ? <button onClick={() => disconnectSocial('twitter')} disabled={disconnecting['twitter']} className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-50">{disconnecting['twitter'] ? 'Disconnecting…' : 'Disconnect'}</button>
+                    : <a href={`/api/v1/dj/social/twitter/connect?station_id=${stationId}`} className="btn-primary text-xs px-3 py-1.5">Connect X / Twitter</a>}
+                </div>
+                {!socialStatus?.twitter?.connected && (
+                  <p className="text-xs text-amber-500/80">Note: X/Twitter Basic tier ($100/mo) recommended for production. <a href="https://developer.twitter.com/en/portal/dashboard" target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-400">X Developer Portal</a></p>
+                )}
+              </div>
             </div>
           </section>
 
