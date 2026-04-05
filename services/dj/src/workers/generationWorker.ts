@@ -100,6 +100,36 @@ export async function runGenerationJob(
   }
   if (!profile) throw new Error('No DJ profile found for station');
 
+  // 2b. Pre-flight: fail fast if no LLM API key is available before creating any DB records.
+  //     Both per-station keys (from station columns / station_settings) and env var defaults
+  //     are checked so the error message tells the operator exactly what to configure.
+  const earlyLlmProvider = stationSettings['llm_provider'] ?? config.llm.provider;
+  const earlyLlmApiKey =
+    stationSettings['llm_api_key'] ??
+    (earlyLlmProvider === 'anthropic'
+      ? station.anthropic_api_key
+      : earlyLlmProvider === 'gemini'
+      ? station.gemini_api_key
+      : earlyLlmProvider === 'openai'
+      ? station.openai_api_key
+      : earlyLlmProvider === 'mistral'
+      ? station.mistral_api_key
+      : station.openrouter_api_key) ??
+    undefined;
+  const earlyLlmFallback =
+    earlyLlmProvider === 'openai'
+      ? config.llm.openaiApiKey
+      : earlyLlmProvider === 'anthropic'
+      ? config.llm.anthropicApiKey
+      : config.openRouter.apiKey;
+  if (!earlyLlmApiKey && !earlyLlmFallback) {
+    throw new Error(
+      `No LLM API key configured for provider "${earlyLlmProvider}". ` +
+      `Set OPENROUTER_API_KEY (or the relevant key) in Railway environment variables, ` +
+      `or add a per-station API key in Station Settings → DJ Settings.`,
+    );
+  }
+
   await reportProgress(10, 'Loading playlist…');
 
   // 3. Load playlist entries with song data

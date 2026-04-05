@@ -15,6 +15,7 @@ Before starting any task, an agent MUST:
 ## Active Work
 
 ## Recently Completed
+- [x] Fix DJ INTERNAL_ERROR: reject handler 422/503 error codes (issue #183, fix/issue-183-dj-error) | @claude-code | 2026-04-05
 - [x] Agent workflow improvements — P0 daemon fixes + CLAUDE.md rules (issue #158, feat/issue-158-workflow-improvements) | @claude-code | 2026-04-05
 - [x] Chatbox for directed script rewrite instructions (issue #32, PR #180) | @claude-code | 2026-04-05
 - [x] Deployment monitoring agent — Vercel + Railway (issue #166, PR #169) | @claude-code | 2026-04-05
