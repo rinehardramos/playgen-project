@@ -195,6 +195,43 @@ server {
         add_header Content-Type application/json;
     }
 
+    # ─── Per-service health proxies (for deployment monitoring) ───
+    location /health/auth {
+        set $svc http://${AUTH_HOST}:3001;
+        proxy_pass $svc/health;
+        proxy_set_header Host $host;
+    }
+    location /health/station {
+        set $svc http://${STATION_HOST}:3002;
+        proxy_pass $svc/health;
+        proxy_set_header Host $host;
+    }
+    location /health/library {
+        set $svc http://${LIBRARY_HOST}:3003;
+        proxy_pass $svc/health;
+        proxy_set_header Host $host;
+    }
+    location /health/scheduler {
+        set $svc http://${SCHEDULER_HOST}:3004;
+        proxy_pass $svc/health;
+        proxy_set_header Host $host;
+    }
+    location /health/playlist {
+        set $svc http://${PLAYLIST_HOST}:3005;
+        proxy_pass $svc/health;
+        proxy_set_header Host $host;
+    }
+    location /health/analytics {
+        set $svc http://${ANALYTICS_HOST}:3006;
+        proxy_pass $svc/health;
+        proxy_set_header Host $host;
+    }
+    location /health/dj {
+        set $svc http://${DJ_HOST}:3007;
+        proxy_pass $svc/health;
+        proxy_set_header Host $host;
+    }
+
     # ─── Frontend catch-all ───────────────────────────────────────
     # Active when FRONTEND_HOST is set (local Docker Compose).
     # On Railway/Vercel the frontend is on Vercel — leave FRONTEND_HOST blank.

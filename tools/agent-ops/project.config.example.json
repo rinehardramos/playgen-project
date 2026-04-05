@@ -45,6 +45,11 @@
       "type": "health",
       "always": true,
       "desc": "Health check"
+    },
+    "monitor-0": {
+      "type": "monitor",
+      "always": true,
+      "desc": "Deployment monitor (Vercel + Railway crash detection)"
     }
   },
   "reset_hours": [0, 5, 9, 14, 19],
@@ -56,6 +61,7 @@
     "lint_command": "pnpm run lint",
     "typecheck_command": "pnpm run typecheck",
     "health_script": "bash scripts/project-health.sh",
+    "monitor_script": "bash scripts/deployment-monitor.sh",
     "collab_file": "tasks/agent-collab.md",
     "docker_services": []
   },

@@ -2,51 +2,43 @@
 set -euo pipefail
 
 GATEWAY_URL="${GATEWAY_URL:?GATEWAY_URL must be set}"
-FRONTEND_URL="${FRONTEND_URL:?FRONTEND_URL must be set}"
+FRONTEND_URL="${FRONTEND_URL:-}"
 
 FAILED=0
 
-echo "=== Gateway Health Check ==="
-STATUS=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 10 "${GATEWAY_URL}/health" 2>/dev/null || echo "000")
-if [ "$STATUS" = "200" ]; then
-  echo "[PASS] gateway -> $STATUS"
-else
-  echo "[FAIL] gateway -> $STATUS"
-  FAILED=1
-fi
-
-echo ""
-echo "=== Service Health Checks (via gateway) ==="
-# Each service registers GET /health returning { status: 'ok' }
-# Gateway proxies /api/v1/dj/* to dj service; other services have their own /health at root
-for svc in auth station library scheduler playlist analytics; do
-  # Services expose /health directly; gateway does not proxy these by default
-  # Use the gateway health endpoint as a proxy indicator
-  URL="${GATEWAY_URL}/health"
-  STATUS=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 10 "$URL" 2>/dev/null || echo "000")
-  if [ "$STATUS" = "200" ]; then
-    echo "[PASS] $svc (via gateway) -> $STATUS"
+check() {
+  local name="$1"
+  local url="$2"
+  local status
+  status=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null || echo "000")
+  if [ "$status" = "200" ]; then
+    echo "[PASS] $name -> $status"
   else
-    echo "[FAIL] $svc (via gateway) -> $STATUS"
+    echo "[FAIL] $name -> $status"
     FAILED=1
   fi
-done
+}
+
+echo "=== Gateway Health ==="
+check "gateway" "${GATEWAY_URL}/health"
 
 echo ""
-echo "=== Frontend Health Check ==="
-STATUS=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 10 "$FRONTEND_URL" 2>/dev/null || echo "000")
-if [ "$STATUS" = "200" ]; then
-  echo "[PASS] frontend -> $STATUS"
-else
-  echo "[FAIL] frontend -> $STATUS"
-  FAILED=1
+echo "=== Per-Service Health (via gateway proxy) ==="
+for svc in auth station library scheduler playlist analytics dj; do
+  check "$svc" "${GATEWAY_URL}/health/${svc}"
+done
+
+if [ -n "$FRONTEND_URL" ]; then
+  echo ""
+  echo "=== Frontend Health ==="
+  check "frontend" "$FRONTEND_URL"
 fi
 
 echo ""
 if [ "$FAILED" -eq 0 ]; then
   echo "All smoke tests passed."
 else
-  echo "Some smoke tests failed!"
+  echo "Some smoke tests FAILED."
 fi
 
 exit $FAILED
