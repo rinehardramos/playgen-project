@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth';
@@ -16,314 +16,219 @@ interface Program {
   station_id: string;
   name: string;
   description: string | null;
-  air_days: string[];
-  start_time: string | null;
-  end_time: string | null;
+  active_days: string[];
+  start_hour: number;
+  end_hour: number;
+  color_tag: string | null;
   is_active: boolean;
-  dj_profile_id: string | null;
+  is_default: boolean;
 }
 
 const DAY_LABELS: Record<string, string> = {
-  mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu',
-  fri: 'Fri', sat: 'Sat', sun: 'Sun',
+  monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu',
+  friday: 'Fri', saturday: 'Sat', sunday: 'Sun',
 };
 
-const ALL_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const ALL_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
-interface FormState {
-  name: string;
-  description: string;
-  air_days: string[];
-  start_time: string;
-  end_time: string;
-  is_active: boolean;
+const PROGRAM_COLORS = [
+  '#7c3aed', '#2563eb', '#059669', '#d97706',
+  '#dc2626', '#db2777', '#0891b2', '#65a30d',
+];
+
+function formatHour(h: number): string {
+  if (h === 0 || h === 24) return '12:00 AM';
+  if (h === 12) return '12:00 PM';
+  return h < 12 ? `${h}:00 AM` : `${h - 12}:00 PM`;
 }
 
-const EMPTY_FORM: FormState = {
-  name: '', description: '', air_days: [], start_time: '', end_time: '', is_active: true,
-};
+function ProgramCard({ program, onEdit }: { program: Program; onEdit: () => void }) {
+  const color = program.color_tag ?? '#7c3aed';
+  return (
+    <div className="bg-[#1a1a2e] border border-[#2a2a40] rounded-xl p-5 hover:border-[#3a3a55] transition-colors">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5"
+            style={{ backgroundColor: color }}
+          />
+          <div className="min-w-0">
+            <h3 className="text-white font-semibold truncate">{program.name}</h3>
+            {program.description && (
+              <p className="text-gray-500 text-xs truncate mt-0.5">{program.description}</p>
+            )}
+          </div>
+        </div>
+        {program.is_default && (
+          <span className="text-xs text-gray-600 bg-gray-800 px-2 py-0.5 rounded flex-shrink-0">default</span>
+        )}
+      </div>
+
+      <div className="space-y-2 mb-4">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {ALL_DAYS.map(day => (
+            <span
+              key={day}
+              className={`text-xs px-1.5 py-0.5 rounded ${
+                program.active_days.includes(day)
+                  ? 'text-white font-medium'
+                  : 'text-gray-700'
+              }`}
+              style={program.active_days.includes(day) ? { backgroundColor: color + '33', color } : {}}
+            >
+              {DAY_LABELS[day]}
+            </span>
+          ))}
+        </div>
+        <p className="text-gray-400 text-xs">
+          {formatHour(program.start_hour)} – {formatHour(program.end_hour)}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Link
+          href={`/programs/${program.id}`}
+          className="flex-1 text-center text-xs bg-[#12122a] hover:bg-[#1e1e3a] text-gray-300 px-3 py-2 rounded-lg transition-colors"
+        >
+          View Episodes
+        </Link>
+        <Link
+          href={`/programs/${program.id}/clock`}
+          className="flex-1 text-center text-xs bg-[#12122a] hover:bg-[#1e1e3a] text-gray-300 px-3 py-2 rounded-lg transition-colors"
+        >
+          Edit Clock
+        </Link>
+        {!program.is_default && (
+          <button
+            onClick={onEdit}
+            className="text-xs text-gray-500 hover:text-gray-300 px-2 py-2 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function ProgramsPage() {
   const router = useRouter();
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState('');
   const [programs, setPrograms] = useState<Program[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
 
+  // Load stations
   useEffect(() => {
     const user = getCurrentUser();
     if (!user) { router.push('/login'); return; }
-
-    api.get<Station[]>('/api/v1/stations').then((data) => {
-      setStations(data);
-      if (data.length > 0) setSelectedStation(data[0].id);
-    }).catch(() => setError('Failed to load stations')).finally(() => setLoading(false));
+    api.get<Station[]>('/api/v1/stations')
+      .then((list) => {
+        setStations(list);
+        if (list.length > 0) setSelectedStation(list[0].id);
+      })
+      .catch(() => {});
   }, [router]);
 
-  useEffect(() => {
+  const loadPrograms = useCallback(async () => {
     if (!selectedStation) return;
-    api.get<Program[]>(`/api/v1/stations/${selectedStation}/programs`)
-      .then(setPrograms)
-      .catch(() => setPrograms([]));
+    setLoading(true);
+    try {
+      const data = await api.get<Program[]>(`/api/v1/stations/${selectedStation}/programs`);
+      setPrograms(data);
+    } catch {
+      setPrograms([]);
+    } finally {
+      setLoading(false);
+    }
   }, [selectedStation]);
 
-  function toggleDay(day: string) {
-    setForm((f) => ({
-      ...f,
-      air_days: f.air_days.includes(day)
-        ? f.air_days.filter((d) => d !== day)
-        : [...f.air_days, day],
-    }));
-  }
+  useEffect(() => { loadPrograms(); }, [loadPrograms]);
 
-  function openCreate() {
-    setEditingId(null);
-    setForm(EMPTY_FORM);
-    setShowForm(true);
-    setError('');
-  }
-
-  function openEdit(p: Program) {
-    setEditingId(p.id);
-    setForm({
-      name: p.name,
-      description: p.description ?? '',
-      air_days: p.air_days ?? [],
-      start_time: p.start_time ?? '',
-      end_time: p.end_time ?? '',
-      is_active: p.is_active,
-    });
-    setShowForm(true);
-    setError('');
-  }
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.name.trim()) { setError('Name is required'); return; }
-    setSaving(true);
-    setError('');
-
-    const payload = {
-      name: form.name.trim(),
-      description: form.description.trim() || undefined,
-      air_days: form.air_days,
-      start_time: form.start_time || undefined,
-      end_time: form.end_time || undefined,
-      is_active: form.is_active,
-    };
-
-    try {
-      if (editingId) {
-        const updated = await api.put<Program>(`/api/v1/stations/${selectedStation}/programs/${editingId}`, payload);
-        setPrograms((prev) => prev.map((p) => p.id === editingId ? updated : p));
-      } else {
-        const created = await api.post<Program>(`/api/v1/stations/${selectedStation}/programs`, payload);
-        setPrograms((prev) => [...prev, created]);
-      }
-      setShowForm(false);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Save failed');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete program "${name}"? This cannot be undone.`)) return;
-    try {
-      await api.delete(`/api/v1/stations/${selectedStation}/programs/${id}`);
-      setPrograms((prev) => prev.filter((p) => p.id !== id));
-    } catch {
-      setError('Failed to delete program');
-    }
-  }
-
-  if (loading) return <div className="p-8 text-gray-400">Loading…</div>;
+  const namedPrograms = programs.filter(p => !p.is_default);
+  const defaultProgram = programs.find(p => p.is_default);
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Programs</h1>
-          <p className="text-gray-400 mt-1">Manage recurring shows and their episode schedules.</p>
+          <p className="text-gray-500 text-sm mt-0.5">Manage your recurring shows and their format clocks</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
-        >
-          + New Program
-        </button>
+        <div className="flex items-center gap-3">
+          {stations.length > 1 && (
+            <select
+              value={selectedStation}
+              onChange={e => setSelectedStation(e.target.value)}
+              className="bg-[#1a1a2e] border border-[#2a2a40] text-gray-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-violet-500"
+            >
+              {stations.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          )}
+          <Link
+            href="/programs/new"
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+            </svg>
+            New Program
+          </Link>
+        </div>
       </div>
 
-      {stations.length > 1 && (
-        <div>
-          <label className="block text-sm text-gray-300 mb-1">Station</label>
-          <select
-            value={selectedStation}
-            onChange={(e) => setSelectedStation(e.target.value)}
-            className="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white"
-          >
-            {stations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-500" />
         </div>
-      )}
-
-      {error && !showForm && <p className="text-red-400 text-sm">{error}</p>}
-
-      {/* Program form */}
-      {showForm && (
-        <form onSubmit={handleSave} className="bg-gray-800 rounded-lg p-6 space-y-4 border border-gray-700">
-          <h2 className="text-lg font-semibold text-white">{editingId ? 'Edit Program' : 'New Program'}</h2>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
-
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">Name *</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Morning Rush"
-              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-              required
-            />
+      ) : namedPrograms.length === 0 && !defaultProgram ? (
+        <div className="text-center py-20">
+          <div className="w-16 h-16 bg-violet-600/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+            </svg>
           </div>
-
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">Description</label>
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Optional description"
-              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-300 mb-2">Air Days</label>
-            <div className="flex flex-wrap gap-2">
-              {ALL_DAYS.map((day) => (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => toggleDay(day)}
-                  className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                    form.air_days.includes(day)
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  {DAY_LABELS[day]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-300 mb-1">Start Time</label>
-              <input
-                type="time"
-                value={form.start_time}
-                onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-300 mb-1">End Time</label>
-              <input
-                type="time"
-                value={form.end_time}
-                onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value }))}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="is_active"
-              checked={form.is_active}
-              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
-              className="rounded"
-            />
-            <label htmlFor="is_active" className="text-sm text-gray-300">Active</label>
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded font-medium transition-colors"
-            >
-              {saving ? 'Saving…' : (editingId ? 'Save Changes' : 'Create Program')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="text-gray-400 hover:text-white px-4 py-2 rounded transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* Programs list */}
-      {programs.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
-          <p className="text-lg mb-2">No programs yet</p>
-          <p className="text-sm">Create a program to group episodes and manage your show schedule.</p>
+          <h3 className="text-white font-semibold mb-2">No programs yet</h3>
+          <p className="text-gray-500 text-sm mb-6 max-w-sm mx-auto">
+            Programs organise your daily shows (Morning Rush, Afternoon Drive) and link music templates with DJ scripts via a Show Clock.
+          </p>
+          <Link
+            href="/programs/new"
+            className="bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+          >
+            Create your first program
+          </Link>
         </div>
       ) : (
-        <div className="space-y-3">
-          {programs.map((p) => (
-            <div key={p.id} className="bg-gray-800 rounded-lg p-5 flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-white font-semibold">{p.name}</h3>
-                  {!p.is_active && (
-                    <span className="text-xs bg-gray-700 text-gray-400 px-2 py-0.5 rounded">Inactive</span>
-                  )}
-                </div>
-                {p.description && <p className="text-gray-400 text-sm mb-2">{p.description}</p>}
-                <div className="flex flex-wrap gap-2 text-xs text-gray-400">
-                  {p.air_days?.length > 0 && (
-                    <span>{p.air_days.map((d) => DAY_LABELS[d] ?? d).join(', ')}</span>
-                  )}
-                  {p.start_time && p.end_time && (
-                    <span>{p.start_time} – {p.end_time}</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <Link
-                  href={`/programs/${p.id}/episodes?station_id=${selectedStation}`}
-                  className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-                >
-                  Episodes
-                </Link>
-                <button
-                  onClick={() => openEdit(p)}
-                  className="text-sm text-gray-400 hover:text-white transition-colors"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(p.id, p.name)}
-                  className="text-sm text-gray-500 hover:text-red-400 transition-colors"
-                >
-                  Delete
-                </button>
+        <div className="space-y-6">
+          {namedPrograms.length > 0 && (
+            <div>
+              <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Your Shows</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {namedPrograms.map(p => (
+                  <ProgramCard key={p.id} program={p} onEdit={() => setEditingId(p.id)} />
+                ))}
               </div>
             </div>
-          ))}
+          )}
+
+          {defaultProgram && (
+            <div>
+              <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Unassigned</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <ProgramCard key={defaultProgram.id} program={defaultProgram} onEdit={() => {}} />
+              </div>
+              <p className="text-gray-600 text-xs mt-2">
+                Pre-existing playlists are grouped here. Reassign episodes to named programs from the episode view.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

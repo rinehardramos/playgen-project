@@ -1,244 +1,168 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate, requirePermission, requireStationAccess } from '@playgen/middleware';
-import { getPool } from '../db';
-import type {
-  Program,
-  ProgramEpisode,
-  CreateProgramRequest,
-  CreateEpisodeRequest,
-} from '@playgen/types';
+import * as programService from '../services/programService';
 
-export async function programRoutes(app: FastifyInstance): Promise<void> {
+export async function programRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate);
 
-  // ── Programs ──────────────────────────────────────────────────────────────
+  // ─── Programs ──────────────────────────────────────────────────────────────
 
-  /** List all programs for a station */
-  app.get<{ Params: { station_id: string } }>(
-    '/stations/:station_id/programs',
-    { onRequest: [requirePermission('station:read'), requireStationAccess()] },
-    async (req) => {
-      const { station_id } = req.params;
-      const { rows } = await getPool().query<Program>(
-        `SELECT * FROM programs WHERE station_id = $1 ORDER BY name`,
-        [station_id],
-      );
-      return rows;
-    },
-  );
+  app.get('/stations/:stationId/programs', {
+    onRequest: [requirePermission('program:read'), requireStationAccess()],
+  }, async (req) => {
+    const { stationId } = req.params as { stationId: string };
+    return programService.listPrograms(stationId);
+  });
 
-  /** Get a single program */
-  app.get<{ Params: { station_id: string; id: string } }>(
-    '/stations/:station_id/programs/:id',
-    { onRequest: [requirePermission('station:read'), requireStationAccess()] },
-    async (req, reply) => {
-      const { id, station_id } = req.params;
-      const { rows } = await getPool().query<Program>(
-        `SELECT * FROM programs WHERE id = $1 AND station_id = $2`,
-        [id, station_id],
-      );
-      if (!rows[0]) return reply.notFound('Program not found');
-      return rows[0];
-    },
-  );
+  app.post('/stations/:stationId/programs', {
+    onRequest: [requirePermission('program:write'), requireStationAccess()],
+  }, async (req, reply) => {
+    const { stationId } = req.params as { stationId: string };
+    const body = req.body as {
+      name: string;
+      description?: string;
+      active_days?: string[];
+      start_hour?: number;
+      end_hour?: number;
+      template_id?: string | null;
+      color_tag?: string | null;
+    };
+    const program = await programService.createProgram({ ...body, station_id: stationId });
+    return reply.code(201).send(program);
+  });
 
-  /** Create a program */
-  app.post<{ Params: { station_id: string }; Body: CreateProgramRequest }>(
-    '/stations/:station_id/programs',
-    { onRequest: [requirePermission('station:write'), requireStationAccess()] },
-    async (req, reply) => {
-      const { station_id } = req.params;
-      const {
-        name, description, air_days, start_time, end_time,
-        dj_profile_id, format_config, is_active,
-      } = req.body;
+  app.get('/programs/:id', {
+    onRequest: [requirePermission('program:read')],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const program = await programService.getProgram(id);
+    if (!program) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Program not found' } });
+    return program;
+  });
 
-      if (!name?.trim()) return reply.badRequest('name is required');
+  app.put('/programs/:id', {
+    onRequest: [requirePermission('program:write')],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const program = await programService.updateProgram(
+      id,
+      req.body as Parameters<typeof programService.updateProgram>[1]
+    );
+    if (!program) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Program not found' } });
+    return program;
+  });
 
-      const { rows } = await getPool().query<Program>(
-        `INSERT INTO programs
-           (station_id, name, description, air_days, start_time, end_time,
-            dj_profile_id, format_config, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING *`,
-        [
-          station_id,
-          name.trim(),
-          description ?? null,
-          air_days ?? [],
-          start_time ?? null,
-          end_time ?? null,
-          dj_profile_id ?? null,
-          format_config ? JSON.stringify(format_config) : null,
-          is_active ?? true,
-        ],
-      );
-      return reply.code(201).send(rows[0]);
-    },
-  );
+  app.delete('/programs/:id', {
+    onRequest: [requirePermission('program:write')],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const deleted = await programService.deleteProgram(id);
+    // deleteProgram only deletes non-default programs
+    if (!deleted) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Program not found or is the default program' } });
+    return reply.code(204).send();
+  });
 
-  /** Update a program */
-  app.put<{ Params: { station_id: string; id: string }; Body: Partial<CreateProgramRequest> }>(
-    '/stations/:station_id/programs/:id',
-    { onRequest: [requirePermission('station:write'), requireStationAccess()] },
-    async (req, reply) => {
-      const { id, station_id } = req.params;
-      const updates = req.body;
+  // ─── Show Format Clocks ────────────────────────────────────────────────────
 
-      const fields: string[] = [];
-      const values: unknown[] = [];
-      let idx = 1;
+  app.get('/programs/:id/clocks', {
+    onRequest: [requirePermission('program:read')],
+  }, async (req) => {
+    const { id } = req.params as { id: string };
+    const clocks = await programService.listClocks(id);
+    // Attach slots to each clock
+    const withSlots = await Promise.all(
+      clocks.map(async (clock) => ({
+        ...clock,
+        slots: await programService.listClockSlots(clock.id),
+      }))
+    );
+    return withSlots;
+  });
 
-      const allowed: Array<keyof CreateProgramRequest> = [
-        'name', 'description', 'air_days', 'start_time', 'end_time',
-        'dj_profile_id', 'format_config', 'is_active',
-      ];
+  app.post('/programs/:id/clocks', {
+    onRequest: [requirePermission('program:write')],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as {
+      name?: string;
+      applies_to_hours?: number[] | null;
+      is_default?: boolean;
+      slots?: Array<Parameters<typeof programService.upsertClockSlots>[1][number]>;
+    };
+    const clock = await programService.createClock({ ...body, program_id: id });
+    if (body.slots?.length) {
+      await programService.upsertClockSlots(clock.id, body.slots);
+    }
+    const slots = await programService.listClockSlots(clock.id);
+    return reply.code(201).send({ ...clock, slots });
+  });
 
-      for (const key of allowed) {
-        if (key in updates) {
-          fields.push(`${key} = $${idx++}`);
-          values.push(key === 'format_config' && updates[key]
-            ? JSON.stringify(updates[key])
-            : updates[key] ?? null);
-        }
-      }
+  app.put('/programs/:id/clocks/:clockId', {
+    onRequest: [requirePermission('program:write')],
+  }, async (req, reply) => {
+    const { clockId } = req.params as { id: string; clockId: string };
+    const body = req.body as {
+      name?: string;
+      applies_to_hours?: number[] | null;
+      is_default?: boolean;
+      slots?: Array<Parameters<typeof programService.upsertClockSlots>[1][number]>;
+    };
+    const clock = await programService.updateClock(clockId, body);
+    if (!clock) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Clock not found' } });
+    if (body.slots !== undefined) {
+      await programService.upsertClockSlots(clockId, body.slots);
+    }
+    const slots = await programService.listClockSlots(clockId);
+    return { ...clock, slots };
+  });
 
-      if (fields.length === 0) return reply.badRequest('No fields to update');
+  app.delete('/programs/:id/clocks/:clockId', {
+    onRequest: [requirePermission('program:write')],
+  }, async (req, reply) => {
+    const { clockId } = req.params as { id: string; clockId: string };
+    const deleted = await programService.deleteClock(clockId);
+    if (!deleted) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Clock not found' } });
+    return reply.code(204).send();
+  });
 
-      fields.push(`updated_at = NOW()`);
-      values.push(id, station_id);
+  // ─── Program Episodes ──────────────────────────────────────────────────────
 
-      const { rows } = await getPool().query<Program>(
-        `UPDATE programs SET ${fields.join(', ')}
-         WHERE id = $${idx} AND station_id = $${idx + 1}
-         RETURNING *`,
-        values,
-      );
-      if (!rows[0]) return reply.notFound('Program not found');
-      return rows[0];
-    },
-  );
+  app.get('/programs/:id/episodes', {
+    onRequest: [requirePermission('program:read')],
+  }, async (req) => {
+    const { id } = req.params as { id: string };
+    const { month } = req.query as { month?: string };
+    return programService.listEpisodes(id, month);
+  });
 
-  /** Delete a program */
-  app.delete<{ Params: { station_id: string; id: string } }>(
-    '/stations/:station_id/programs/:id',
-    { onRequest: [requirePermission('station:write'), requireStationAccess()] },
-    async (req, reply) => {
-      const { id, station_id } = req.params;
-      const { rowCount } = await getPool().query(
-        `DELETE FROM programs WHERE id = $1 AND station_id = $2`,
-        [id, station_id],
-      );
-      if (!rowCount) return reply.notFound('Program not found');
-      return reply.code(204).send();
-    },
-  );
+  app.get('/program-episodes/:episodeId', {
+    onRequest: [requirePermission('program:read')],
+  }, async (req, reply) => {
+    const { episodeId } = req.params as { episodeId: string };
+    const episode = await programService.getEpisode(episodeId);
+    if (!episode) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Episode not found' } });
+    return episode;
+  });
 
-  // ── Episodes ──────────────────────────────────────────────────────────────
+  app.put('/program-episodes/:episodeId', {
+    onRequest: [requirePermission('program:write')],
+  }, async (req, reply) => {
+    const { episodeId } = req.params as { episodeId: string };
+    const episode = await programService.updateEpisode(
+      episodeId,
+      req.body as Parameters<typeof programService.updateEpisode>[1]
+    );
+    if (!episode) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Episode not found' } });
+    return episode;
+  });
 
-  /** List episodes for a program */
-  app.get<{ Params: { station_id: string; program_id: string }; Querystring: { limit?: string } }>(
-    '/stations/:station_id/programs/:program_id/episodes',
-    { onRequest: [requirePermission('station:read'), requireStationAccess()] },
-    async (req, reply) => {
-      const { program_id, station_id } = req.params;
-      const limit = Math.min(parseInt(req.query.limit ?? '50', 10) || 50, 200);
-
-      // Verify program belongs to station
-      const { rows: progRows } = await getPool().query(
-        `SELECT id FROM programs WHERE id = $1 AND station_id = $2`,
-        [program_id, station_id],
-      );
-      if (!progRows[0]) return reply.notFound('Program not found');
-
-      const { rows } = await getPool().query<ProgramEpisode>(
-        `SELECT * FROM program_episodes WHERE program_id = $1
-         ORDER BY air_date DESC LIMIT $2`,
-        [program_id, limit],
-      );
-      return rows;
-    },
-  );
-
-  /** Get a single episode */
-  app.get<{ Params: { station_id: string; program_id: string; id: string } }>(
-    '/stations/:station_id/programs/:program_id/episodes/:id',
-    { onRequest: [requirePermission('station:read'), requireStationAccess()] },
-    async (req, reply) => {
-      const { program_id, id, station_id } = req.params;
-
-      const { rows: progRows } = await getPool().query(
-        `SELECT id FROM programs WHERE id = $1 AND station_id = $2`,
-        [program_id, station_id],
-      );
-      if (!progRows[0]) return reply.notFound('Program not found');
-
-      const { rows } = await getPool().query<ProgramEpisode>(
-        `SELECT * FROM program_episodes WHERE id = $1 AND program_id = $2`,
-        [id, program_id],
-      );
-      if (!rows[0]) return reply.notFound('Episode not found');
-      return rows[0];
-    },
-  );
-
-  /** Create an episode for a program */
-  app.post<{ Params: { station_id: string; program_id: string }; Body: CreateEpisodeRequest }>(
-    '/stations/:station_id/programs/:program_id/episodes',
-    { onRequest: [requirePermission('station:write'), requireStationAccess()] },
-    async (req, reply) => {
-      const { program_id, station_id } = req.params;
-      const { air_date, playlist_id, dj_script_id, notes } = req.body;
-
-      if (!air_date) return reply.badRequest('air_date is required');
-
-      const { rows: progRows } = await getPool().query(
-        `SELECT id FROM programs WHERE id = $1 AND station_id = $2`,
-        [program_id, station_id],
-      );
-      if (!progRows[0]) return reply.notFound('Program not found');
-
-      const { rows } = await getPool().query<ProgramEpisode>(
-        `INSERT INTO program_episodes (program_id, air_date, playlist_id, dj_script_id, notes)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING *`,
-        [program_id, air_date, playlist_id ?? null, dj_script_id ?? null, notes ?? null],
-      );
-      return reply.code(201).send(rows[0]);
-    },
-  );
-
-  /** Update episode status or link resources */
-  app.patch<{
-    Params: { station_id: string; program_id: string; id: string };
-    Body: { status?: string; playlist_id?: string; dj_script_id?: string; manifest_id?: string; notes?: string };
-  }>(
-    '/stations/:station_id/programs/:program_id/episodes/:id',
-    { onRequest: [requirePermission('station:write'), requireStationAccess()] },
-    async (req, reply) => {
-      const { program_id, id, station_id } = req.params;
-      const { status, playlist_id, dj_script_id, manifest_id, notes } = req.body;
-
-      const { rows: progRows } = await getPool().query(
-        `SELECT id FROM programs WHERE id = $1 AND station_id = $2`,
-        [program_id, station_id],
-      );
-      if (!progRows[0]) return reply.notFound('Program not found');
-
-      const { rows } = await getPool().query<ProgramEpisode>(
-        `UPDATE program_episodes
-         SET status       = COALESCE($3::episode_status, status),
-             playlist_id  = COALESCE($4, playlist_id),
-             dj_script_id = COALESCE($5, dj_script_id),
-             manifest_id  = COALESCE($6, manifest_id),
-             notes        = COALESCE($7, notes),
-             updated_at   = NOW()
-         WHERE id = $1 AND program_id = $2
-         RETURNING *`,
-        [id, program_id, status ?? null, playlist_id ?? null, dj_script_id ?? null, manifest_id ?? null, notes ?? null],
-      );
-      if (!rows[0]) return reply.notFound('Episode not found');
-      return rows[0];
-    },
-  );
+  app.post('/program-episodes/:episodeId/publish', {
+    onRequest: [requirePermission('program:write')],
+  }, async (req, reply) => {
+    const { episodeId } = req.params as { episodeId: string };
+    const user = (req as unknown as { user: { sub: string } }).user;
+    const episode = await programService.publishEpisode(episodeId, user.sub);
+    if (!episode) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Episode not found' } });
+    return episode;
+  });
 }

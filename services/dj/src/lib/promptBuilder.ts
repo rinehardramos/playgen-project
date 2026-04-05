@@ -1,4 +1,7 @@
 import type { DjProfile, DjSegmentType, NewsHeadline, PersonaConfig } from '@playgen/types';
+import type { WeatherData, NewsItem } from '../adapters/data/index.js';
+
+export type { WeatherData, NewsItem };
 
 export interface SongContext {
   title: string;
@@ -23,6 +26,7 @@ export interface ScriptContext {
   station_name: string;
   station_timezone: string;
   station_identity?: StationIdentity;
+  station_city?: string;  // kept for backward compat; prefer station_identity.city
   current_date: string;    // YYYY-MM-DD
   current_hour: number;
   /** Human-readable local time string, e.g. "3:47 PM" — used for time_check segments. */
@@ -33,7 +37,9 @@ export interface ScriptContext {
   segment_type: DjSegmentType;
   custom_template?: string;  // overrides default prompt when set
   shoutout?: ShoutoutContext;    // populated for listener_activity segments
-  news_headlines?: NewsHeadline[]; // populated for current_events segments
+  news_headlines?: NewsHeadline[]; // populated for current_events segments (legacy)
+  weather?: WeatherData;
+  news_items?: NewsItem[];
   /** Texts of recently generated segments — used to enforce variety */
   previousSegmentTexts?: string[];
   /** 0-based position of this segment in the full script */
@@ -146,11 +152,12 @@ const SEGMENT_DEFAULTS: Record<DjSegmentType, string> = {
   show_outro: `Wrap up the show on {{station_name}}. Thank listeners genuinely, give a feel for what's next or who's on after you, and sign off with personality.`,
   station_id: `Give a live station identification for {{station_name}}{{station_id_suffix}}. Say the station name clearly and naturally — work in the callsign, frequency, or tagline if available, but keep it punchy and in-character. No more than 2 sentences.`,
   time_check: `Give a time check — it's {{current_time_local}} on {{station_name}}. Weave the time naturally into a moment: tie it to the vibe, what listeners might be doing right now, or just say it with personality. Keep it brief (1-2 sentences).`,
-  weather_tease: `Tease an upcoming weather update in one sentence. Make it feel relevant, not just a filler announcement.`,
+  weather_tease: `{{#weather}}Give a quick weather update for {{station_city}}: {{weather_summary}}. Keep it conversational and brief.{{/weather}}{{^weather}}Tease an upcoming weather update in one sentence.{{/weather}}`,
   ad_break: `Announce a short commercial break in a smooth, natural way that doesn't feel like a hard stop.`,
+  adlib: `Drop a quick, spontaneous on-air comment — a shout-out, a fun fact, or a playful observation. Keep it under 2 sentences. Be natural, like you just thought of it.`,
+  joke: `Tell a short, clean, family-friendly joke that fits the vibe of {{station_name}}. One setup, one punchline.`,
   current_events: `Briefly mention 1-2 current news headlines in a natural, conversational way on {{station_name}}. Keep it light and relatable — you're a DJ, not a newscaster. Headlines available: {{news_headlines}}`,
-  listener_activity: `Give a shoutout to {{listener_name}} who sent in this message: "{{listener_message}}". Make it feel personal, warm, and on-brand for the station. Keep it to 2-3 sentences.`,
-};
+  listener_activity: `Give a shoutout to {{listener_name}} who sent in this message: "{{listener_message}}". Make it feel personal, warm, and on-brand for the station. Keep it to 2-3 sentences.`,};
 
 /** Build the station ID suffix from identity fields, e.g. " — DWRR, 97.1 FM, The Sound of Manila". */
 function buildStationIdSuffix(identity?: StationIdentity | null): string {
@@ -164,11 +171,40 @@ function buildStationIdSuffix(identity?: StationIdentity | null): string {
   return ` — ${parts.join(', ')}`;
 }
 
+// Resolve {{#section}}...{{/section}} and {{^section}}...{{/section}} blocks
+function resolveConditionals(template: string, ctx: ScriptContext): string {
+  // {{#weather}}...{{/weather}} — render if weather data present
+  const hasWeather = !!ctx.weather;
+  template = template.replace(/\{\{#weather\}\}([\s\S]*?)\{\{\/weather\}\}/g, (_, inner) =>
+    hasWeather ? inner : '',
+  );
+  template = template.replace(/\{\{\^weather\}\}([\s\S]*?)\{\{\/weather\}\}/g, (_, inner) =>
+    hasWeather ? '' : inner,
+  );
+
+  // {{#news}}...{{/news}} — render if news items present
+  const hasNews = !!(ctx.news_items && ctx.news_items.length > 0);
+  template = template.replace(/\{\{#news\}\}([\s\S]*?)\{\{\/news\}\}/g, (_, inner) =>
+    hasNews ? inner : '',
+  );
+  template = template.replace(/\{\{\^news\}\}([\s\S]*?)\{\{\/news\}\}/g, (_, inner) =>
+    hasNews ? '' : inner,
+  );
+
+  return template;
+}
+
 // Simple {{variable}} interpolation
 function interpolate(template: string, ctx: ScriptContext): string {
   const stationIdSuffix = buildStationIdSuffix(ctx.station_identity);
-  return template
+  const resolved = resolveConditionals(template, ctx);
+
+  const newsHeadline1 = ctx.news_items?.[0]?.headline ?? '';
+  const newsHeadline2 = ctx.news_items?.[1]?.headline ?? '';
+
+  return resolved
     .replace(/\{\{station_name\}\}/g, ctx.station_name)
+    .replace(/\{\{station_city\}\}/g, ctx.station_city ?? ctx.station_name)
     .replace(/\{\{current_date\}\}/g, ctx.current_date)
     .replace(/\{\{current_hour\}\}/g, String(ctx.current_hour))
     .replace(/\{\{current_time_local\}\}/g, ctx.current_time_local ?? `${ctx.current_hour}:00`)
@@ -186,9 +222,14 @@ function interpolate(template: string, ctx: ScriptContext): string {
     .replace(
       /\{\{news_headlines\}\}/g,
       ctx.news_headlines?.length
-        ? ctx.news_headlines.map((h) => `"${h.title}"${h.source ? ` (${h.source})` : ''}`).join('; ')
-        : 'no current headlines available',
-    );
+        ? ctx.news_headlines.map((h) => '"' + h.title + '"' + (h.source ? ' (' + h.source + ')' : '')).join('; ')
+        : newsHeadline1 || 'no current headlines available',
+    )
+    .replace(/\{\{weather_summary\}\}/g, ctx.weather?.summary ?? '')
+    .replace(/\{\{weather_temp\}\}/g, ctx.weather ? ctx.weather.temperature_c + 'C' : '')
+    .replace(/\{\{weather_condition\}\}/g, ctx.weather?.condition ?? '')
+    .replace(/\{\{news_headline_1\}\}/g, newsHeadline1)
+    .replace(/\{\{news_headline_2\}\}/g, newsHeadline2);
 }
 
 export function buildUserPrompt(ctx: ScriptContext): string {
@@ -199,8 +240,8 @@ export function buildUserPrompt(ctx: ScriptContext): string {
   // Limit to 4 previous segments to keep the context window manageable.
   if (ctx.previousSegmentTexts && ctx.previousSegmentTexts.length > 0) {
     const recent = ctx.previousSegmentTexts.slice(-4);
-    const list = recent.map((t, i) => `${i + 1}. "${t}"`).join('\n');
-    prompt += `\n\nPrevious segments you already wrote (your new segment MUST open differently and feel distinct from all of these):\n${list}`;
+    const list = recent.map((t, i) => (i + 1) + '. "' + t + '"').join('\n');
+    prompt += '\n\nPrevious segments you already wrote (your new segment MUST open differently and feel distinct from all of these):\n' + list;
   }
 
   return prompt;

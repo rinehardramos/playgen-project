@@ -2,6 +2,14 @@ import { getPool } from '../db.js';
 import { llmComplete } from '../adapters/llm/openrouter.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import type { StationIdentity } from '../lib/promptBuilder.js';
+import {
+  openWeatherMapProvider,
+  newsApiProvider,
+  ddgWeatherSearch,
+  ddgNewsSearch,
+  cityFromTimezone,
+} from '../adapters/data/index.js';
+import type { WeatherData, NewsItem } from '../adapters/data/index.js';
 import { config } from '../config.js';
 import { buildManifest } from '../services/manifestService.js';
 import type { DjGenerationJobData, Job } from '../queues/djQueue.js';
@@ -31,6 +39,12 @@ interface StationRow {
   timezone: string;
   locale_code: string | null;
   company_id: string;
+  city: string | null;
+  country_code: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  weather_api_key: string | null;
+  news_api_key: string | null;
   openrouter_api_key: string | null;
   openai_api_key: string | null;
   elevenlabs_api_key: string | null;
@@ -41,7 +55,6 @@ interface StationRow {
   callsign: string | null;
   tagline: string | null;
   frequency: string | null;
-  city: string | null;
 }
 
 /**
@@ -75,9 +88,46 @@ function segmentsForEntry(
   const types: DjSegmentType[] = [];
   const isFirst = idx === 0;
   const isLast = idx === entries.length - 1;
+  const total = entries.length;
 
   if (isFirst) types.push('show_intro');
   types.push(isFirst ? 'song_intro' : 'song_transition');
+
+  // Time check at the start of each new hour boundary
+  if (!isFirst && entry.hour !== entries[idx - 1].hour) {
+    types.push('time_check');
+  }
+
+  // Adlib every 4 songs (not first or last)
+  if (!isFirst && !isLast && idx % 4 === 0) {
+    types.push('adlib');
+  }
+
+  // Joke once, around 1/4 through the show
+  if (idx === Math.max(1, Math.floor(total / 4))) {
+    types.push('joke');
+  }
+
+  // Weather tease once, around the middle of the show
+  if (idx === Math.floor(total / 2) && !isFirst) {
+    types.push('weather_tease');
+  }
+
+  // Current events once, around 2/3 through
+  if (idx === Math.floor(total * 2 / 3) && !isFirst && !isLast) {
+    types.push('current_events');
+  }
+
+  // Listener activity once, around 3/4 through
+  if (idx === Math.floor(total * 3 / 4) && !isFirst && !isLast) {
+    types.push('listener_activity');
+  }
+
+  // Station ID drop again at 2/3 through (for longer shows)
+  if (total > 12 && idx === Math.floor(total * 2 / 3) + 1 && !isLast) {
+    types.push('station_id');
+  }
+
   if (isLast) types.push('show_outro');
 
   return types;
@@ -103,8 +153,10 @@ export async function runGenerationJob(
   // 1. Load station info (including API key columns + station identity columns from migration 039)
   const { rows: stationRows } = await pool.query<StationRow>(
     `SELECT id, name, timezone, locale_code, company_id,
+            city, country_code, latitude, longitude,
+            weather_api_key, news_api_key,
             openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, gemini_api_key, mistral_api_key,
-            callsign, tagline, frequency, city
+            callsign, tagline, frequency
      FROM stations WHERE id = $1`,
     [data.station_id],
   );
@@ -164,6 +216,76 @@ export async function runGenerationJob(
       `Set OPENROUTER_API_KEY (or the relevant key) in Railway environment variables, ` +
       `or add a per-station API key in Station Settings → DJ Settings.`,
     );
+  }
+
+  // 1c. Fetch live weather and news data (non-blocking — all failures are soft).
+  //     Priority chain for each:
+  //       1. Dedicated API key (OpenWeatherMap / NewsAPI)
+  //       2. DuckDuckGo Instant Answer (free, no key required)
+  //     City is derived from station.city if set, otherwise inferred from station.timezone.
+  let weatherData: WeatherData | undefined;
+  let newsItems: NewsItem[] | undefined;
+
+  const resolvedCity: string = station.city ?? cityFromTimezone(station.timezone);
+
+  // ── Weather ────────────────────────────────────────────────────────────────
+  const weatherApiKey = station.weather_api_key ?? undefined;
+  if (weatherApiKey) {
+    // Primary: OpenWeatherMap
+    try {
+      weatherData = await openWeatherMapProvider.fetch({
+        api_key: weatherApiKey,
+        city: resolvedCity,
+        country_code: station.country_code ?? undefined,
+        lat: station.latitude ?? undefined,
+        lon: station.longitude ?? undefined,
+      });
+      console.info(`[generationWorker] Weather (OpenWeatherMap): ${weatherData.summary}`);
+    } catch (err) {
+      console.warn('[generationWorker] OpenWeatherMap failed, falling back to DuckDuckGo:', err);
+    }
+  }
+
+  if (!weatherData) {
+    // Fallback: DuckDuckGo web search (no key needed)
+    try {
+      const ddgResult = await ddgWeatherSearch(resolvedCity);
+      if (ddgResult) {
+        weatherData = ddgResult;
+        console.info(`[generationWorker] Weather (DuckDuckGo): ${weatherData.summary}`);
+      }
+    } catch (err) {
+      console.warn('[generationWorker] DuckDuckGo weather search failed (non-fatal):', err);
+    }
+  }
+
+  // ── News ───────────────────────────────────────────────────────────────────
+  const newsApiKey = station.news_api_key ?? undefined;
+  if (newsApiKey) {
+    // Primary: NewsAPI
+    try {
+      newsItems = await newsApiProvider.fetch({
+        api_key: newsApiKey,
+        country_code: station.country_code ?? undefined,
+        query: station.city ?? undefined,
+      });
+      console.info(`[generationWorker] News (NewsAPI): ${newsItems.length} headlines`);
+    } catch (err) {
+      console.warn('[generationWorker] NewsAPI failed, falling back to DuckDuckGo:', err);
+    }
+  }
+
+  if (!newsItems || newsItems.length === 0) {
+    // Fallback: DuckDuckGo web search (no key needed)
+    try {
+      const ddgNews = await ddgNewsSearch(resolvedCity);
+      if (ddgNews.length > 0) {
+        newsItems = ddgNews;
+        console.info(`[generationWorker] News (DuckDuckGo): ${newsItems.length} headlines`);
+      }
+    } catch (err) {
+      console.warn('[generationWorker] DuckDuckGo news search failed (non-fatal):', err);
+    }
   }
 
   await reportProgress(10, 'Loading playlist…');
@@ -298,6 +420,7 @@ export async function runGenerationJob(
     const ctx = {
       station_name: station.name,
       station_timezone: station.timezone,
+      station_city: resolvedCity,
       station_identity: stationIdentity,
       current_date: currentDate,
       current_hour: overrides?.current_hour ?? 0,
@@ -410,6 +533,7 @@ export async function runGenerationJob(
       const ctx = {
         station_name: station.name,
         station_timezone: station.timezone,
+        station_city: resolvedCity,
         station_identity: stationIdentity,
         current_date: currentDate,
         current_hour: entry.hour,
@@ -418,6 +542,8 @@ export async function runGenerationJob(
         next_song: next ? { title: next.song_title, artist: next.song_artist, duration_sec: next.duration_sec } : undefined,
         segment_type,
         custom_template: customTemplate,
+        weather: weatherData,
+        news_items: newsItems,
         previousSegmentTexts: generatedTexts.slice(-4),
         segmentIndex: position,
       };
@@ -477,6 +603,7 @@ export async function runGenerationJob(
           const shoutoutCtx = {
             station_name: station.name,
             station_timezone: station.timezone,
+            station_city: resolvedCity,
             station_identity: stationIdentity,
             current_date: currentDate,
             current_hour: entry.hour,
