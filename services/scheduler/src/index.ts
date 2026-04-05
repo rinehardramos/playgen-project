@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import { schedulerRoutes } from './routes/scheduler';
 import { configRoutes } from './routes/config';
@@ -15,6 +16,7 @@ const app = Fastify({
   },
 });
 
+app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
 app.register(sensible);
 
 // ── Health check ──────────────────────────────────────────────────────────────
