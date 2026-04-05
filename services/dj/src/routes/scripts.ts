@@ -84,7 +84,6 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { playlistId: string }; Body: GenerateScriptRequest }>(
     '/dj/playlists/:playlistId/generate',
     async (req, reply) => {
-      const { station_id } = req.body as any;
       const { playlistId } = req.params;
 
       // Look up station to check auto_approve flag

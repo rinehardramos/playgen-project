@@ -150,7 +150,7 @@ export function parseMaterialString(raw: string): ParsedSong | null {
  */
 export function parseXlsmCategorySheet(
   rows: unknown[][],
-  sheetName: string
+  _sheetName: string
 ): ParsedSong[] {
   const songs: ParsedSong[] = [];
   // Row 0: header (# / MATERIAL / backtick / hourly slots)

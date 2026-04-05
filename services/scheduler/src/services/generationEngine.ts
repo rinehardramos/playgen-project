@@ -37,11 +37,6 @@ interface PlayHistoryEntry {
   played_at: Date;
 }
 
-interface DayPlayCount {
-  song_id: string;
-  plays: number;
-}
-
 interface PlacedEntry {
   hour: number;
   position: number;
@@ -335,9 +330,6 @@ export async function generatePlaylist(
     );
     const overrideSet = new Set<string>(
       overridesRes.rows.map((o) => `${o.hour}:${o.position}`),
-    );
-    const overrideMap = new Map<string, string>(
-      overridesRes.rows.map((o) => [`${o.hour}:${o.position}`, o.song_id]),
     );
 
     // ── Step 9a: Batch-load ALL active songs with eligibility (single query) ─

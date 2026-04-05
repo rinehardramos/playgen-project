@@ -18,7 +18,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
   // All routes require auth
   app.addHook('preHandler', authenticate);
 
-  app.get('/dj/profiles', async (req, reply) => {
+  app.get('/dj/profiles', async (req, _reply) => {
     const { company_id } = (req as any).user;
     return profileService.listProfiles(company_id);
   });
@@ -53,7 +53,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
   // List voices: OpenAI (static) + ElevenLabs (live API if key configured, else fallback)
   app.get<{ Querystring: { station_id?: string } }>('/dj/tts/voices', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-  }, async (req, reply) => {
+  }, async (req, _reply) => {
     // Allow station-level API key override for ElevenLabs
     let elevenLabsKey = config.tts.elevenlabsApiKey;
     if (req.query.station_id) {

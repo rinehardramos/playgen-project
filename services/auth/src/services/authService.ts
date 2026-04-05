@@ -42,7 +42,7 @@ export async function login(email: string, password: string): Promise<{
   await pool.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
 
   const tokens = await issueTokenPair(user);
-  const { password_hash, role_id, ...safeUser } = user;
+  const { password_hash: _password_hash, role_id: _role_id, ...safeUser } = user;
   return { tokens, user: safeUser };
 }
 
@@ -158,7 +158,7 @@ export async function acceptInvite(rawToken: string, displayName: string, passwo
   await pool.query(`UPDATE user_invites SET accepted_at = NOW() WHERE id = $1`, [invite.id]);
   const { rows: userRows } = await pool.query<UserRow>(`SELECT u.id, u.company_id, u.role_id, r.code AS role_code, r.permissions AS role_permissions, u.email, u.display_name, u.password_hash, u.station_ids, u.is_active FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`, [newUserId]);
   const tokens = await issueTokenPair(userRows[0]);
-  const { password_hash, role_id, ...safeUser } = userRows[0];
+  const { password_hash: _password_hash, role_id: _role_id, ...safeUser } = userRows[0];
   return { tokens, user: safeUser };
 }
 
