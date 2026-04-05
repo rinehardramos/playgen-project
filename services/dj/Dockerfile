@@ -1,3 +1,4 @@
+# cache-bust: adlib/joke segment types added (2026-04-06)
 FROM node:20-alpine AS builder
 WORKDIR /app
 RUN npm install -g pnpm
