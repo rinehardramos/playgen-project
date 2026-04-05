@@ -199,6 +199,29 @@ export interface Station {
   sort_order?: number;
   created_at: Date;
   updated_at: Date;
+  // Identity (added in migration 039)
+  callsign?: string | null;
+  tagline?: string | null;
+  frequency?: string | null;
+  broadcast_type?: 'fm' | 'am' | 'online' | 'podcast' | 'dab' | null;
+  // Locale
+  city?: string | null;
+  province?: string | null;
+  country?: string | null;
+  locale_code?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  // Social media
+  facebook_page_id?: string | null;
+  facebook_page_url?: string | null;
+  twitter_handle?: string | null;
+  instagram_handle?: string | null;
+  youtube_channel_url?: string | null;
+  // Branding
+  logo_url?: string | null;
+  primary_color?: string | null;
+  secondary_color?: string | null;
+  website_url?: string | null;
 }
 
 export interface Role {
