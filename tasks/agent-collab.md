@@ -30,6 +30,8 @@ Before starting any task, an agent MUST:
 ## Active Work
 
 ## Recently Completed
+- [x] feat(dj): Time Check segment — localized time_check injection (issue #203, feat/issue-203-204-dj-segments) | @claude-code | 2026-04-06
+- [x] feat(dj): Station ID segment — callsign/tagline/frequency injection (issue #204, feat/issue-203-204-dj-segments) | @claude-code | 2026-04-06
 - [x] Google OAuth login (issue #200, feat/issue-200-google-oauth) | @claude-code | 2026-04-05
 - [x] Fix DJ INTERNAL_ERROR: reject handler 422/503 error codes (issue #183, fix/issue-183-dj-error) | @claude-code | 2026-04-05
 - [x] Agent workflow improvements — P0 daemon fixes + CLAUDE.md rules (issue #158, feat/issue-158-workflow-improvements) | @claude-code | 2026-04-05

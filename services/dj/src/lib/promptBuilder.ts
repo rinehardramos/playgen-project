@@ -11,11 +11,22 @@ export interface ShoutoutContext {
   listener_message: string;
 }
 
+/** Station identity fields sourced from the station_details columns (migration 039). */
+export interface StationIdentity {
+  callsign?: string | null;
+  tagline?: string | null;
+  frequency?: string | null;
+  city?: string | null;
+}
+
 export interface ScriptContext {
   station_name: string;
   station_timezone: string;
+  station_identity?: StationIdentity;
   current_date: string;    // YYYY-MM-DD
   current_hour: number;
+  /** Human-readable local time string, e.g. "3:47 PM" — used for time_check segments. */
+  current_time_local?: string;
   dj_profile: DjProfile;
   prev_song?: SongContext;
   next_song?: SongContext;
@@ -133,20 +144,39 @@ const SEGMENT_DEFAULTS: Record<DjSegmentType, string> = {
   song_intro: `You just played "{{prev_song_title}}" by {{prev_song_artist}}. Now set up "{{next_song_title}}" by {{next_song_artist}}. Pick ONE creative angle: a fun fact about the artist, what makes this track special, a feeling it evokes, or a sharp observation — then hand off to the song. Do NOT just say what the song is called again.`,
   song_transition: `Bridge from "{{prev_song_title}}" by {{prev_song_artist}} to "{{next_song_title}}" by {{next_song_artist}}. Comment on what you just heard, then pivot naturally to what's coming. Make it feel like one continuous conversation.`,
   show_outro: `Wrap up the show on {{station_name}}. Thank listeners genuinely, give a feel for what's next or who's on after you, and sign off with personality.`,
-  station_id: `Give the station ID for {{station_name}} in a short, punchy line. Make it memorable — not just the name.`,
-  time_check: `Call out the time ({{current_hour}}:00) on {{station_name}}. Tie it to the mood, the day, or something listeners might be doing right now — don't just read the clock.`,
+  station_id: `Give a live station identification for {{station_name}}{{station_id_suffix}}. Say the station name clearly and naturally — work in the callsign, frequency, or tagline if available, but keep it punchy and in-character. No more than 2 sentences.`,
+  time_check: `Give a time check — it's {{current_time_local}} on {{station_name}}. Weave the time naturally into a moment: tie it to the vibe, what listeners might be doing right now, or just say it with personality. Keep it brief (1-2 sentences).`,
   weather_tease: `Tease an upcoming weather update in one sentence. Make it feel relevant, not just a filler announcement.`,
   ad_break: `Announce a short commercial break in a smooth, natural way that doesn't feel like a hard stop.`,
   current_events: `Briefly mention 1-2 current news headlines in a natural, conversational way on {{station_name}}. Keep it light and relatable — you're a DJ, not a newscaster. Headlines available: {{news_headlines}}`,
   listener_activity: `Give a shoutout to {{listener_name}} who sent in this message: "{{listener_message}}". Make it feel personal, warm, and on-brand for the station. Keep it to 2-3 sentences.`,
 };
 
+/** Build the station ID suffix from identity fields, e.g. " — DWRR, 97.1 FM, The Sound of Manila". */
+function buildStationIdSuffix(identity?: StationIdentity | null): string {
+  if (!identity) return '';
+  const parts: string[] = [];
+  if (identity.callsign) parts.push(identity.callsign);
+  if (identity.frequency) parts.push(identity.frequency);
+  if (identity.tagline) parts.push(identity.tagline);
+  if (identity.city) parts.push(identity.city);
+  if (parts.length === 0) return '';
+  return ` — ${parts.join(', ')}`;
+}
+
 // Simple {{variable}} interpolation
 function interpolate(template: string, ctx: ScriptContext): string {
+  const stationIdSuffix = buildStationIdSuffix(ctx.station_identity);
   return template
     .replace(/\{\{station_name\}\}/g, ctx.station_name)
     .replace(/\{\{current_date\}\}/g, ctx.current_date)
     .replace(/\{\{current_hour\}\}/g, String(ctx.current_hour))
+    .replace(/\{\{current_time_local\}\}/g, ctx.current_time_local ?? `${ctx.current_hour}:00`)
+    .replace(/\{\{station_id_suffix\}\}/g, stationIdSuffix)
+    .replace(/\{\{callsign\}\}/g, ctx.station_identity?.callsign ?? '')
+    .replace(/\{\{tagline\}\}/g, ctx.station_identity?.tagline ?? '')
+    .replace(/\{\{frequency\}\}/g, ctx.station_identity?.frequency ?? '')
+    .replace(/\{\{city\}\}/g, ctx.station_identity?.city ?? '')
     .replace(/\{\{prev_song_title\}\}/g, ctx.prev_song?.title ?? '')
     .replace(/\{\{prev_song_artist\}\}/g, ctx.prev_song?.artist ?? '')
     .replace(/\{\{next_song_title\}\}/g, ctx.next_song?.title ?? '')
