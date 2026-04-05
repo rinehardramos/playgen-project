@@ -2,19 +2,20 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { getPool } from '../db';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from './jwtService';
-import { ROLE_PERMISSIONS, TokenPair } from '@playgen/types';
-import type { RoleCode, Permission } from '@playgen/types';
+import { TokenPair } from '@playgen/types';
+import type { RoleCode, JwtPayload, SubscriptionTier } from '@playgen/types';
 
 export interface UserRow {
   id: string;
   company_id: string;
   role_id: string;
   role_code: RoleCode;
-  role_permissions: Permission[];
+  role_permissions: string[];
   email: string;
   display_name: string;
   password_hash: string;
   station_ids: string[];
+  perm_version: number;
   is_active: boolean;
 }
 
@@ -26,7 +27,7 @@ export async function login(email: string, password: string): Promise<{
   const { rows } = await pool.query<UserRow>(
     `SELECT u.id, u.company_id, u.role_id, r.code AS role_code,
             r.permissions AS role_permissions, u.email, u.display_name,
-            u.password_hash, u.station_ids, u.is_active
+            u.password_hash, u.station_ids, COALESCE(u.perm_version, 1) AS perm_version, u.is_active
      FROM users u
      JOIN roles r ON r.id = u.role_id
      WHERE u.email = $1`,
@@ -69,7 +70,7 @@ export async function refresh(rawRefreshToken: string): Promise<TokenPair> {
   const { rows: userRows } = await pool.query<UserRow>(
     `SELECT u.id, u.company_id, u.role_id, r.code AS role_code,
             r.permissions AS role_permissions, u.email, u.display_name,
-            u.password_hash, u.station_ids, u.is_active
+            u.password_hash, u.station_ids, COALESCE(u.perm_version, 1) AS perm_version, u.is_active
      FROM users u
      JOIN roles r ON r.id = u.role_id
      WHERE u.id = $1 AND u.is_active = TRUE`,
@@ -90,17 +91,30 @@ export async function logout(rawRefreshToken: string): Promise<void> {
 
 export async function issueTokenPair(user: UserRow): Promise<TokenPair> {
   const pool = getPool();
-  const permissions = user.role_permissions?.length
-    ? user.role_permissions
-    : (ROLE_PERMISSIONS[user.role_code] ?? []);
 
-  const accessToken = signAccessToken({
+  // Get subscription tier — falls back to 'free' if no active subscription found
+  const tierResult = await pool.query<{ tier: string }>(
+    `SELECT COALESCE(s.tier, 'free') AS tier
+     FROM users u
+     LEFT JOIN subscriptions s ON s.company_id = u.company_id
+       AND s.status IN ('active', 'trialing', 'past_due')
+     WHERE u.id = $1
+     LIMIT 1`,
+    [user.id],
+  );
+  const tier = (tierResult.rows[0]?.tier ?? 'free') as SubscriptionTier;
+  const isSystemRole = ['super_admin', 'company_admin'].includes(user.role_code);
+
+  const accessPayload: Omit<JwtPayload, 'iat' | 'exp'> = {
     sub: user.id,
-    company_id: user.company_id,
-    station_ids: user.station_ids,
-    role_code: user.role_code,
-    permissions,
-  });
+    cid: user.company_id,
+    rc: user.role_code,
+    tier,
+    pv: user.perm_version ?? 1,
+    ...(isSystemRole ? { sys: true as const } : {}),
+  };
+
+  const accessToken = signAccessToken(accessPayload);
 
   const refreshToken = signRefreshToken(user.id);
   const tokenHash = hashToken(refreshToken);
@@ -108,7 +122,7 @@ export async function issueTokenPair(user: UserRow): Promise<TokenPair> {
   await pool.query(
     `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
      VALUES ($1, $2, NOW() + INTERVAL '7 days')`,
-    [user.id, tokenHash]
+    [user.id, tokenHash],
   );
 
   return { access_token: accessToken, refresh_token: refreshToken };
@@ -156,7 +170,7 @@ export async function acceptInvite(rawToken: string, displayName: string, passwo
   const { rows: newUserRows } = await pool.query<{ id: string }>(`INSERT INTO users (company_id, role_id, email, display_name, password_hash, station_ids) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, [invite.company_id, invite.role_id, invite.email, displayName, passwordHash, invite.station_ids]);
   const newUserId = newUserRows[0].id;
   await pool.query(`UPDATE user_invites SET accepted_at = NOW() WHERE id = $1`, [invite.id]);
-  const { rows: userRows } = await pool.query<UserRow>(`SELECT u.id, u.company_id, u.role_id, r.code AS role_code, r.permissions AS role_permissions, u.email, u.display_name, u.password_hash, u.station_ids, u.is_active FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`, [newUserId]);
+  const { rows: userRows } = await pool.query<UserRow>(`SELECT u.id, u.company_id, u.role_id, r.code AS role_code, r.permissions AS role_permissions, u.email, u.display_name, u.password_hash, u.station_ids, COALESCE(u.perm_version, 1) AS perm_version, u.is_active FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`, [newUserId]);
   const tokens = await issueTokenPair(userRows[0]);
   const { password_hash: _password_hash, role_id: _role_id, ...safeUser } = userRows[0];
   return { tokens, user: safeUser };

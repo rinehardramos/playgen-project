@@ -41,7 +41,7 @@ export async function songRoutes(app: FastifyInstance) {
       duration_sec?: number;
       eligible_hours?: number[];
     };
-    const song = await songService.createSong({ ...body, station_id: id, company_id: req.user.company_id });
+    const song = await songService.createSong({ ...body, station_id: id, company_id: req.user.cid });
     return reply.code(201).send(song);
   });
 
@@ -92,7 +92,7 @@ export async function songRoutes(app: FastifyInstance) {
     try {
       await pipeline(data.file, fs.createWriteStream(tmpPath));
 
-      const result = await importXlsmSongs(tmpPath, id, req.user.company_id);
+      const result = await importXlsmSongs(tmpPath, id, req.user.cid);
 
       if (query.include_history === 'true') {
         const historyResult = await importXlsmLoadHistory(tmpPath, id);

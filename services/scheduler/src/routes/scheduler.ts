@@ -272,15 +272,21 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       // Enforce station access: non-super/company admins may only see jobs for
       // stations they have access to.
       const job = res.rows[0] as { station_id: string; [key: string]: unknown };
-      const { role_code, station_ids } = req.user;
-      if (
-        role_code !== 'super_admin' &&
-        role_code !== 'company_admin' &&
-        !station_ids.includes(job.station_id)
-      ) {
-        return reply.code(403).send({
-          error: { code: 'FORBIDDEN', message: 'No access to this station' },
-        });
+      const user = req.user;
+      if (!user.sys) {
+        const pool = getPool();
+        const access = await pool.query(
+          `SELECT 1 FROM user_station_assignments WHERE user_id = $1 AND station_id = $2
+           UNION ALL
+           SELECT 1 FROM users WHERE id = $1 AND $2::uuid = ANY(station_ids)
+           LIMIT 1`,
+          [user.sub, job.station_id],
+        );
+        if (!access.rows.length) {
+          return reply.code(403).send({
+            error: { code: 'FORBIDDEN', message: 'No access to this station' },
+          });
+        }
       }
 
       return reply.code(200).send(job);

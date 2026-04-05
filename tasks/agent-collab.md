@@ -13,6 +13,7 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
+- [ ] Tiered user permission system — subscriptions, custom roles, station hierarchy, thin JWT (issue #216, feat/issue-216-tiered-permissions) | @claude-code | 2026-04-06
 
 ## Recently Completed
 - [x] Google OAuth login (issue #200, feat/issue-200-google-oauth) | @claude-code | 2026-04-05
