@@ -189,7 +189,36 @@ export async function runGenerationJob(
       : station.openrouter_api_key)
     ?? undefined;
 
-  // Collect generated texts for variety tracking
+  const effectiveTtsProvider = (stationSettings['tts_provider'] ?? config.tts.provider) as string;
+  const effectiveTtsApiKey = stationSettings['tts_api_key']
+    ?? (effectiveTtsProvider === 'elevenlabs'
+      ? station.elevenlabs_api_key
+      : effectiveTtsProvider === 'google'
+      ? station.gemini_api_key   // Google TTS uses the same Google/Gemini API key
+      : effectiveTtsProvider === 'gemini_tts'
+      ? station.gemini_api_key   // Gemini native TTS also uses the Gemini API key
+      : effectiveTtsProvider === 'mistral'
+      ? station.mistral_api_key
+      : station.openai_api_key)
+    ?? (effectiveTtsProvider === 'elevenlabs'
+      ? config.tts.elevenlabsApiKey
+      : effectiveTtsProvider === 'google'
+      ? config.tts.googleApiKey
+      : effectiveTtsProvider === 'gemini_tts'
+      ? config.tts.geminiApiKey
+      : effectiveTtsProvider === 'mistral'
+      ? config.tts.mistralApiKey
+      : config.tts.openaiApiKey);
+
+  const ttsEnabled = !!(effectiveTtsApiKey);
+
+  // Collect all generated segments for TTS pass + variety context
+  const generatedSegments: Array<{
+    id: string;
+    script_text: string;
+    position: number;
+  }> = [];
+  // Running list of generated texts — passed to each LLM call to enforce variety
   const generatedTexts: string[] = [];
 
   // Pre-count total segment slots for progress reporting
@@ -263,13 +292,15 @@ export async function runGenerationJob(
       }
 
       const pos = position++;
-      await pool.query(
+      const segResult = await pool.query(
         `INSERT INTO dj_segments
            (script_id, playlist_entry_id, segment_type, position, script_text)
-         VALUES ($1, $2, $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id`,
         [script_id, entry.id, segment_type, pos, script_text],
       );
 
+      generatedSegments.push({ id: segResult.rows[0].id, script_text, position: pos });
       generatedTexts.push(script_text);
       segmentsDone++;
     }

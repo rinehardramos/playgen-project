@@ -54,6 +54,14 @@ interface Props {
   playlistId: string;
   onScriptChange: (script: ReviewPanelScript | null) => void;
   onGenerating: (v: boolean) => void;
+  /** Called when user clicks ▶ on a segment — parent resolves URL and plays */
+  onPlaySegment?: (segment: ReviewPanelSegment) => void;
+  /** ID of the segment currently playing in the global player (for visual highlight) */
+  playingSegmentId?: string | null;
+  /** Whether the global player is currently playing (for ▶/⏸ toggle) */
+  isPlaying?: boolean;
+  /** Called after the script is successfully approved — parent can trigger audio download */
+  onApproved?: (scriptId: string) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -80,6 +88,10 @@ export default function ScriptReviewPanel({
   playlistId,
   onScriptChange,
   onGenerating,
+  onPlaySegment,
+  playingSegmentId,
+  isPlaying,
+  onApproved,
 }: Props) {
   const [script, setScript] = useState<ReviewPanelScript>(initialScript);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +106,7 @@ export default function ScriptReviewPanel({
   // Per-segment TTS states
   const [generatingTts, setGeneratingTts] = useState<Record<string, boolean>>({});
   const [deletingTts, setDeletingTts] = useState<Record<string, boolean>>({});
-  const [playingSegmentId, setPlayingSegmentId] = useState<string | null>(null);
+  const [localPlayingSegmentId, setLocalPlayingSegmentId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Bulk TTS generation state
@@ -267,6 +279,8 @@ export default function ScriptReviewPanel({
         {},
       );
       updateScript({ ...script, review_status: updated.review_status });
+      // Notify parent so it can trigger a full-audio download
+      onApproved?.(script.id);
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to approve script');
     } finally {
@@ -447,10 +461,10 @@ export default function ScriptReviewPanel({
   async function handleDeleteTts(segmentId: string) {
     setDeletingTts((p) => ({ ...p, [segmentId]: true }));
     // Stop playback if this segment is playing
-    if (playingSegmentId === segmentId) {
+    if (localPlayingSegmentId === segmentId) {
       audioRef.current?.pause();
       audioRef.current = null;
-      setPlayingSegmentId(null);
+      setLocalPlayingSegmentId(null);
     }
     try {
       await api.delete(`/api/v1/dj/segments/${segmentId}/audio`);
@@ -470,10 +484,10 @@ export default function ScriptReviewPanel({
   function handlePlayTts(seg: ReviewPanelSegment) {
     if (!seg.audio_url) return;
     // If already playing this segment, pause it
-    if (playingSegmentId === seg.id && audioRef.current) {
+    if (localPlayingSegmentId === seg.id && audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
-      setPlayingSegmentId(null);
+      setLocalPlayingSegmentId(null);
       return;
     }
     // Stop any currently playing segment
@@ -486,10 +500,10 @@ export default function ScriptReviewPanel({
     const url = `${base}${seg.audio_url}`;
     const audio = new Audio(url);
     audioRef.current = audio;
-    setPlayingSegmentId(seg.id);
-    audio.onended = () => { audioRef.current = null; setPlayingSegmentId(null); };
-    audio.onerror = () => { audioRef.current = null; setPlayingSegmentId(null); };
-    audio.play().catch(() => { audioRef.current = null; setPlayingSegmentId(null); });
+    setLocalPlayingSegmentId(seg.id);
+    audio.onended = () => { audioRef.current = null; setLocalPlayingSegmentId(null); };
+    audio.onerror = () => { audioRef.current = null; setLocalPlayingSegmentId(null); };
+    audio.play().catch(() => { audioRef.current = null; setLocalPlayingSegmentId(null); });
   }
 
   // ── Bulk TTS generation ─────────────────────────────────────────────────
@@ -687,9 +701,36 @@ export default function ScriptReviewPanel({
                   )}
                 </div>
 
+                {/* Right-side controls */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Play / Pause button — shown whenever TTS audio exists */}
+                  {seg.audio_url && onPlaySegment && (
+                    <button
+                      onClick={() => onPlaySegment(seg)}
+                      title={playingSegmentId === seg.id && isPlaying ? 'Pause' : 'Preview segment audio'}
+                      className={`p-1.5 rounded-lg border text-xs transition-colors ${
+                        playingSegmentId === seg.id
+                          ? 'bg-violet-600/30 border-violet-500/50 text-violet-300'
+                          : 'bg-[#1e1e2e] border-[#3a3a50] text-gray-400 hover:text-violet-400 hover:border-violet-500/40'
+                      }`}
+                    >
+                      {playingSegmentId === seg.id && isPlaying ? (
+                        /* Pause icon */
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                        </svg>
+                      ) : (
+                        /* Play icon */
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+
                 {/* Per-segment action buttons — only when script is pending_review */}
                 {isPending && !isRewriting && (
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <>
                     {/* Accept */}
                     <button
                       onClick={() => handleApproveSegment(seg.id)}
@@ -720,7 +761,7 @@ export default function ScriptReviewPanel({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
-                  </div>
+                  </>
                 )}
 
                 {/* Rewriting spinner badge */}
@@ -730,7 +771,8 @@ export default function ScriptReviewPanel({
                     Rewriting…
                   </span>
                 )}
-              </div>
+                </div>{/* end right-side controls */}
+              </div>{/* end segment header */}
 
               {/* Script text / edit area */}
               {isPending && !isRewriting ? (
@@ -845,12 +887,12 @@ export default function ScriptReviewPanel({
                     <button
                       onClick={() => handlePlayTts(seg)}
                       className={`flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-colors ${
-                        playingSegmentId === seg.id
+                        localPlayingSegmentId === seg.id
                           ? 'bg-violet-600/30 border-violet-500/50 text-violet-200'
                           : 'bg-[#1a1a2a] border-[#2a2a40] text-gray-300 hover:border-violet-500/40 hover:text-violet-300'
                       }`}
                     >
-                      {playingSegmentId === seg.id ? (
+                      {localPlayingSegmentId === seg.id ? (
                         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                         </svg>
@@ -859,7 +901,7 @@ export default function ScriptReviewPanel({
                           <path d="M8 5v14l11-7z" />
                         </svg>
                       )}
-                      {playingSegmentId === seg.id ? 'Playing…' : 'Play'}
+                      {localPlayingSegmentId === seg.id ? 'Playing…' : 'Play'}
                       {seg.audio_duration_sec && (
                         <span className="text-gray-500">
                           {seg.audio_duration_sec < 60

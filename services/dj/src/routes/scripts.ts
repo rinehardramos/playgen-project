@@ -74,6 +74,59 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // Download full show audio — all segment audio files concatenated in order
+  app.get<{ Params: { id: string } }>(
+    '/dj/scripts/:id/audio',
+    async (req, reply) => {
+      const { id } = req.params;
+      const { company_id } = req.user as { company_id: string };
+      const pool = getPool();
+
+      // Verify tenant ownership and get playlist date for the filename
+      const { rows: scriptRows } = await pool.query<{ playlist_date: string; station_name: string }>(
+        `SELECT pl.date::text AS playlist_date, st.name AS station_name
+         FROM dj_scripts scr
+         JOIN playlists pl ON pl.id = scr.playlist_id
+         JOIN stations st ON st.id = scr.station_id
+         WHERE scr.id = $1 AND st.company_id = $2`,
+        [id, company_id],
+      );
+      if (!scriptRows[0]) return reply.notFound('Script not found');
+
+      const { rows: segments } = await pool.query<{ position: number; audio_url: string | null }>(
+        `SELECT position, audio_url FROM dj_segments WHERE script_id = $1 ORDER BY position`,
+        [id],
+      );
+
+      const storage = getStorageAdapter();
+      const prefix = '/api/v1/dj/audio/';
+      const buffers: Buffer[] = [];
+
+      for (const seg of segments) {
+        if (!seg.audio_url) continue;
+        const relativePath = seg.audio_url.startsWith(prefix)
+          ? seg.audio_url.substring(prefix.length)
+          : seg.audio_url;
+        try {
+          buffers.push(await storage.read(relativePath));
+        } catch {
+          // skip segments whose audio file is missing
+        }
+      }
+
+      if (buffers.length === 0) return reply.notFound('No audio files found for this script');
+
+      const combined = Buffer.concat(buffers);
+      const safeDate = (scriptRows[0].playlist_date ?? 'show').replace(/[^0-9-]/g, '');
+      const filename = `dj-show-${safeDate}.mp3`;
+
+      return reply
+        .header('Content-Type', 'audio/mpeg')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(combined);
+    },
+  );
+
   // Get the DJ script for a playlist (latest version)
   app.get<{ Params: { playlistId: string } }>(
     '/dj/playlists/:playlistId/script',

@@ -566,6 +566,28 @@ export default function PlaylistDetailPage() {
                 playlistId={playlistId}
                 onScriptChange={(updated) => setDjScript(updated)}
                 onGenerating={(v) => setGenerating(v)}
+                onPlaySegment={(seg) => {
+                  if (!seg.audio_url) return;
+                  djPlayer.playSegment({
+                    id: seg.id,
+                    segmentType: seg.segment_type,
+                    position: seg.position,
+                    djName: 'DJ',
+                    audioUrl: resolveAudioUrl(seg.audio_url),
+                    durationSec: seg.audio_duration_sec,
+                  });
+                }}
+                playingSegmentId={djPlayer.currentSegment?.id ?? null}
+                isPlaying={djPlayer.isPlaying}
+                onApproved={(scriptId) => {
+                  // Trigger full-show audio download after approval
+                  const a = document.createElement('a');
+                  a.href = `${BASE}/api/v1/dj/scripts/${scriptId}/audio`;
+                  a.download = 'dj-show.mp3';
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                }}
               />
             </>
           )}
