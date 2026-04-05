@@ -90,6 +90,22 @@ export default function ScriptReviewPanel({
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Inline editable text for all segments when pending_review
+  const [segmentTexts, setSegmentTexts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      (initialScript.segments ?? []).map((s) => [s.id, s.edited_text ?? s.script_text]),
+    ),
+  );
+
+  // Re-sync segmentTexts when new script data arrives (e.g. after a rewrite)
+  useEffect(() => {
+    setSegmentTexts(
+      Object.fromEntries(
+        script.segments.map((s) => [s.id, s.edited_text ?? s.script_text]),
+      ),
+    );
+  }, [script.id]);
+
   // Bulk action loading
   const [bulkApproving, setBulkApproving] = useState(false);
   const [reviewing, setReviewing] = useState(false);
@@ -394,7 +410,7 @@ export default function ScriptReviewPanel({
                     <button
                       onClick={() => handleApproveSegment(seg.id)}
                       disabled={!!approving[seg.id]}
-                      title="Accept (a)"
+                      title="Approve segment"
                       className={`p-1.5 rounded-lg border text-xs font-bold transition-colors ${
                         seg.segment_review_status === 'approved'
                           ? 'bg-green-900/40 border-green-700/50 text-green-400'
@@ -410,24 +426,10 @@ export default function ScriptReviewPanel({
                       )}
                     </button>
 
-                    {/* Edit */}
-                    <button
-                      onClick={() => {
-                        setEditing(seg.id);
-                        setEditText(seg.edited_text ?? seg.script_text);
-                      }}
-                      title="Edit (e)"
-                      className="p-1.5 rounded-lg border bg-[#1e1e2e] border-[#3a3a50] text-gray-400 hover:text-violet-400 hover:border-violet-700/50 transition-colors"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-
                     {/* Reject / rewrite */}
                     <button
                       onClick={() => handleRejectSegment(seg.id)}
-                      title="Reject & rewrite (r)"
+                      title="Reject & rewrite"
                       className="p-1.5 rounded-lg border bg-[#1e1e2e] border-[#3a3a50] text-gray-400 hover:text-red-400 hover:border-red-700/50 transition-colors"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -447,7 +449,43 @@ export default function ScriptReviewPanel({
               </div>
 
               {/* Script text / edit area */}
-              {editing === seg.id ? (
+              {isPending && !isRewriting ? (
+                <div className="space-y-1.5">
+                  <textarea
+                    value={segmentTexts[seg.id] ?? seg.edited_text ?? seg.script_text}
+                    onChange={(e) =>
+                      setSegmentTexts((prev) => ({ ...prev, [seg.id]: e.target.value }))
+                    }
+                    onBlur={async () => {
+                      const newText = segmentTexts[seg.id] ?? '';
+                      const original = seg.edited_text ?? seg.script_text;
+                      if (newText === original) return;
+                      setSaving(true);
+                      try {
+                        await api.put(`/api/v1/dj/segments/${seg.id}/text`, { text: newText });
+                        updateScript({
+                          ...script,
+                          segments: script.segments.map((s) =>
+                            s.id === seg.id
+                              ? { ...s, edited_text: newText, segment_review_status: 'edited' }
+                              : s,
+                          ),
+                        });
+                      } catch {
+                        setError('Failed to save edit');
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    rows={Math.max(3, Math.ceil((segmentTexts[seg.id] ?? seg.edited_text ?? seg.script_text).length / 80))}
+                    className="input w-full text-sm leading-relaxed resize-y"
+                    placeholder="Script text…"
+                  />
+                  {saving && editing === seg.id && (
+                    <p className="text-[10px] text-gray-500">Saving…</p>
+                  )}
+                </div>
+              ) : editing === seg.id ? (
                 <div className="space-y-3">
                   <textarea
                     value={editText}
