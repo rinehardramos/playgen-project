@@ -217,3 +217,17 @@ gh project item-edit --project-id "$PROJECT_ID" --id "$ITEM" --field-id "$FIELD_
 **How to apply**: Before changing a line of code, write down what EXACTLY is broken and why. If you can't explain the root cause in one sentence, keep investigating.
 
 ---
+
+## [process] Run typecheck + Docker build before every push — 2026-04-05
+
+**Trigger**: PR #163 failed CI because `pnpm run typecheck` wasn't run locally before pushing. A missing dependency (`@playgen/middleware`) in `services/auth/package.json` caused TypeScript build failure. The Docker build also failed because the Dockerfile didn't copy `shared/middleware/`.
+
+**Rule**: ALWAYS run `pnpm run typecheck` before `git push`. When adding a new workspace package dependency, ALSO verify the service's Dockerfile copies that package in the build context.
+
+**Why**: CI runs `pnpm run typecheck` and Docker builds as separate jobs. Local dev can mask failures because pnpm hoists workspace packages — a dependency missing from `package.json` may resolve fine locally via hoisting but fail in Docker (where only declared packages are in context).
+
+**How to apply**:
+1. Before any `git push`: run `pnpm run typecheck`
+2. When adding `"@playgen/X": "workspace:*"` to a service's deps: check that service's Dockerfile copies `shared/X/package.json` and `shared/X` source, and builds `@playgen/X` before the service
+3. Pattern: `COPY shared/X/package.json` → `RUN pnpm install` → `COPY shared/X` → `RUN pnpm --filter @playgen/X build`
+
