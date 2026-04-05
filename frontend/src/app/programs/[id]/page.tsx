@@ -121,8 +121,8 @@ export default function ProgramDetailPage() {
     setLoading(true);
     try {
       const [prog, clockData] = await Promise.all([
-        api(`/api/v1/programs/${id}`) as Promise<Program>,
-        api(`/api/v1/programs/${id}/clocks`) as Promise<ShowClock[]>,
+        api.get<unknown>(`/api/v1/programs/${id}`) as Promise<Program>,
+        api.get<unknown>(`/api/v1/programs/${id}/clocks`) as Promise<ShowClock[]>,
       ]);
       setProgram(prog);
       setClocks(clockData);
@@ -143,10 +143,10 @@ export default function ProgramDetailPage() {
     setEpisodesLoading(true);
     try {
       // Load episodes for this program (filtered by month)
-      const eps = await api(`/api/v1/programs/${id}/episodes?month=${month}`) as ProgramEpisode[];
+      const eps = await api.get<unknown>(`/api/v1/programs/${id}/episodes?month=${month}`) as ProgramEpisode[];
       setEpisodes(eps);
       // Also load all playlists for the station for this month to show non-episode days
-      const pls = await api(`/api/v1/stations/${program.station_id}/playlists?month=${month}`) as PlaylistWithEpisode[];
+      const pls = await api.get<unknown>(`/api/v1/stations/${program.station_id}/playlists?month=${month}`) as PlaylistWithEpisode[];
       // Cross-reference playlists with episodes
       const epsByPlaylist = new Map(eps.map(e => [e.playlist_id, e]));
       setPlaylists(pls.map(pl => ({ ...pl, episode: epsByPlaylist.get(pl.id) })));
@@ -166,10 +166,7 @@ export default function ProgramDetailPage() {
     if (!program || saving) return;
     setSaving(true);
     try {
-      const updated = await api(`/api/v1/programs/${program.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ name: editName, description: editDesc || null, is_active: editActive }),
-      }) as Program;
+      const updated = await api.put<unknown>(`/api/v1/programs/${program.id}`, { name: editName, description: editDesc || null, is_active: editActive }) as Program;
       setProgram(updated);
     } finally {
       setSaving(false);
@@ -179,7 +176,7 @@ export default function ProgramDetailPage() {
   async function deleteProgram() {
     if (!program || program.is_default) return;
     if (!window.confirm(`Delete "${program.name}"? All episodes will be moved to Unassigned.`)) return;
-    await api(`/api/v1/programs/${program.id}`, { method: 'DELETE' });
+    await api.delete<unknown>(`/api/v1/programs/${program.id}`);
     router.push('/programs');
   }
 
