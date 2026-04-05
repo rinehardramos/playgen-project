@@ -114,6 +114,9 @@ export default function ScriptReviewPanel({
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectNotes, setRejectNotes] = useState('');
 
+  // Per-segment instruction text for guided rewrites
+  const [segmentInstructions, setSegmentInstructions] = useState<Record<string, string>>({});
+
   // Propagate local script changes to parent
   const updateScript = useCallback(
     (updated: ReviewPanelScript) => {
@@ -180,9 +183,13 @@ export default function ScriptReviewPanel({
     }
   }
 
-  async function handleRejectSegment(segmentId: string) {
+  async function handleRejectSegment(segmentId: string, instruction?: string) {
     setRejecting((p) => ({ ...p, [segmentId]: true }));
     setError(null);
+    // Clear instruction input after submitting
+    if (instruction) {
+      setSegmentInstructions((p) => { const n = { ...p }; delete n[segmentId]; return n; });
+    }
     try {
       // Mark as rejected locally to show spinner immediately
       setScript((prev) => ({
@@ -191,9 +198,10 @@ export default function ScriptReviewPanel({
           s.id === segmentId ? { ...s, segment_review_status: 'rejected' } : s,
         ),
       }));
+      const body = instruction ? { reason: instruction } : {};
       const updated = await api.post<ReviewPanelSegment>(
         `/api/v1/dj/segments/${segmentId}/reject`,
-        {},
+        body,
       );
       updateScript({
         ...script,
@@ -560,8 +568,8 @@ export default function ScriptReviewPanel({
 
                     {/* Reject / rewrite */}
                     <button
-                      onClick={() => handleRejectSegment(seg.id)}
-                      title="Reject & rewrite"
+                      onClick={() => handleRejectSegment(seg.id, segmentInstructions[seg.id]?.trim() || undefined)}
+                      title="Reject & rewrite (r)"
                       className="p-1.5 rounded-lg border bg-[#1e1e2e] border-[#3a3a50] text-gray-400 hover:text-red-400 hover:border-red-700/50 transition-colors"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -649,20 +657,39 @@ export default function ScriptReviewPanel({
                 </p>
               )}
 
-              {/* "Add instruction" placeholder — future feature */}
-              {isPending && (
+              {/* Instruction input for guided rewrite */}
+              {isPending && !isRewriting && (
                 <div className="mt-4 pt-4 border-t border-[#2a2a40]">
-                  <button
-                    disabled
-                    title="Coming soon — send instructions to the AI for this rewrite"
-                    className="text-[10px] font-bold uppercase text-gray-600 flex items-center gap-1 cursor-not-allowed"
-                  >
+                  <label className="text-[10px] font-bold uppercase text-gray-500 flex items-center gap-1 mb-2">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                     </svg>
-                    Add instruction
-                    <span className="ml-1 text-[9px] normal-case font-normal text-gray-700">(coming soon)</span>
-                  </button>
+                    Add instruction <span className="normal-case font-normal text-gray-600">(optional — guides the AI rewrite)</span>
+                  </label>
+                  <textarea
+                    value={segmentInstructions[seg.id] ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value.slice(0, 500);
+                      setSegmentInstructions((p) => ({ ...p, [seg.id]: val }));
+                    }}
+                    placeholder="e.g. 'Make it more upbeat' or 'Mention the Grammy win'"
+                    rows={2}
+                    className="w-full bg-[#12121a] border border-[#2a2a40] rounded-lg px-3 py-2 text-xs text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-violet-600/60"
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-[10px] text-gray-600">
+                      {(segmentInstructions[seg.id] ?? '').length}/500
+                    </span>
+                    {(segmentInstructions[seg.id] ?? '').trim() && (
+                      <button
+                        onClick={() => handleRejectSegment(seg.id, segmentInstructions[seg.id].trim())}
+                        disabled={!!rejecting[seg.id]}
+                        className="text-[11px] font-semibold px-3 py-1 rounded-lg bg-red-900/40 border border-red-700/50 text-red-400 hover:bg-red-800/40 transition-colors disabled:opacity-50"
+                      >
+                        {rejecting[seg.id] ? 'Rewriting…' : 'Reject with instruction'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
