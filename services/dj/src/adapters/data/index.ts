@@ -2,3 +2,4 @@ export type { IDataProvider, WeatherData, NewsItem, WeatherProviderConfig, NewsP
 export { openWeatherMapProvider } from './openWeatherMap.js';
 export { newsApiProvider } from './newsApi.js';
 export { ddgWeatherSearch, ddgNewsSearch, cityFromTimezone } from './duckDuckGo.js';
+export { mockWeatherProvider, mockIWeatherProvider, mockWeatherData } from './mock.js';

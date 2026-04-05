@@ -14,6 +14,7 @@ Before starting any task, an agent MUST:
 
 ## Active Work
 - [ ] feat(dj): Jokes segment (issue #205, feat/issue-205-dj-jokes) | @claude-code | 2026-04-06 | Migration: 044
+- [ ] feat(dj): Weather segment (issue #207, feat/issue-207-dj-weather) | @claude-code | 2026-04-06
 - [ ] Fix DJ Script generation INTERNAL_ERROR — missing API key validation + unmasked LLM errors (issue #183, fix/issue-183) | @claude-code | 2026-04-05
 - [ ] arch: Program as higher-tier entity — programs + program_episodes (issue #210, feat/issue-210-program-entity) | @claude-code | 2026-04-06 | Migration: 034-035
 - [ ] feat(auth): real email reset + verification (issue #224, feat/issue-224-email-reset-verification) | @claude-code | 2026-04-06 | Migration: 047-048
