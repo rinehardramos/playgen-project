@@ -1,7 +1,13 @@
 import { getPool } from '../db.js';
 import { llmComplete } from '../adapters/llm/openrouter.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
-import { openWeatherMapProvider, newsApiProvider } from '../adapters/data/index.js';
+import {
+  openWeatherMapProvider,
+  newsApiProvider,
+  ddgWeatherSearch,
+  ddgNewsSearch,
+  cityFromTimezone,
+} from '../adapters/data/index.js';
 import type { WeatherData, NewsItem } from '../adapters/data/index.js';
 import { config } from '../config.js';
 import { buildManifest } from '../services/manifestService.js';
@@ -180,37 +186,73 @@ export async function runGenerationJob(
     );
   }
 
-  // 1c. Fetch live weather and news data (non-blocking — failure is soft)
+  // 1c. Fetch live weather and news data (non-blocking — all failures are soft).
+  //     Priority chain for each:
+  //       1. Dedicated API key (OpenWeatherMap / NewsAPI)
+  //       2. DuckDuckGo Instant Answer (free, no key required)
+  //     City is derived from station.city if set, otherwise inferred from station.timezone.
   let weatherData: WeatherData | undefined;
   let newsItems: NewsItem[] | undefined;
 
+  const resolvedCity: string = station.city ?? cityFromTimezone(station.timezone);
+
+  // ── Weather ────────────────────────────────────────────────────────────────
   const weatherApiKey = station.weather_api_key ?? undefined;
-  if (weatherApiKey && station.city) {
+  if (weatherApiKey) {
+    // Primary: OpenWeatherMap
     try {
       weatherData = await openWeatherMapProvider.fetch({
         api_key: weatherApiKey,
-        city: station.city,
+        city: resolvedCity,
         country_code: station.country_code ?? undefined,
         lat: station.latitude ?? undefined,
         lon: station.longitude ?? undefined,
       });
-      console.info(`[generationWorker] Weather fetched: ${weatherData.summary}`);
+      console.info(`[generationWorker] Weather (OpenWeatherMap): ${weatherData.summary}`);
     } catch (err) {
-      console.warn('[generationWorker] Weather fetch failed (non-fatal):', err);
+      console.warn('[generationWorker] OpenWeatherMap failed, falling back to DuckDuckGo:', err);
     }
   }
 
+  if (!weatherData) {
+    // Fallback: DuckDuckGo web search (no key needed)
+    try {
+      const ddgResult = await ddgWeatherSearch(resolvedCity);
+      if (ddgResult) {
+        weatherData = ddgResult;
+        console.info(`[generationWorker] Weather (DuckDuckGo): ${weatherData.summary}`);
+      }
+    } catch (err) {
+      console.warn('[generationWorker] DuckDuckGo weather search failed (non-fatal):', err);
+    }
+  }
+
+  // ── News ───────────────────────────────────────────────────────────────────
   const newsApiKey = station.news_api_key ?? undefined;
   if (newsApiKey) {
+    // Primary: NewsAPI
     try {
       newsItems = await newsApiProvider.fetch({
         api_key: newsApiKey,
         country_code: station.country_code ?? undefined,
         query: station.city ?? undefined,
       });
-      console.info(`[generationWorker] News fetched: ${newsItems.length} headlines`);
+      console.info(`[generationWorker] News (NewsAPI): ${newsItems.length} headlines`);
     } catch (err) {
-      console.warn('[generationWorker] News fetch failed (non-fatal):', err);
+      console.warn('[generationWorker] NewsAPI failed, falling back to DuckDuckGo:', err);
+    }
+  }
+
+  if (!newsItems || newsItems.length === 0) {
+    // Fallback: DuckDuckGo web search (no key needed)
+    try {
+      const ddgNews = await ddgNewsSearch(resolvedCity);
+      if (ddgNews.length > 0) {
+        newsItems = ddgNews;
+        console.info(`[generationWorker] News (DuckDuckGo): ${newsItems.length} headlines`);
+      }
+    } catch (err) {
+      console.warn('[generationWorker] DuckDuckGo news search failed (non-fatal):', err);
     }
   }
 
@@ -343,7 +385,7 @@ export async function runGenerationJob(
       const ctx = {
         station_name: station.name,
         station_timezone: station.timezone,
-        station_city: station.city ?? undefined,
+        station_city: resolvedCity,
         current_date: currentDate,
         current_hour: entry.hour,
         dj_profile: profile,
