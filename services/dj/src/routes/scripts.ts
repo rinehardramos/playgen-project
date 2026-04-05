@@ -163,6 +163,90 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── Per-segment review endpoints (issue #31) ────────────────────────────
+
+  // POST /dj/segments/:id/approve — mark single segment as approved
+  app.post<{ Params: { id: string } }>(
+    '/dj/segments/:id/approve',
+    async (req, reply) => {
+      const { id } = req.params;
+      const updated = await scriptService.approveSegment(id);
+      if (!updated) return reply.notFound('Segment not found');
+      return updated;
+    },
+  );
+
+  // POST /dj/segments/:id/reject — inline LLM rewrite for a single segment
+  app.post<{ Params: { id: string }; Body: { reason?: string } }>(
+    '/dj/segments/:id/reject',
+    async (req, reply) => {
+      const { id } = req.params;
+      const { reason } = req.body ?? {};
+      const updated = await scriptService.regenerateSegment(id, reason);
+      if (!updated) return reply.notFound('Segment not found or profile missing');
+      return updated;
+    },
+  );
+
+  // PUT /dj/segments/:id/text — save human-edited text for a single segment
+  app.put<{ Params: { id: string }; Body: { text: string } }>(
+    '/dj/segments/:id/text',
+    async (req, reply) => {
+      const { id } = req.params;
+      const { text } = req.body ?? {} as { text: string };
+      if (!text?.trim()) return reply.badRequest('text is required');
+      const updated = await scriptService.saveSegmentEdit(id, text);
+      if (!updated) return reply.notFound('Segment not found');
+      return updated;
+    },
+  );
+
+  // POST /dj/scripts/:id/approve — approve whole script (separate from /review action)
+  app.post<{ Params: { id: string }; Body: { review_notes?: string } }>(
+    '/dj/scripts/:id/approve',
+    async (req, reply) => {
+      const { id } = req.params;
+      const { review_notes } = req.body ?? {};
+      const userId: string = (req as any).user.sub;
+      const script = await scriptService.approveScript(id, userId, review_notes);
+      if (!script) return reply.badRequest('Script not found or not in pending_review state');
+      return script;
+    },
+  );
+
+  // POST /dj/scripts/:id/reject — reject whole script and re-queue LLM rewrite
+  app.post<{ Params: { id: string }; Body: { review_notes: string } }>(
+    '/dj/scripts/:id/reject',
+    async (req, reply) => {
+      const { id } = req.params;
+      const { review_notes } = req.body ?? {} as { review_notes: string };
+      const userId: string = (req as any).user.sub;
+
+      if (!review_notes) return reply.badRequest('review_notes is required');
+
+      const script = await scriptService.rejectScript(id, userId, review_notes);
+      if (!script) return reply.badRequest('Script not found or already finalized');
+
+      // Re-queue LLM rewrite with rejection context
+      const { rows } = await getPool().query(
+        `SELECT playlist_id, station_id, dj_profile_id FROM dj_scripts WHERE id = $1`,
+        [id],
+      );
+      if (rows[0]) {
+        await enqueueDjGeneration({
+          playlist_id: rows[0].playlist_id,
+          station_id: rows[0].station_id,
+          dj_profile_id: rows[0].dj_profile_id,
+          auto_approve: false,
+          rejection_notes: review_notes,
+        });
+      }
+      return script;
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Regenerate TTS audio for a single segment
   app.post<{ Params: { segmentId: string } }>(
     '/dj/segments/:segmentId/regenerate-tts',
