@@ -47,11 +47,15 @@ export async function llmComplete(
   messages: LlmMessage[],
   options: LlmOptions = {},
 ): Promise<string> {
-  // Dispatch to OpenAI direct if requested
+  // Dispatch to the appropriate provider
   const provider = options.provider ?? config.llm.provider;
   if (provider === 'openai') {
     const { openAiLlmComplete } = await import('./openai.js');
     return openAiLlmComplete(messages, options);
+  }
+  if (provider === 'anthropic') {
+    const { anthropicLlmComplete } = await import('./anthropic.js');
+    return anthropicLlmComplete(messages, options);
   }
 
   const c = getClient(options.apiKey);

@@ -19,6 +19,7 @@ interface StationConfig {
   openai_api_key?: string;
   elevenlabs_api_key?: string;
   openrouter_api_key?: string;
+  anthropic_api_key?: string;
 }
 
 interface RotationRules {
@@ -38,6 +39,7 @@ const DEFAULT_CONFIG: StationConfig = {
   openai_api_key: '',
   elevenlabs_api_key: '',
   openrouter_api_key: '',
+  anthropic_api_key: '',
 };
 
 const DEFAULT_RULES: RotationRules = {
@@ -351,6 +353,18 @@ export default function SettingsPage() {
                       onChange={(e) => setConfig((p) => ({ ...p, elevenlabs_api_key: e.target.value }))}
                       className="input w-full"
                       placeholder="eleven-..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">Anthropic API Key</label>
+                    <p className="text-xs text-gray-500 mb-2">Used for direct Anthropic script generation (if provider is set to Anthropic)</p>
+                    <input
+                      type="password"
+                      value={config.anthropic_api_key || ''}
+                      onChange={(e) => setConfig((p) => ({ ...p, anthropic_api_key: e.target.value }))}
+                      className="input w-full"
+                      placeholder="sk-ant-..."
                     />
                   </div>
                 </div>

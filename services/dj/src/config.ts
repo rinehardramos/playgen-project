@@ -12,9 +12,10 @@ export const config = {
 
   // LLM providers
   llm: {
-    /** 'openrouter' (default) | 'openai' */
+    /** 'openrouter' (default) | 'openai' | 'anthropic' */
     provider: process.env.LLM_PROVIDER ?? 'openrouter',
     openaiApiKey: process.env.OPENAI_API_KEY ?? '',
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
   },
 
   // OpenRouter (LLM via OpenRouter gateway)
