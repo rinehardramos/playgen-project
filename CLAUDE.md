@@ -26,6 +26,20 @@
 - Ask yourself: "Would a staff engineer approve this?"
 - Run tests, check logs, demonstrate correctness
 
+### 4a. Mandatory Pre-PR Local Checklist (NON-NEGOTIABLE)
+Before ANY `git push` or PR creation, run ALL of these in order. If any fails, fix it first:
+```bash
+pnpm run typecheck       # MUST pass — catches TS errors before CI does
+pnpm run lint            # MUST pass — no lint violations
+pnpm run test:unit       # MUST pass — unit tests green
+```
+If a Dockerfile was changed or a new workspace dependency added, also run:
+```bash
+docker build -f services/<svc>/Dockerfile . --no-cache 2>&1 | tail -5
+```
+Local tests must be 1:1 with GitHub Actions. If it passes locally, it MUST pass in CI.
+When adding `"@playgen/X": "workspace:*"` to a service's deps, ALSO update its Dockerfile to COPY and build the package.
+
 ### 5. Demand Elegance (Balanced)
 - For non-trivial changes: pause and ask "is there a more elegant way?"
 - If a fix feels hacky: "Knowing everything I know now, implement the elegant solution"

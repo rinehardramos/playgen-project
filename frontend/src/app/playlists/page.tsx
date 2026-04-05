@@ -27,6 +27,14 @@ interface GenerateJob {
   job_id: string;
 }
 
+interface GenerationFailure {
+  id: string;
+  playlist_id: string | null;
+  error_message: string | null;
+  queued_at: string;
+  triggered_by: string;
+}
+
 const STATUS_STYLES: Record<PlaylistStatus, string> = {
   draft: 'bg-gray-800 text-gray-400',
   generating: 'bg-blue-900/30 text-blue-400 animate-pulse',
@@ -72,6 +80,10 @@ export default function PlaylistsPage() {
   // Per-day generation state: date -> 'pending' | 'done' | 'failed'
   const [dayGenerating, setDayGenerating] = useState<Record<string, boolean>>({});
 
+  // Generation failure alert
+  const [failures, setFailures] = useState<GenerationFailure[]>([]);
+  const [failuresExpanded, setFailuresExpanded] = useState(false);
+
   // Polling ref
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeJobsRef = useRef<GenerateJob[]>([]);
@@ -87,7 +99,10 @@ export default function PlaylistsPage() {
   }, [router]);
 
   useEffect(() => {
-    if (selectedStation) fetchPlaylists();
+    if (selectedStation) {
+      fetchPlaylists();
+      fetchFailures();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStation, selectedMonth]);
 
@@ -125,6 +140,17 @@ export default function PlaylistsPage() {
       setError((err as ApiError).message ?? 'Failed to load playlists');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchFailures() {
+    try {
+      const data = await api.get<{ data: GenerationFailure[]; count: number }>(
+        `/api/v1/stations/${selectedStation}/generation-failures`
+      );
+      setFailures(data.data);
+    } catch {
+      // Non-critical — don't surface fetch errors for the failure badge
     }
   }
 
@@ -310,6 +336,40 @@ export default function PlaylistsPage() {
               style={{ width: `${batchProgress.total > 0 ? (batchProgress.done / batchProgress.total) * 100 : 0}%` }}
             />
           </div>
+        </div>
+      )}
+
+      {/* Generation failure alert */}
+      {failures.length > 0 && (
+        <div className="mb-4 rounded-lg border border-red-700/50 bg-red-900/20">
+          <button
+            onClick={() => setFailuresExpanded((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-red-400">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-600 text-white text-xs font-bold">
+                {failures.length}
+              </span>
+              {failures.length === 1 ? '1 generation failure' : `${failures.length} generation failures`} in the last 30 days
+            </span>
+            <span className="text-red-500 text-xs">{failuresExpanded ? '▲ Hide' : '▼ Details'}</span>
+          </button>
+          {failuresExpanded && (
+            <ul className="border-t border-red-700/30 divide-y divide-red-700/20">
+              {failures.map((f) => (
+                <li key={f.id} className="px-4 py-2.5">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-xs text-red-300 font-mono truncate flex-1">
+                      {f.error_message ?? 'Unknown error'}
+                    </span>
+                    <span className="text-xs text-gray-500 shrink-0">
+                      {new Date(f.queued_at).toLocaleDateString()} · {f.triggered_by}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

@@ -36,12 +36,9 @@ server {
         return 204;
     }
 
-    # ─── Auth: login, logout, me ──────────────────────────────────
+    # ─── Auth: login, logout, refresh, me ───────────────────────
     location ~ ^/api/v1/(auth|me) {
-        set $svc http://${STATION_HOST}:3002;
-        if ($uri ~ ^/api/v1/auth) {
-            set $svc http://${AUTH_HOST}:3001;
-        }
+        set $svc http://${AUTH_HOST}:3001;
         proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -96,6 +93,15 @@ server {
     # ─── Library: templates ───────────────────────────────────────
     location ~ ^/api/v1/stations/[^/]+/templates {
         set $svc http://${LIBRARY_HOST}:3003;
+        proxy_pass $svc;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Request-ID $request_id;
+    }
+
+    # ─── Scheduler: generation failures ─────────────────────────
+    location ~ ^/api/v1/stations/[^/]+/generation-failures {
+        set $svc http://${SCHEDULER_HOST}:3004;
         proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

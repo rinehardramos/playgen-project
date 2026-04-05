@@ -9,12 +9,15 @@ Before starting any task, an agent MUST:
 5. When finished, move the entry to `## Recently Completed`.
 6. SECURITY MANDATE: Detect and categorize vulnerabilities (High -> TODO, Medium/Low -> Backlog). Fix easy High ones first. Notify user if unfixable.
 7. PR MERGE MANDATE: Before merging any PR, verify `mergeable_state` is clean. Rebase onto `origin/main` locally, resolve conflicts manually (never blindly `-X theirs`), verify `pnpm run typecheck` passes, then force-push and wait for CI to go green before merging.
+8. **PRE-PR TESTING MANDATE (NON-NEGOTIABLE)**: Before ANY `git push`, run locally: `pnpm run typecheck && pnpm run lint && pnpm run test:unit`. ALL must pass. Local results must be 1:1 with GitHub Actions CI. If a Dockerfile changed or new workspace dep added, also run `docker build -f services/<svc>/Dockerfile .` to verify. NO exceptions — type errors, lint failures, and integration issues must NEVER reach the pipeline.
 
 ## Active Work
 - [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
 - [ ] Re-generate single playlist slot (issue #132, feat/issue-132-slot-regen) | @claude-code | 2026-04-05
 - [x] Manifest builder + ElevenLabs TTS adapter (issue #16, feat/issue-16-manifest-builder-elevenlabs) | @claude-code | 2026-04-05
-- [ ] Generation failure alerting — endpoint + UI red badge (issue #133, feat/issue-133-generation-failure-alerting) | @claude-code | 2026-04-05
+- [x] Generation failure alerting — endpoint + UI red badge + /me fix + nginx fix (issue #133, PR #163) | @claude-code | 2026-04-05
+- [ ] PM ceremonies: DSU, sprint planning, sprint review (issue #164, PR #165) | @claude-code | 2026-04-05
+- [x] Deployment monitoring agent — Vercel + Railway error alerting (issue #166, PR #169) | @claude-code | 2026-04-05
 - [ ] Category distribution report by date + chart (issue #134, feat/issue-134-category-distribution-by-date) | @claude-code | 2026-04-05
 - [ ] DJ Show Player component (issue #21, feat/issue-21-dj-show-player) | @claude-code | 2026-04-05
 - [ ] Spotify/Apple Music widgets (issue #22, feat/issue-22-music-widgets) | @claude-code | 2026-04-05
