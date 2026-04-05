@@ -255,38 +255,104 @@ export default function ScriptReviewPanel({
     }
   }
 
+  /** Poll /dj/jobs/:jobId/status until completed or failed, then show result. */
+  function pollJobUntilDone(jobId: string, oldScriptId: string) {
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      if (pollTimer) clearInterval(pollTimer);
+      if (safetyTimer) clearTimeout(safetyTimer);
+    };
+
+    pollTimer = setInterval(async () => {
+      try {
+        const status = await api.get<{
+          state: string;
+          pct: number;
+          step: string;
+          error: string | null;
+          playlist_id: string;
+        }>(`/api/v1/dj/jobs/${jobId}/status`);
+
+        if (status.state === 'failed') {
+          cleanup();
+          onGenerating(false);
+          onScriptChange(null);
+          setError(status.error ?? 'Script generation failed. Check your LLM provider and API key settings.');
+          return;
+        }
+
+        if (status.state === 'completed') {
+          try {
+            const refreshed = await api.get<ReviewPanelScript>(
+              `/api/v1/dj/playlists/${playlistId}/script`,
+            );
+            if (refreshed && refreshed.total_segments > 0 && refreshed.id !== oldScriptId) {
+              onScriptChange(refreshed);
+            } else {
+              onScriptChange(null);
+              setError('Script was generated but has 0 segments. Check your LLM provider and API key settings.');
+            }
+          } catch {
+            onScriptChange(null);
+            setError('Generation completed but could not load the script. Please refresh.');
+          }
+          cleanup();
+          onGenerating(false);
+        }
+      } catch {
+        // poll error — keep trying (job status endpoint temporarily unavailable)
+      }
+    }, 2000);
+
+    // Safety timeout: 3 minutes
+    safetyTimer = setTimeout(() => {
+      cleanup();
+      onGenerating(false);
+      onScriptChange(null);
+      setError('Generation timed out after 3 minutes. Check your LLM provider and API key settings.');
+    }, 180000);
+  }
+
   async function handleRejectAll() {
     if (!rejectNotes.trim()) return;
     setReviewing(true);
     setError(null);
+    const oldScriptId = script.id;
     try {
-      await api.post(`/api/v1/dj/scripts/${script.id}/reject`, {
-        review_notes: rejectNotes,
-      });
-      // Re-generation queued, start polling
+      const res = await api.post<ReviewPanelScript & { job_id?: string }>(
+        `/api/v1/dj/scripts/${script.id}/reject`,
+        { review_notes: rejectNotes },
+      );
       onScriptChange(null);
       setShowRejectModal(false);
       setRejectNotes('');
       onGenerating(true);
 
-      const poll = setInterval(async () => {
-        try {
-          const refreshed = await api.get<ReviewPanelScript>(
-            `/api/v1/dj/playlists/${playlistId}/script`,
-          );
-          if (
-            refreshed &&
-            refreshed.total_segments > 0 &&
-            refreshed.generation_ms != null &&
-            refreshed.id !== script.id
-          ) {
-            onScriptChange(refreshed);
-            onGenerating(false);
-            clearInterval(poll);
-          }
-        } catch { /* still generating */ }
-      }, 3000);
-      setTimeout(() => { clearInterval(poll); onGenerating(false); }, 120000);
+      if (res.job_id) {
+        pollJobUntilDone(res.job_id, oldScriptId);
+      } else {
+        // Fallback: old script-polling if no job_id returned
+        const poll = setInterval(async () => {
+          try {
+            const refreshed = await api.get<ReviewPanelScript>(
+              `/api/v1/dj/playlists/${playlistId}/script`,
+            );
+            if (refreshed && refreshed.total_segments > 0 && refreshed.id !== oldScriptId) {
+              onScriptChange(refreshed);
+              onGenerating(false);
+              clearInterval(poll);
+            }
+          } catch { /* still generating */ }
+        }, 3000);
+        setTimeout(() => {
+          clearInterval(poll);
+          onGenerating(false);
+          onScriptChange(null);
+          setError('Generation timed out. Check your LLM provider and API key settings.');
+        }, 180000);
+      }
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Reject & rewrite failed');
     } finally {
@@ -299,30 +365,38 @@ export default function ScriptReviewPanel({
   async function handleRetry() {
     setReviewing(true);
     setError(null);
+    const oldScriptId = script.id;
     try {
-      await api.post(`/api/v1/dj/scripts/${script.id}/reject`, {
-        review_notes: 'Retrying generation — previous attempt produced 0 segments.',
-      });
+      const res = await api.post<ReviewPanelScript & { job_id?: string }>(
+        `/api/v1/dj/scripts/${script.id}/reject`,
+        { review_notes: 'Retrying generation — previous attempt produced 0 segments.' },
+      );
       onScriptChange(null);
       onGenerating(true);
 
-      const poll = setInterval(async () => {
-        try {
-          const refreshed = await api.get<ReviewPanelScript>(
-            `/api/v1/dj/playlists/${playlistId}/script`,
-          );
-          if (
-            refreshed &&
-            refreshed.total_segments > 0 &&
-            refreshed.id !== script.id
-          ) {
-            onScriptChange(refreshed);
-            onGenerating(false);
-            clearInterval(poll);
-          }
-        } catch { /* still generating */ }
-      }, 3000);
-      setTimeout(() => { clearInterval(poll); onGenerating(false); }, 120000);
+      if (res.job_id) {
+        pollJobUntilDone(res.job_id, oldScriptId);
+      } else {
+        // Fallback: old script-polling if no job_id returned
+        const poll = setInterval(async () => {
+          try {
+            const refreshed = await api.get<ReviewPanelScript>(
+              `/api/v1/dj/playlists/${playlistId}/script`,
+            );
+            if (refreshed && refreshed.total_segments > 0 && refreshed.id !== oldScriptId) {
+              onScriptChange(refreshed);
+              onGenerating(false);
+              clearInterval(poll);
+            }
+          } catch { /* still generating */ }
+        }, 3000);
+        setTimeout(() => {
+          clearInterval(poll);
+          onGenerating(false);
+          onScriptChange(null);
+          setError('Generation timed out. Check your LLM provider and API key settings.');
+        }, 180000);
+      }
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Retry failed');
     } finally {

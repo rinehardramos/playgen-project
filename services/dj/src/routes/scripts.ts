@@ -171,8 +171,9 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
           `SELECT playlist_id, station_id, dj_profile_id FROM dj_scripts WHERE id = $1`,
           [id],
         );
+        let job_id: string | null = null;
         if (rows[0]) {
-          await enqueueDjGeneration({
+          job_id = await enqueueDjGeneration({
             playlist_id: rows[0].playlist_id,
             station_id: rows[0].station_id,
             dj_profile_id: rows[0].dj_profile_id,
@@ -180,7 +181,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
             rejection_notes: review_notes,
           });
         }
-        return script;
+        return { ...script, job_id };
       }
 
       if (action === 'edit') {
@@ -263,13 +264,15 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       const script = await scriptService.rejectScript(id, userId, review_notes);
       if (!script) return reply.badRequest('Script not found or already finalized');
 
-      // Re-queue LLM rewrite with rejection context
+      // Re-queue LLM rewrite with rejection context — return the job_id so the
+      // frontend can poll /dj/jobs/:jobId/status for real progress and error details.
       const { rows } = await getPool().query(
         `SELECT playlist_id, station_id, dj_profile_id FROM dj_scripts WHERE id = $1`,
         [id],
       );
+      let job_id: string | null = null;
       if (rows[0]) {
-        await enqueueDjGeneration({
+        job_id = await enqueueDjGeneration({
           playlist_id: rows[0].playlist_id,
           station_id: rows[0].station_id,
           dj_profile_id: rows[0].dj_profile_id,
@@ -277,7 +280,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
           rejection_notes: review_notes,
         });
       }
-      return script;
+      return { ...script, job_id };
     },
   );
 

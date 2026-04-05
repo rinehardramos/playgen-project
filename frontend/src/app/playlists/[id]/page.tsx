@@ -157,39 +157,48 @@ export default function PlaylistDetailPage() {
 
       pollTimer = setInterval(async () => {
         try {
-          const status = await api.get<{
-            state: string;
-            pct: number;
-            step: string;
-            error: string | null;
-            playlist_id: string;
-          }>(`/api/v1/dj/jobs/${job_id}/status`);
+          // --- Primary: poll job status endpoint for progress + error detection ---
+          let jobState = 'unknown';
+          try {
+            const status = await api.get<{
+              state: string;
+              pct: number;
+              step: string;
+              error: string | null;
+            }>(`/api/v1/dj/jobs/${job_id}/status`);
+            jobState = status.state;
+            setGenerationProgress({ pct: status.pct, step: status.step });
 
-          setGenerationProgress({ pct: status.pct, step: status.step });
-
-          if (status.state === 'failed') {
-            cleanup();
-            setGenerating(false);
-            setDjError(status.error ?? 'DJ script generation failed. Check your API key and provider settings.');
-            return;
+            if (status.state === 'failed') {
+              cleanup();
+              setGenerating(false);
+              setDjError(status.error ?? 'DJ script generation failed. Check your API key and provider settings.');
+              return;
+            }
+          } catch {
+            // Job status endpoint unavailable — fall through to script polling
           }
 
-          if (status.state === 'completed') {
-            // Fetch the actual script now that the job is done
+          // --- Fallback / parallel: also check if the script is ready ---
+          if (jobState === 'completed' || jobState === 'unknown') {
             try {
               const script = await api.get<DjScript>(`/api/v1/dj/playlists/${playlistId}/script`);
               if (script && script.total_segments > 0) {
+                cleanup();
                 setDjScript(script);
-              } else {
-                setDjError('Script was generated but has 0 segments. Check your LLM provider and API key settings.');
+                setGenerating(false);
+                return;
               }
-            } catch {
-              setDjError('Generation completed but could not load the script. Please refresh.');
-            }
+            } catch { /* script not ready yet */ }
+          }
+
+          if (jobState === 'completed') {
+            // Job done but script still has 0 segments
             cleanup();
             setGenerating(false);
+            setDjError('Script was generated but has 0 segments. Check your LLM provider and API key settings.');
           }
-        } catch { /* poll error — keep trying */ }
+        } catch { /* outer catch — keep polling */ }
       }, 2000);
 
       // Safety timeout: 3 minutes
