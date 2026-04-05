@@ -134,7 +134,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: npm install -g @railway/cli@latest --prefer-online
 
       - name: Deploy to Railway
         run: railway up --service ${{ matrix.service }} --detach
@@ -151,7 +151,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Wait for deployments to stabilize
-        run: sleep 30
+        run: sleep 180
 
       - name: Run smoke tests
         run: bash scripts/smoke-test.sh
