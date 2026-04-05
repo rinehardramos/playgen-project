@@ -183,18 +183,31 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
       const systemPrompt = buildSystemPrompt(profile);
       const userPrompt = buildUserPrompt(ctx) + rejectionContext;
 
-      const script_text = await llmComplete(
-        [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        {
-          model: effectiveLlmModel,
-          temperature: profile.llm_temperature != null ? Number(profile.llm_temperature) : undefined,
-          apiKey: effectiveLlmApiKey ?? undefined,
-          provider: effectiveLlmProvider,
-        },
+      console.info(
+        `[generationWorker] LLM call — provider=${effectiveLlmProvider} model=${effectiveLlmModel} hasKey=${!!effectiveLlmApiKey} segment=${segment_type}`,
       );
+
+      let script_text: string;
+      try {
+        script_text = await llmComplete(
+          [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          {
+            model: effectiveLlmModel,
+            temperature: profile.llm_temperature != null ? Number(profile.llm_temperature) : undefined,
+            apiKey: effectiveLlmApiKey ?? undefined,
+            provider: effectiveLlmProvider,
+          },
+        );
+      } catch (llmErr) {
+        console.error(
+          `[generationWorker] LLM call FAILED — provider=${effectiveLlmProvider} model=${effectiveLlmModel} error:`,
+          llmErr,
+        );
+        throw llmErr;
+      }
 
       const pos = position++;
       const { rows: segRows } = await pool.query<{ id: string }>(
