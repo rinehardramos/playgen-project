@@ -57,6 +57,10 @@ export async function llmComplete(
     const { anthropicLlmComplete } = await import('./anthropic.js');
     return anthropicLlmComplete(messages, options);
   }
+  if (provider === 'gemini') {
+    const { geminiLlmComplete } = await import('./gemini.js');
+    return geminiLlmComplete(messages, options);
+  }
 
   const c = getClient(options.apiKey);
   const model = options.model ?? config.openRouter.defaultModel;

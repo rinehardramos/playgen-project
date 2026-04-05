@@ -34,6 +34,7 @@ interface StationRow {
   openai_api_key: string | null;
   elevenlabs_api_key: string | null;
   anthropic_api_key: string | null;
+  gemini_api_key: string | null;
 }
 
 // Determine which segment types to generate for a given playlist position
@@ -60,7 +61,7 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   // 1. Load station info (including API key columns saved via Settings page)
   const { rows: stationRows } = await pool.query<StationRow>(
     `SELECT id, name, timezone, company_id,
-            openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key
+            openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, gemini_api_key
      FROM stations WHERE id = $1`,
     [data.station_id],
   );
@@ -137,7 +138,13 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   const effectiveLlmModel    = stationSettings['llm_model'] || profile.llm_model;
 
   const effectiveLlmApiKey = stationSettings['llm_api_key']
-    ?? (effectiveLlmProvider === 'anthropic' ? station.anthropic_api_key : station.openrouter_api_key)
+    ?? (effectiveLlmProvider === 'anthropic'
+      ? station.anthropic_api_key
+      : effectiveLlmProvider === 'gemini'
+      ? station.gemini_api_key
+      : effectiveLlmProvider === 'openai'
+      ? station.openai_api_key
+      : station.openrouter_api_key)
     ?? undefined;
 
   const effectiveTtsApiKey = stationSettings['tts_api_key']

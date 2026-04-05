@@ -20,6 +20,7 @@ interface StationConfig {
   elevenlabs_api_key?: string;
   openrouter_api_key?: string;
   anthropic_api_key?: string;
+  gemini_api_key?: string;
 }
 
 interface RotationRules {
@@ -47,6 +48,7 @@ const DEFAULT_CONFIG: StationConfig = {
   elevenlabs_api_key: '',
   openrouter_api_key: '',
   anthropic_api_key: '',
+  gemini_api_key: '',
 };
 
 const DEFAULT_RULES: RotationRules = {
@@ -440,6 +442,18 @@ export default function SettingsPage() {
                       placeholder="eleven-..."
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">Gemini API Key</label>
+                    <p className="text-xs text-gray-500 mb-2">Used when LLM Provider is set to Gemini (Google AI Studio)</p>
+                    <input
+                      type="password"
+                      value={config.gemini_api_key || ''}
+                      onChange={(e) => setConfig((p) => ({ ...p, gemini_api_key: e.target.value }))}
+                      className="input w-full"
+                      placeholder="AIza..."
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -498,6 +512,7 @@ export default function SettingsPage() {
                       <option value="openrouter">OpenRouter (routes to any model via OpenRouter key)</option>
                       <option value="anthropic">Anthropic (direct — uses Anthropic API Key)</option>
                       <option value="openai">OpenAI (direct — uses OpenAI API Key)</option>
+                      <option value="gemini">Gemini (direct — uses Gemini API Key)</option>
                     </select>
                   </div>
 
@@ -508,6 +523,8 @@ export default function SettingsPage() {
                         ? 'OpenRouter model ID, e.g. anthropic/claude-sonnet-4-5 or openai/gpt-4o'
                         : dj.llm_provider === 'anthropic'
                         ? 'Anthropic model ID, e.g. claude-sonnet-4-5 or claude-3-5-haiku-20241022'
+                        : dj.llm_provider === 'gemini'
+                        ? 'Gemini model ID, e.g. gemini-2.0-flash or gemini-1.5-flash'
                         : 'OpenAI model ID, e.g. gpt-4o or gpt-4o-mini'}
                     </p>
                     <input
@@ -520,6 +537,8 @@ export default function SettingsPage() {
                           ? 'anthropic/claude-sonnet-4-5'
                           : dj.llm_provider === 'anthropic'
                           ? 'claude-sonnet-4-5'
+                          : dj.llm_provider === 'gemini'
+                          ? 'gemini-2.0-flash'
                           : 'gpt-4o'
                       }
                     />

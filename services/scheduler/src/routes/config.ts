@@ -7,7 +7,7 @@ interface StationParams {
   id: string;
 }
 
-const SECRET_KEYS = ['openai_api_key', 'elevenlabs_api_key', 'openrouter_api_key', 'anthropic_api_key'] as const;
+const SECRET_KEYS = ['openai_api_key', 'elevenlabs_api_key', 'openrouter_api_key', 'anthropic_api_key', 'gemini_api_key'] as const;
 
 function maskSecrets<T extends Record<string, unknown>>(row: T): T {
   const masked = { ...row };
@@ -98,8 +98,9 @@ export async function configRoutes(app: FastifyInstance): Promise<void> {
         elevenlabs_api_key?: string;
         openrouter_api_key?: string;
         anthropic_api_key?: string;
+        gemini_api_key?: string;
       }>(
-        'SELECT timezone, broadcast_start_hour, broadcast_end_hour, active_days, openai_api_key, elevenlabs_api_key, openrouter_api_key, anthropic_api_key FROM stations WHERE id = $1',
+        'SELECT timezone, broadcast_start_hour, broadcast_end_hour, active_days, openai_api_key, elevenlabs_api_key, openrouter_api_key, anthropic_api_key, gemini_api_key FROM stations WHERE id = $1',
         [stationId],
       );
 
@@ -144,12 +145,13 @@ export async function configRoutes(app: FastifyInstance): Promise<void> {
         elevenlabs_api_key?: string;
         openrouter_api_key?: string;
         anthropic_api_key?: string;
+        gemini_api_key?: string;
       };
     }>, reply: FastifyReply) => {
       const stationId = req.params.id;
       const {
         timezone, broadcast_start_hour, broadcast_end_hour, active_days,
-        openai_api_key, elevenlabs_api_key, openrouter_api_key, anthropic_api_key
+        openai_api_key, elevenlabs_api_key, openrouter_api_key, anthropic_api_key, gemini_api_key
       } = req.body;
       const pool = getPool();
 
@@ -165,10 +167,11 @@ export async function configRoutes(app: FastifyInstance): Promise<void> {
       if (elevenlabs_api_key !== undefined) { fields.push(`elevenlabs_api_key = $${i++}`); values.push(elevenlabs_api_key); }
       if (openrouter_api_key !== undefined) { fields.push(`openrouter_api_key = $${i++}`); values.push(openrouter_api_key); }
       if (anthropic_api_key !== undefined) { fields.push(`anthropic_api_key = $${i++}`); values.push(anthropic_api_key); }
+      if (gemini_api_key !== undefined) { fields.push(`gemini_api_key = $${i++}`); values.push(gemini_api_key); }
 
       if (!fields.length) {
         const current = await pool.query(
-          'SELECT timezone, broadcast_start_hour, broadcast_end_hour, active_days, openai_api_key, elevenlabs_api_key, openrouter_api_key, anthropic_api_key FROM stations WHERE id = $1',
+          'SELECT timezone, broadcast_start_hour, broadcast_end_hour, active_days, openai_api_key, elevenlabs_api_key, openrouter_api_key, anthropic_api_key, gemini_api_key FROM stations WHERE id = $1',
           [stationId],
         );
         return reply.code(200).send(maskSecrets(current.rows[0]));
@@ -186,9 +189,10 @@ export async function configRoutes(app: FastifyInstance): Promise<void> {
         elevenlabs_api_key?: string;
         openrouter_api_key?: string;
         anthropic_api_key?: string;
+        gemini_api_key?: string;
       }>(
         `UPDATE stations SET ${fields.join(', ')} WHERE id = $${i}
-         RETURNING timezone, broadcast_start_hour, broadcast_end_hour, active_days, openai_api_key, elevenlabs_api_key, openrouter_api_key, anthropic_api_key`,
+         RETURNING timezone, broadcast_start_hour, broadcast_end_hour, active_days, openai_api_key, elevenlabs_api_key, openrouter_api_key, anthropic_api_key, gemini_api_key`,
         values,
       );
 
