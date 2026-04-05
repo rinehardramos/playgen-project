@@ -1,4 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mock resend so `new Resend()` doesn't throw when authService imports emailService
+vi.mock('resend', () => {
+  class ResendMock {
+    emails = { send: vi.fn().mockResolvedValue({ id: 'stub' }) };
+  }
+  return { Resend: ResendMock };
+});
+
 import { AuthError } from '../../src/services/authService';
 
 // Unit tests for AuthError — isolated from DB

@@ -6,6 +6,8 @@ import {
   forgotPassword,
   resetPassword,
   acceptInvite,
+  sendEmailVerification,
+  verifyEmail,
   AuthError,
 } from '../services/authService';
 import { loginWithGoogle, type GoogleProfile } from '../services/oauthService';
@@ -145,6 +147,49 @@ export async function authRoutes(app: FastifyInstance) {
       if (err instanceof AuthError) {
         const statusCode = err.code === 'EMAIL_TAKEN' ? 409 : 400;
         return reply.code(statusCode).send({ error: { code: err.code, message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // ── POST /auth/send-verification — resend verification email ─────────────
+  app.post('/auth/send-verification', {
+    preHandler: [authenticate],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const pool = getPool();
+    const userId = req.user.sub;
+    const { rows } = await pool.query<{ email: string; email_verified_at: string | null }>(
+      `SELECT email, email_verified_at FROM users WHERE id = $1 AND is_active = TRUE`,
+      [userId]
+    );
+    if (!rows[0]) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+    if (rows[0].email_verified_at) {
+      return reply.code(400).send({ error: { code: 'ALREADY_VERIFIED', message: 'Email is already verified.' } });
+    }
+    await sendEmailVerification(userId, rows[0].email);
+    return reply.code(200).send({ message: 'Verification email sent.' });
+  });
+
+  // ── GET /auth/verify-email — verify email with token ─────────────────────
+  app.get('/auth/verify-email', {
+    schema: {
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: {
+          token: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const { token } = req.query as { token: string };
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+    try {
+      await verifyEmail(token);
+      return reply.redirect(`${frontendUrl}/verify-email?verified=true`, 302);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        return reply.redirect(`${frontendUrl}/verify-email?error=invalid_token`, 302);
       }
       throw err;
     }
