@@ -87,6 +87,7 @@ export const PERMISSIONS = [
   'dj:read', 'dj:write', 'dj:approve', 'dj:config',
   'settings:read', 'settings:write',
   'billing:read', 'billing:write',
+  'program:read', 'program:write',
 ] as const;
 
 export type Permission_Code = typeof PERMISSIONS[number];
@@ -105,9 +106,10 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     'rules:read', 'rules:write',
     'dj:read', 'dj:write', 'dj:approve', 'dj:config',
     'settings:read', 'settings:write',
+    'program:read', 'program:write',
   ],
   scheduler: ['playlist:read', 'playlist:write', 'template:read', 'rules:read'],
-  viewer: ['library:read', 'template:read', 'playlist:read', 'analytics:read'],
+  viewer: ['library:read', 'template:read', 'playlist:read', 'analytics:read', 'program:read'],
   general_manager: [
     'station:read', 'station:write',
     'library:read', 'library:write', 'library:delete',
@@ -119,6 +121,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     'rules:read', 'rules:write',
     'dj:read', 'dj:write', 'dj:approve', 'dj:config',
     'settings:read', 'settings:write',
+    'program:read', 'program:write',
   ],
   program_director: [
     'library:read', 'library:write', 'library:delete',
@@ -127,15 +130,17 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     'analytics:read',
     'rules:read', 'rules:write',
     'dj:read', 'dj:write', 'dj:approve',
+    'program:read', 'program:write',
   ],
-  music_director: ['library:read', 'library:write', 'template:read', 'playlist:read', 'rules:read', 'dj:read'],
+  music_director: ['library:read', 'library:write', 'template:read', 'playlist:read', 'rules:read', 'dj:read', 'program:read'],
   traffic_manager: [
     'library:read', 'template:read',
     'playlist:read', 'playlist:write', 'playlist:approve', 'playlist:export',
     'analytics:read', 'rules:read',
+    'program:read',
   ],
-  on_air_talent: ['library:read', 'playlist:read', 'dj:read', 'dj:write'],
-  viewer_template: ['library:read', 'template:read', 'playlist:read', 'analytics:read'],
+  on_air_talent: ['library:read', 'playlist:read', 'dj:read', 'dj:write', 'program:read'],
+  viewer_template: ['library:read', 'template:read', 'playlist:read', 'analytics:read', 'program:read'],
 };
 
 // ─── Permissions ─────────────────────────────────────────────────────────────
@@ -380,6 +385,8 @@ export type DjSegmentType =
   | 'time_check'
   | 'weather_tease'
   | 'ad_break'
+  | 'adlib'
+  | 'joke'
   | 'current_events'
   | 'listener_activity';
 
@@ -401,6 +408,7 @@ export interface ListenerShoutout {
   created_at: Date;
   updated_at: Date;
 }
+
 export type DjReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'auto_approved';
 export type DjSegmentReviewStatus = 'pending' | 'approved' | 'edited' | 'rejected';
 export type ManifestStatus = 'building' | 'ready' | 'failed';
@@ -543,7 +551,7 @@ export interface StationSetting {
   updated_at: string;
 }
 
-// ─── Programs & Episodes (issue #210) ─────────────────────────────────────────
+// ─── Programs & Episodes ──────────────────────────────────────────────────────
 
 export type ProgramAirDay = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 export type EpisodeStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'aired';
@@ -553,15 +561,66 @@ export interface Program {
   station_id: string;
   name: string;
   description: string | null;
-  air_days: ProgramAirDay[];
-  start_time: string | null;
-  end_time: string | null;
-  dj_profile_id: string | null;
-  format_config: Record<string, unknown> | null;
+  active_days: string[];
+  start_hour: number;
+  end_hour: number;
+  template_id: string | null;
+  color_tag: string | null;
   is_active: boolean;
+  is_default: boolean;
   created_at: Date;
   updated_at: Date;
 }
+
+export interface CreateProgramRequest {
+  name: string;
+  description?: string;
+  active_days?: string[];
+  start_hour?: number;
+  end_hour?: number;
+  template_id?: string | null;
+  color_tag?: string | null;
+  is_active?: boolean;
+}
+
+// ─── Show Format Clocks ───────────────────────────────────────────────────────
+
+export type ClockContentType =
+  | 'song'
+  | 'dj_segment'
+  | 'weather'
+  | 'news'
+  | 'adlib'
+  | 'joke'
+  | 'time_check'
+  | 'station_id'
+  | 'ad_break'
+  | 'listener_activity';
+
+export interface ShowFormatClock {
+  id: string;
+  program_id: string;
+  name: string;
+  applies_to_hours: number[] | null;
+  is_default: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ShowClockSlot {
+  id: string;
+  clock_id: string;
+  position: number;
+  content_type: ClockContentType;
+  category_id: string | null;
+  segment_type: string | null;
+  target_minute: number | null;
+  duration_est_sec: number | null;
+  is_required: boolean;
+  notes: string | null;
+}
+
+// ─── Program Episodes ─────────────────────────────────────────────────────────
 
 export interface ProgramEpisode {
   id: string;
@@ -574,17 +633,6 @@ export interface ProgramEpisode {
   notes: string | null;
   created_at: Date;
   updated_at: Date;
-}
-
-export interface CreateProgramRequest {
-  name: string;
-  description?: string;
-  air_days?: ProgramAirDay[];
-  start_time?: string;
-  end_time?: string;
-  dj_profile_id?: string;
-  format_config?: Record<string, unknown>;
-  is_active?: boolean;
 }
 
 export interface CreateEpisodeRequest {
