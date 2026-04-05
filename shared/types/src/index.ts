@@ -537,6 +537,35 @@ export interface DjScriptWithSegments extends DjScript {
   segments: DjSegment[];
 }
 
+// ─── Weather / Data Plugins ───────────────────────────────────────────────────
+
+/** Live weather forecast returned by any weather provider. */
+export interface WeatherForecast {
+  city: string;
+  temperature_c: number;
+  temperature_f: number;
+  conditions: string;       // Short label, e.g. "Partly Cloudy"
+  description: string;      // Longer description, e.g. "partly cloudy skies"
+  humidity: number;         // 0–100 %
+  wind_speed_kmh: number;
+  summary: string;          // Human-readable one-liner for prompt injection
+}
+
+/** Generic extensible data-provider interface.
+ *  Implement this to add new weather/news/data backends. */
+export interface IDataProvider<TConfig = unknown, TResult = unknown> {
+  /** Returns true when required config keys are present and non-empty. */
+  isConfigured(cfg: TConfig): boolean;
+  /** Fetches live data. Throws on unrecoverable error. */
+  fetch(cfg: TConfig): Promise<TResult>;
+}
+
+/** Dedicated weather-provider interface (higher-level than IDataProvider). */
+export interface IWeatherProvider {
+  /** Fetch a forecast for the given coordinates and/or city name. */
+  fetchForecast(lat: number | null, lon: number | null, city: string): Promise<WeatherForecast>;
+}
+
 // ─── Station Settings ─────────────────────────────────────────────────────────
 
 /** Known per-station setting keys managed via the settings UI. */
@@ -545,7 +574,9 @@ export type StationSettingKey =
   | 'tts_api_key'
   | 'tts_voice_id'
   | 'llm_model'
-  | 'llm_api_key';
+  | 'llm_api_key'
+  | 'weather_provider'
+  | 'weather_api_key';
 
 export interface StationSetting {
   id: string;

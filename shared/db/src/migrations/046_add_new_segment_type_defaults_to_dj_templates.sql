@@ -32,6 +32,11 @@ CROSS JOIN (
         'listener_activity'::dj_segment_type,
         'Default Listener Activity',
         'Invite listeners to connect — shout out the station''s social media, invite song requests, or tease an upcoming listener contest. Keep it energetic and under 3 sentences.'
+    ),
+    (
+        'weather_tease'::dj_segment_type,
+        'Default Weather Tease',
+        '{{#weather}}Give a quick, conversational weather update for {{station_city}}: {{weather_summary}}. Work it naturally into the show — tie it to what listeners might be doing or feeling. Keep it to 1-2 sentences.{{/weather}}{{^weather}}Tease that weather info is coming up, or mention the weather vibe outside right now in one punchy sentence.{{/weather}}'
     )
 ) AS t(segment_type, name, prompt_template)
 WHERE NOT EXISTS (
