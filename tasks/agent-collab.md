@@ -13,10 +13,10 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
-- [ ] Station Details page — locale, callsign, social handles, system metadata (issue #202, feat/issue-202-station-details) | @claude-code | 2026-04-06
+- [ ] Fix DJ Script generation INTERNAL_ERROR — missing API key validation + unmasked LLM errors (issue #183, fix/issue-183) | @claude-code | 2026-04-05
+- [ ] arch: Program as higher-tier entity — programs + program_episodes (issue #210, feat/issue-210-program-entity) | @claude-code | 2026-04-06 | Migration: 034-035
 
 ## Recently Completed
-- [x] Tiered user permission system — subscriptions, custom roles, station hierarchy, thin JWT (issue #216, PR #218, feat/issue-216-tiered-permissions-v2) | @claude-code | 2026-04-06
 - [x] Google OAuth login (issue #200, feat/issue-200-google-oauth) | @claude-code | 2026-04-05
 - [x] Fix DJ INTERNAL_ERROR: reject handler 422/503 error codes (issue #183, fix/issue-183-dj-error) | @claude-code | 2026-04-05
 - [x] Agent workflow improvements — P0 daemon fixes + CLAUDE.md rules (issue #158, feat/issue-158-workflow-improvements) | @claude-code | 2026-04-05
