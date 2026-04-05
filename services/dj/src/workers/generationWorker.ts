@@ -190,7 +190,7 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
         ],
         {
           model: effectiveLlmModel,
-          temperature: profile.llm_temperature,
+          temperature: profile.llm_temperature != null ? Number(profile.llm_temperature) : undefined,
           apiKey: effectiveLlmApiKey ?? undefined,
           provider: effectiveLlmProvider,
         },
