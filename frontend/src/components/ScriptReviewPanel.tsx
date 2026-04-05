@@ -106,7 +106,7 @@ export default function ScriptReviewPanel({
   // Per-segment TTS states
   const [generatingTts, setGeneratingTts] = useState<Record<string, boolean>>({});
   const [deletingTts, setDeletingTts] = useState<Record<string, boolean>>({});
-  const [playingSegmentId, setPlayingSegmentId] = useState<string | null>(null);
+  const [localPlayingSegmentId, setLocalPlayingSegmentId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Bulk TTS generation state
@@ -461,10 +461,10 @@ export default function ScriptReviewPanel({
   async function handleDeleteTts(segmentId: string) {
     setDeletingTts((p) => ({ ...p, [segmentId]: true }));
     // Stop playback if this segment is playing
-    if (playingSegmentId === segmentId) {
+    if (localPlayingSegmentId === segmentId) {
       audioRef.current?.pause();
       audioRef.current = null;
-      setPlayingSegmentId(null);
+      setLocalPlayingSegmentId(null);
     }
     try {
       await api.delete(`/api/v1/dj/segments/${segmentId}/audio`);
@@ -484,10 +484,10 @@ export default function ScriptReviewPanel({
   function handlePlayTts(seg: ReviewPanelSegment) {
     if (!seg.audio_url) return;
     // If already playing this segment, pause it
-    if (playingSegmentId === seg.id && audioRef.current) {
+    if (localPlayingSegmentId === seg.id && audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
-      setPlayingSegmentId(null);
+      setLocalPlayingSegmentId(null);
       return;
     }
     // Stop any currently playing segment
@@ -500,10 +500,10 @@ export default function ScriptReviewPanel({
     const url = `${base}${seg.audio_url}`;
     const audio = new Audio(url);
     audioRef.current = audio;
-    setPlayingSegmentId(seg.id);
-    audio.onended = () => { audioRef.current = null; setPlayingSegmentId(null); };
-    audio.onerror = () => { audioRef.current = null; setPlayingSegmentId(null); };
-    audio.play().catch(() => { audioRef.current = null; setPlayingSegmentId(null); });
+    setLocalPlayingSegmentId(seg.id);
+    audio.onended = () => { audioRef.current = null; setLocalPlayingSegmentId(null); };
+    audio.onerror = () => { audioRef.current = null; setLocalPlayingSegmentId(null); };
+    audio.play().catch(() => { audioRef.current = null; setLocalPlayingSegmentId(null); });
   }
 
   // ── Bulk TTS generation ─────────────────────────────────────────────────
@@ -887,12 +887,12 @@ export default function ScriptReviewPanel({
                     <button
                       onClick={() => handlePlayTts(seg)}
                       className={`flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-colors ${
-                        playingSegmentId === seg.id
+                        localPlayingSegmentId === seg.id
                           ? 'bg-violet-600/30 border-violet-500/50 text-violet-200'
                           : 'bg-[#1a1a2a] border-[#2a2a40] text-gray-300 hover:border-violet-500/40 hover:text-violet-300'
                       }`}
                     >
-                      {playingSegmentId === seg.id ? (
+                      {localPlayingSegmentId === seg.id ? (
                         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                         </svg>
@@ -901,7 +901,7 @@ export default function ScriptReviewPanel({
                           <path d="M8 5v14l11-7z" />
                         </svg>
                       )}
-                      {playingSegmentId === seg.id ? 'Playing…' : 'Play'}
+                      {localPlayingSegmentId === seg.id ? 'Playing…' : 'Play'}
                       {seg.audio_duration_sec && (
                         <span className="text-gray-500">
                           {seg.audio_duration_sec < 60
