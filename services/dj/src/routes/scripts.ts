@@ -361,9 +361,9 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
         return { ...updatedRows[0], audio_url, audio_duration_sec };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'TTS generation failed';
-        // Provider auth/quota/config errors (4xx from the TTS API) are user-fixable —
-        // surface them as 400 Bad Request so the frontend shows the real reason.
-        const isProviderConfigError = /\b(401|403|429|quota|invalid.*key|key.*invalid|incorrect.*key|billing)\b/i.test(message);
+        // Any 4xx from the TTS provider (bad voice, invalid model, bad key, quota, etc.) is
+        // user-fixable — surface the real message as 400 Bad Request.
+        const isProviderConfigError = /\b(400|401|403|429|quota|invalid.*key|key.*invalid|incorrect.*key|billing|Input should be)\b/i.test(message);
         if (isProviderConfigError) {
           return reply.badRequest(message);
         }
