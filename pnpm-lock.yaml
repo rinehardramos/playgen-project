@@ -227,8 +227,8 @@ importers:
         version: 8.20.0
     devDependencies:
       '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.37
+        specifier: ^25.5.2
+        version: 25.5.2
       '@types/pg':
         specifier: ^8.11.0
         version: 8.20.0
@@ -243,7 +243,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.5.0
-        version: 1.6.1(@types/node@20.19.37)(lightningcss@1.32.0)
+        version: 1.6.1(@types/node@25.5.2)(lightningcss@1.32.0)
 
   services/playlist:
     dependencies:
