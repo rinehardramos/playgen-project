@@ -1,6 +1,6 @@
 import { getPool } from '../db.js';
 import type { DjScript, DjScriptWithSegments, DjSegment, DjSegmentType, DjProfile } from '@playgen/types';
-import { llmComplete } from '../adapters/llm/openrouter.js';
+import { llmComplete } from '../adapters/llm/index.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import { config } from '../config.js';
 
