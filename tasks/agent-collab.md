@@ -13,6 +13,9 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
+- [ ] Fix DJ Script generation INTERNAL_ERROR — missing API key validation + unmasked LLM errors (issue #183, fix/issue-183) | @claude-code | 2026-04-05
+- [ ] bootstrap.sh: tasks/TODO.md stub + --help-board-ids + macOS sed fix (issue #179, feat/issue-179) | @claude-code | 2026-04-05
+- [ ] tg-agent: add /report command (issue #181, feat/issue-181) | @claude-code | 2026-04-05
 
 ## Recently Completed
 - [x] Google OAuth login (issue #200, feat/issue-200-google-oauth) | @claude-code | 2026-04-05

@@ -52,8 +52,32 @@ while [ $# -gt 0 ]; do
         --board-number)   BOARD_NUMBER="$2"; shift 2 ;;
         --board-owner)    BOARD_OWNER="$2"; shift 2 ;;
         --no-docker)      NO_DOCKER=1; shift ;;
+        --help-board-ids)
+            _HBI_OWNER="${REPO%%/*}"
+            if [ -z "$_HBI_OWNER" ]; then
+                _HBI_OWNER="$(git remote get-url origin 2>/dev/null | sed 's|.*github\.com[:/]\([^/]*\)/.*|\1|')"
+            fi
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "  GitHub Projects IDs${_HBI_OWNER:+ for: $_HBI_OWNER}"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "  Projects list:"
+            gh project list --owner "${_HBI_OWNER:-@me}" --format json \
+                --jq '.projects[] | "  #\(.number)  id=\(.id)  \(.title)"' 2>/dev/null \
+                || gh project list --owner "${_HBI_OWNER:-@me}" 2>/dev/null \
+                || echo "  (run: gh project list --owner <your-org-or-user>)"
+            echo ""
+            echo "  To list field IDs for board N (replace N with board number above):"
+            echo "  gh project field-list N --owner ${_HBI_OWNER:-<owner>} --format json \\"
+            echo "    --jq '.fields[] | \"  \\(.id)  \\(.name)\"'"
+            echo ""
+            echo "  Copy board_id, status_field_id, and option IDs into project.config.json"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 0
+            ;;
         --help|-h)
-            sed -n '/^# bootstrap/,/^[^#]/p' "$0" | head -30
+            sed -n '/^# bootstrap/,/^[^#]/p' "$0" | head -35
             exit 0
             ;;
         *)
@@ -179,6 +203,33 @@ if [ -f "tasks/lessons.md" ]; then
 else
     cp "$SCRIPT_DIR/templates/lessons.md" "tasks/lessons.md"
     ok "Created tasks/lessons.md"
+fi
+
+if [ -f "tasks/TODO.md" ]; then
+    warn "tasks/TODO.md already exists — skipping"
+else
+    cat > "tasks/TODO.md" <<'TODOEOF'
+# TODO
+
+## Phase 1: Setup
+- [ ] Configure environment variables
+- [ ] Set up database and run migrations
+- [ ] Verify local dev server starts
+
+## Phase 2: Core Features
+- [ ] Implement primary feature set
+- [ ] Write unit tests
+
+## Phase 3: Integration & Polish
+- [ ] End-to-end integration tests
+- [ ] UI/UX review and fixes
+- [ ] Performance and security review
+
+## Phase 4: Deployment
+- [ ] Staging deploy and smoke test
+- [ ] Production deploy
+TODOEOF
+    ok "Created tasks/TODO.md"
 fi
 
 # ── Step 4: scripts/ ──────────────────────────────────────────────────────────
@@ -384,6 +435,7 @@ echo "  ✅ .github/workflows/ci.yml + cd.yml"
 echo "  ✅ CLAUDE.md (project instructions)"
 echo "  ✅ tasks/agent-collab.md (coordination lock)"
 echo "  ✅ tasks/lessons.md (self-improvement log)"
+echo "  ✅ tasks/TODO.md (phase structure stub)"
 echo "  ✅ scripts/project-health.sh"
 echo "  ✅ scripts/simulate-deploy.sh"
 echo "  ✅ tools/agent-ops/project.config.json"
@@ -392,7 +444,9 @@ echo ""
 echo "  Next steps:"
 echo ""
 echo "  1. Edit tools/agent-ops/project.config.json:"
-echo "     - Set board_id, status_field_id, board_columns from your GitHub Project"
+echo "     - Run: bash tools/agent-ops/bootstrap.sh --help-board-ids --repo $REPO"
+echo "       to print your GitHub Projects board_id and field IDs"
+echo "     - Set board_id, status_field_id, board_columns from that output"
 echo "     - Set tech.docker_services (your service names)"
 echo "     - Set deploy.vercel/railway flags"
 echo ""
