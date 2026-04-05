@@ -55,6 +55,11 @@ vi.mock('../../src/services/manifestService.js', () => ({
   getManifestByScript: vi.fn().mockResolvedValue(null),
 }));
 
+// Mock news provider — returns empty headlines by default
+vi.mock('../../src/adapters/news/index.js', () => ({
+  getNewsProvider: vi.fn(() => ({ fetchHeadlines: vi.fn().mockResolvedValue([]) })),
+}));
+
 // 2. Import the worker
 import { runGenerationJob } from '../../src/workers/generationWorker';
 
@@ -94,23 +99,20 @@ describe('generationWorker', () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ segment_type: 'show_intro', prompt_template: 'Intro template' }],
     });
+    // 4b. Pending shoutouts (none)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
     // 5. Script insert
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: scriptId }],
     });
-    
+
     // For 1 entry, segmentsForEntry returns ['show_intro', 'song_intro', 'show_outro']
     // 6. Segment inserts
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-1' }] }); // show_intro
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-2' }] }); // song_intro
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-3' }] }); // show_outro
 
-    // 7. TTS pass updates (3 segments)
-    mockQuery.mockResolvedValueOnce({ rows: [] }); // update seg-1
-    mockQuery.mockResolvedValueOnce({ rows: [] }); // update seg-2
-    mockQuery.mockResolvedValueOnce({ rows: [] }); // update seg-3
-
-    // 8. Final script update
+    // 7. Final script update
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
     await runGenerationJob({
@@ -144,5 +146,61 @@ describe('generationWorker', () => {
     await expect(
       runGenerationJob({ playlist_id: 'playlist-1', station_id: 'station-1', auto_approve: false }),
     ).rejects.toThrow(/No LLM API key configured/);
+  });
+
+  it('injects listener shoutout segments after show_intro', async () => {
+    const scriptId = 'script-shoutout';
+
+    // 1. Station info
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1', openrouter_api_key: 'test-key' }],
+    });
+    // 1b. Station settings
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 2. DJ profile
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'profile-1', llm_model: 'test-model', llm_temperature: 0.8, tts_voice_id: 'alloy' }],
+    });
+    // 3. Playlist entries (1 entry)
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'entry-1', hour: 10, position: 0, song_title: 'Song 1', song_artist: 'Artist 1', duration_sec: 180 }],
+    });
+    // 4. Script templates
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 4b. Pending shoutouts (1 shoutout)
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'shoutout-1', listener_name: 'Maria', message: 'Love the morning show!' }],
+    });
+    // 5. Script insert
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: scriptId }] });
+
+    // 6. Segment inserts (main loop uses RETURNING id; shoutout INSERT does not)
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-1' }] }); // show_intro RETURNING id
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // listener_activity insert (no RETURNING id)
+    // 6b. Mark shoutout as used
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-2' }] }); // song_intro RETURNING id
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-3' }] }); // show_outro RETURNING id
+
+    // 7. Final script update
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await runGenerationJob({
+      playlist_id: 'playlist-1',
+      station_id: 'station-1',
+      auto_approve: false,
+    });
+
+    // Verify listener_activity segment was inserted
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO dj_segments'),
+      expect.arrayContaining(['listener_activity']),
+    );
+
+    // Verify shoutout was marked as used
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE listener_shoutouts'),
+      expect.arrayContaining([scriptId]),
+    );
   });
 });
