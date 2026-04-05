@@ -27,7 +27,9 @@ export async function anthropicLlmComplete(
   options: LlmOptions = {},
 ): Promise<string> {
   const c = getClient(options.apiKey);
-  const model = options.model ?? DEFAULT_MODEL;
+  // OpenRouter uses "anthropic/claude-*" format; Anthropic API expects just "claude-*"
+  const rawModel = options.model ?? DEFAULT_MODEL;
+  const model = rawModel.startsWith('anthropic/') ? rawModel.slice('anthropic/'.length) : rawModel;
 
   // Anthropic API separates system prompt from user/assistant messages
   const systemMessages = messages.filter((m) => m.role === 'system');

@@ -55,20 +55,32 @@ const SETTING_FIELDS: SettingField[] = [
     placeholder: 'e.g. EXAVITQu4vr4xnSDxMaL',
   },
   {
+    key: 'llm_provider',
+    label: 'LLM Provider',
+    description: 'AI provider used for DJ script generation.',
+    type: 'select',
+    is_secret: false,
+    options: [
+      { value: 'openrouter', label: 'OpenRouter (default)' },
+      { value: 'anthropic', label: 'Anthropic (direct)' },
+      { value: 'openai', label: 'OpenAI (direct)' },
+    ],
+  },
+  {
     key: 'llm_model',
     label: 'LLM Model',
-    description: 'OpenRouter model string for DJ script generation.',
+    description: 'Model name for the selected provider. OpenRouter: "anthropic/claude-sonnet-4-5". Anthropic direct: "claude-sonnet-4-5". OpenAI direct: "gpt-4o".',
     type: 'text',
     is_secret: false,
     placeholder: 'anthropic/claude-sonnet-4-5',
   },
   {
     key: 'llm_api_key',
-    label: 'LLM API Key Override',
-    description: 'Override the default OpenRouter API key for this station. Falls back to service env if not set.',
+    label: 'LLM API Key',
+    description: 'API key for the selected LLM provider. Stored encrypted; masked after saving.',
     type: 'password',
     is_secret: true,
-    placeholder: 'sk-or-v1-…',
+    placeholder: 'sk-or-v1-… / sk-ant-… / sk-…',
   },
 ];
 
@@ -243,7 +255,7 @@ export default function StationSettingsPage() {
             </h2>
             <div className="space-y-4">
               {SETTING_FIELDS.filter((f) =>
-                ['llm_model', 'llm_api_key'].includes(f.key),
+                ['llm_provider', 'llm_model', 'llm_api_key'].includes(f.key),
               ).map((field) => (
                 <SettingRow
                   key={field.key}
