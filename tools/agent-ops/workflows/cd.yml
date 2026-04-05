@@ -1,0 +1,184 @@
+name: CD
+
+# AGENT-OPS TEMPLATE — runs on push to main after CI passes.
+# Sections are conditionally enabled via project.config.json deploy flags.
+# bootstrap.sh will patch service matrices to match your project.
+#
+# Required secrets (set in GitHub repo settings):
+#   GHCR: GITHUB_TOKEN (automatic)
+#   DB migrations: DATABASE_URL  (or your DB_URL_SECRET from config)
+#   Vercel (if enabled): VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+#   Railway (if enabled): RAILWAY_TOKEN
+#
+# Required vars (GitHub Actions → Variables):
+#   PRODUCTION_GATEWAY_URL   — base URL of your deployed API
+#   PRODUCTION_FRONTEND_URL  — base URL of your deployed frontend (if applicable)
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  # ── Build & push Docker images to GHCR ────────────────────────────────────
+  # CUSTOMIZE: replace the matrix entries below with your actual services.
+  build-and-push:
+    name: Build & Push (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── REPLACE THESE WITH YOUR SERVICES ──────────────────────────────
+          - service: api
+            dockerfile: services/api/Dockerfile
+            context: .
+          - service: frontend
+            dockerfile: frontend/Dockerfile
+            context: ./frontend
+          # Add more services here:
+          # - service: worker
+          #   dockerfile: services/worker/Dockerfile
+          #   context: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}/${{ matrix.service }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Run DB migrations ──────────────────────────────────────────────────────
+  # CUSTOMIZE: adjust the migrate command for your ORM/DB tool.
+  # Remove this job entirely if you don't use a managed database.
+  migrate:
+    name: Run Migrations
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # CUSTOMIZE: replace with your migration command
+      # e.g. pnpm run db:migrate, npx prisma migrate deploy, python manage.py migrate
+      - name: Run migrations
+        run: |
+          echo "CUSTOMIZE: add your migration command here"
+          # Example for a shared/db package:
+          # pnpm --filter @myproject/db build
+          # node shared/db/dist/migrate.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+  # ── Deploy frontend to Vercel ──────────────────────────────────────────────
+  # OPTIONAL: remove this job if not using Vercel.
+  # Enable by setting deploy.vercel: true in project.config.json
+  deploy-frontend:
+    name: Deploy Frontend (Vercel)
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    environment: production
+    # CUSTOMIZE: set this condition based on your project.config.json deploy.vercel flag
+    # Or simply remove the if: condition to always run
+    if: ${{ vars.DEPLOY_VERCEL == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  # ── Deploy backend services to Railway ────────────────────────────────────
+  # OPTIONAL: remove this job if not using Railway.
+  # Enable by setting deploy.railway: true in project.config.json
+  deploy-services:
+    name: Deploy (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs: [migrate]
+    environment: production
+    if: ${{ vars.DEPLOY_RAILWAY == 'true' }}
+    strategy:
+      max-parallel: 3
+      matrix:
+        # CUSTOMIZE: list your Railway service names
+        service: [api, worker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        run: railway up --service ${{ matrix.service }} --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  # ── Post-deploy smoke tests ───────────────────────────────────────────────
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: [deploy-services, deploy-frontend]
+    # If neither Vercel nor Railway is used, adjust 'needs' to just [migrate]
+    if: always()
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for deployments to stabilize
+        run: sleep 30
+
+      - name: Run smoke tests
+        run: |
+          if [ -f "scripts/smoke-test.sh" ]; then
+            bash scripts/smoke-test.sh
+          else
+            echo "No smoke-test.sh found. Add scripts/smoke-test.sh to your project."
+            echo "CUSTOMIZE: add curl-based health checks for your production endpoints."
+          fi
+        env:
+          GATEWAY_URL: ${{ vars.PRODUCTION_GATEWAY_URL }}
+          FRONTEND_URL: ${{ vars.PRODUCTION_FRONTEND_URL }}

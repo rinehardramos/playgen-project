@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  tg-agent:
+    build: .
+    image: agent-ops-tg-agent
+    restart: unless-stopped
+    volumes:
+      # Share state with the daemon (read pool status)
+      - agent_state:/state
+      # Mount the project config from the agent-ops root
+      - ../project.config.json:/app/project.config.json:ro
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - GH_TOKEN=${GH_TOKEN}
+      - WORKDIR=${WORKDIR:-/workspace}
+      - CONFIG_FILE=/app/project.config.json
+      - GH_TOKEN=${GH_TOKEN}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  agent_state:
+    external: true
+    name: daemon_agent_state

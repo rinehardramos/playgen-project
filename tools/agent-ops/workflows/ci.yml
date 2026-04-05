@@ -1,0 +1,119 @@
+name: CI
+
+# AGENT-OPS TEMPLATE — customize the matrix.include sections below
+# Replace service entries with your actual services/Dockerfiles.
+# bootstrap.sh will do this substitution automatically.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Lint, typecheck, unit tests ───────────────────────────────────────────
+  quality:
+    name: Lint, Typecheck & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # Remove this if not using pnpm — replace with npm/yarn setup as needed
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          # Change cache to "npm" or "yarn" if not using pnpm
+
+      - run: pnpm install --frozen-lockfile
+        # Change to: npm ci   OR   yarn install --frozen-lockfile
+
+      - run: pnpm run typecheck
+        # Remove if not a TypeScript project
+
+      - run: pnpm run lint
+
+      - run: pnpm run test:unit
+
+  # ── Security audit ────────────────────────────────────────────────────────
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Dependency audit
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Secret scanning
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
+  # ── Docker build verification ─────────────────────────────────────────────
+  # CUSTOMIZE: replace the matrix entries below with your actual services.
+  # Each entry needs: service (name), dockerfile (path), context (build root).
+  docker-build-verify:
+    name: Docker Build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── REPLACE THESE WITH YOUR SERVICES ──────────────────────────────
+          - service: api
+            dockerfile: services/api/Dockerfile
+            context: .
+          - service: frontend
+            dockerfile: frontend/Dockerfile
+            context: ./frontend
+          # Add more services here:
+          # - service: worker
+          #   dockerfile: services/worker/Dockerfile
+          #   context: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Project health check ──────────────────────────────────────────────────
+  project-health:
+    name: Project Health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check project health
+        run: |
+          if [ -f "scripts/project-health.sh" ]; then
+            bash scripts/project-health.sh --ci
+          elif [ -f "tools/agent-ops/scripts/project-health.sh" ]; then
+            bash tools/agent-ops/scripts/project-health.sh --ci
+          else
+            echo "No project-health.sh found — skipping"
+          fi
+        continue-on-error: true
+        # Set continue-on-error: false to block PRs on P0 blockers

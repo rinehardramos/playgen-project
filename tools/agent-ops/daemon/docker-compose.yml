@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  daemon:
+    build: .
+    image: agent-ops-daemon
+    restart: unless-stopped
+    volumes:
+      # Shared state between daemon and spawned agents
+      - agent_state:/state
+      # Mount the project config from the agent-ops root
+      - ../project.config.json:/app/project.config.json:ro
+      # Optional: mount claude binary if available on the host
+      # - /path/to/claude:/usr/local/bin/claude:ro
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - GH_TOKEN=${GH_TOKEN}
+      - CLAUDE_BIN=${CLAUDE_BIN:-}
+      - CLAUDE_FLAGS=${CLAUDE_FLAGS:---dangerously-skip-permissions}
+      - WORKDIR=${WORKDIR:-/workspace}
+      - CONFIG_FILE=/app/project.config.json
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  agent_state:
+    driver: local
