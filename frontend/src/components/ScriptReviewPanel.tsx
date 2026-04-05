@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 import type { ApiError } from '@/lib/api';
 
@@ -45,6 +45,7 @@ export interface PlaylistEntry {
   position: number;
   song_title: string;
   song_artist: string;
+  duration_sec?: number | null;
 }
 
 interface Props {
@@ -89,6 +90,16 @@ export default function ScriptReviewPanel({
   const [editing, setEditing] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Per-segment TTS states
+  const [generatingTts, setGeneratingTts] = useState<Record<string, boolean>>({});
+  const [deletingTts, setDeletingTts] = useState<Record<string, boolean>>({});
+  const [playingSegmentId, setPlayingSegmentId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Bulk TTS generation state
+  const [bulkGeneratingTts, setBulkGeneratingTts] = useState(false);
+  const [bulkTtsProgress, setBulkTtsProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Inline editable text for all segments when pending_review
   const [segmentTexts, setSegmentTexts] = useState<Record<string, string>>(() =>
@@ -412,6 +423,114 @@ export default function ScriptReviewPanel({
     }
   }
 
+  // ── Per-segment TTS actions ─────────────────────────────────────────────
+
+  async function handleGenerateTts(segmentId: string) {
+    setGeneratingTts((p) => ({ ...p, [segmentId]: true }));
+    setError(null);
+    try {
+      const updated = await api.post<ReviewPanelSegment>(
+        `/api/v1/dj/segments/${segmentId}/regenerate-tts`,
+        {},
+      );
+      updateScript({
+        ...script,
+        segments: script.segments.map((s) => s.id === segmentId ? { ...s, ...updated } : s),
+      });
+    } catch (err: unknown) {
+      setError((err as ApiError).message ?? 'TTS generation failed');
+    } finally {
+      setGeneratingTts((p) => { const n = { ...p }; delete n[segmentId]; return n; });
+    }
+  }
+
+  async function handleDeleteTts(segmentId: string) {
+    setDeletingTts((p) => ({ ...p, [segmentId]: true }));
+    // Stop playback if this segment is playing
+    if (playingSegmentId === segmentId) {
+      audioRef.current?.pause();
+      audioRef.current = null;
+      setPlayingSegmentId(null);
+    }
+    try {
+      await api.delete(`/api/v1/dj/segments/${segmentId}/audio`);
+      updateScript({
+        ...script,
+        segments: script.segments.map((s) =>
+          s.id === segmentId ? { ...s, audio_url: null, audio_duration_sec: null } : s,
+        ),
+      });
+    } catch (err: unknown) {
+      setError((err as ApiError).message ?? 'Failed to delete audio');
+    } finally {
+      setDeletingTts((p) => { const n = { ...p }; delete n[segmentId]; return n; });
+    }
+  }
+
+  function handlePlayTts(seg: ReviewPanelSegment) {
+    if (!seg.audio_url) return;
+    // If already playing this segment, pause it
+    if (playingSegmentId === seg.id && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setPlayingSegmentId(null);
+      return;
+    }
+    // Stop any currently playing segment
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    // Build absolute URL (audio_url is like /api/v1/dj/audio/...)
+    const base = process.env.NEXT_PUBLIC_API_URL ?? '';
+    const url = `${base}${seg.audio_url}`;
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    setPlayingSegmentId(seg.id);
+    audio.onended = () => { audioRef.current = null; setPlayingSegmentId(null); };
+    audio.onerror = () => { audioRef.current = null; setPlayingSegmentId(null); };
+    audio.play().catch(() => { audioRef.current = null; setPlayingSegmentId(null); });
+  }
+
+  // ── Bulk TTS generation ─────────────────────────────────────────────────
+
+  async function handleGenerateAllTts() {
+    const pending = script.segments.filter((s) => !s.audio_url);
+    if (pending.length === 0) return;
+
+    setBulkGeneratingTts(true);
+    setBulkTtsProgress({ done: 0, total: pending.length });
+    setError(null);
+
+    let done = 0;
+    let currentScript = script;
+
+    for (const seg of pending) {
+      try {
+        const updated = await api.post<ReviewPanelSegment>(
+          `/api/v1/dj/segments/${seg.id}/regenerate-tts`,
+          {},
+        );
+        done++;
+        setBulkTtsProgress({ done, total: pending.length });
+        currentScript = {
+          ...currentScript,
+          segments: currentScript.segments.map((s) =>
+            s.id === seg.id ? { ...s, ...updated } : s,
+          ),
+        };
+        updateScript(currentScript);
+      } catch {
+        // One segment failed — continue with the rest
+        done++;
+        setBulkTtsProgress({ done, total: pending.length });
+      }
+    }
+
+    setBulkGeneratingTts(false);
+    setBulkTtsProgress(null);
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────
 
   const isPending = script.review_status === 'pending_review';
@@ -469,12 +588,37 @@ export default function ScriptReviewPanel({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Generate All TTS — visible whenever some segments lack audio */}
+          {!isFailed && script.segments.some((s) => !s.audio_url) && (
+            <button
+              onClick={handleGenerateAllTts}
+              disabled={bulkGeneratingTts || bulkApproving}
+              className="btn-secondary text-xs flex items-center gap-1.5 border-violet-900/50 text-violet-400 hover:bg-violet-900/20 disabled:opacity-50"
+            >
+              {bulkGeneratingTts ? (
+                <>
+                  <span className="w-3.5 h-3.5 inline-block border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                  {bulkTtsProgress
+                    ? `Generating ${bulkTtsProgress.done + 1}/${bulkTtsProgress.total}…`
+                    : 'Starting…'}
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 9a3 3 0 010 6m-3.536-6.464a5 5 0 000 7.072" />
+                  </svg>
+                  Generate All TTS
+                </>
+              )}
+            </button>
+          )}
+
           {isPending && !isFailed && (
             <>
               {/* Approve All */}
               <button
                 onClick={handleApproveAll}
-                disabled={bulkApproving}
+                disabled={bulkApproving || bulkGeneratingTts}
                 className="btn-primary text-xs flex items-center gap-1.5"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -486,7 +630,7 @@ export default function ScriptReviewPanel({
               {/* Reject All */}
               <button
                 onClick={() => setShowRejectModal(true)}
-                disabled={bulkApproving}
+                disabled={bulkApproving || bulkGeneratingTts}
                 className="btn-secondary text-xs border-red-900/50 hover:bg-red-900/20 text-red-400 flex items-center gap-1.5"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -692,6 +836,96 @@ export default function ScriptReviewPanel({
                   </div>
                 </div>
               )}
+
+              {/* ── TTS Audio Controls ─────────────────────────────────── */}
+              <div className="mt-3 pt-3 border-t border-[#2a2a40] flex items-center gap-2 flex-wrap">
+                {seg.audio_url ? (
+                  <>
+                    {/* Play / Pause */}
+                    <button
+                      onClick={() => handlePlayTts(seg)}
+                      className={`flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                        playingSegmentId === seg.id
+                          ? 'bg-violet-600/30 border-violet-500/50 text-violet-200'
+                          : 'bg-[#1a1a2a] border-[#2a2a40] text-gray-300 hover:border-violet-500/40 hover:text-violet-300'
+                      }`}
+                    >
+                      {playingSegmentId === seg.id ? (
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      )}
+                      {playingSegmentId === seg.id ? 'Playing…' : 'Play'}
+                      {seg.audio_duration_sec && (
+                        <span className="text-gray-500">
+                          {seg.audio_duration_sec < 60
+                            ? `${Math.round(seg.audio_duration_sec)}s`
+                            : `${Math.floor(seg.audio_duration_sec / 60)}:${String(Math.round(seg.audio_duration_sec % 60)).padStart(2, '0')}`}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Delete TTS */}
+                    <button
+                      onClick={() => handleDeleteTts(seg.id)}
+                      disabled={!!deletingTts[seg.id]}
+                      title="Delete generated audio"
+                      className="flex items-center gap-1 text-[11px] px-2 py-1.5 rounded-lg border bg-[#1a1a2a] border-[#2a2a40] text-gray-500 hover:text-red-400 hover:border-red-700/40 transition-colors disabled:opacity-40"
+                    >
+                      {deletingTts[seg.id] ? (
+                        <span className="w-3 h-3 inline-block border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      )}
+                    </button>
+
+                    {/* Regenerate TTS (re-generate with current text) */}
+                    <button
+                      onClick={() => handleGenerateTts(seg.id)}
+                      disabled={!!generatingTts[seg.id]}
+                      title="Re-generate audio from current text"
+                      className="flex items-center gap-1 text-[11px] px-2 py-1.5 rounded-lg border bg-[#1a1a2a] border-[#2a2a40] text-gray-500 hover:text-violet-400 hover:border-violet-500/40 transition-colors disabled:opacity-40"
+                    >
+                      {generatingTts[seg.id] ? (
+                        <span className="w-3 h-3 inline-block border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      )}
+                    </button>
+                  </>
+                ) : (
+                  /* Generate TTS */
+                  <button
+                    onClick={() => handleGenerateTts(seg.id)}
+                    disabled={!!generatingTts[seg.id]}
+                    className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg border bg-[#1a1a2a] border-[#2a2a40] text-gray-400 hover:text-violet-300 hover:border-violet-500/40 transition-colors disabled:opacity-50"
+                  >
+                    {generatingTts[seg.id] ? (
+                      <>
+                        <span className="w-3 h-3 inline-block border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                        Generating audio…
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 9a3 3 0 010 6m-3.536-6.464a5 5 0 000 7.072" />
+                        </svg>
+                        Generate TTS
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+              {/* ─────────────────────────────────────────────────────── */}
+
             </div>
           );
         })}

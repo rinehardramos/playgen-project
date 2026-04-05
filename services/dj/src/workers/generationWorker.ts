@@ -2,7 +2,6 @@ import { getPool } from '../db.js';
 import { llmComplete } from '../adapters/llm/openrouter.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import { config } from '../config.js';
-import { generateSegmentTts } from '../services/ttsService.js';
 import { buildManifest } from '../services/manifestService.js';
 import type { DjGenerationJobData, Job } from '../queues/djQueue.js';
 import type { DjProfile, DjSegmentType, DjScriptTemplate } from '@playgen/types';
@@ -174,13 +173,8 @@ export async function runGenerationJob(
   const currentDate = new Date().toISOString().split('T')[0];
   let position = 0;
 
-  // Resolve effective TTS / LLM config:
-  //   1. station_settings table (per-station override, keyed by string)
-  //   2. stations table columns (saved via the Settings page)
-  //   3. environment-variable defaults from config
-  const effectiveTtsProvider = stationSettings['tts_provider'] ?? config.tts.provider;
+  // Resolve effective LLM config (TTS is now generated on-demand per segment)
   const effectiveLlmProvider = stationSettings['llm_provider'] ?? config.llm.provider;
-  const effectiveTtsVoiceId  = stationSettings['tts_voice_id'] ?? profile.tts_voice_id ?? config.tts.defaultVoice;
   const effectiveLlmModel    = stationSettings['llm_model'] || profile.llm_model;
 
   const effectiveLlmApiKey = stationSettings['llm_api_key']
@@ -195,34 +189,8 @@ export async function runGenerationJob(
       : station.openrouter_api_key)
     ?? undefined;
 
-  const effectiveTtsApiKey = stationSettings['tts_api_key']
-    ?? (effectiveTtsProvider === 'elevenlabs'
-      ? station.elevenlabs_api_key
-      : effectiveTtsProvider === 'google'
-      ? station.gemini_api_key   // Google TTS uses the same Google/Gemini API key
-      : effectiveTtsProvider === 'gemini_tts'
-      ? station.gemini_api_key   // Gemini native TTS also uses the Gemini API key
-      : effectiveTtsProvider === 'mistral'
-      ? station.mistral_api_key
-      : station.openai_api_key)
-    ?? (effectiveTtsProvider === 'elevenlabs'
-      ? config.tts.elevenlabsApiKey
-      : effectiveTtsProvider === 'google'
-      ? config.tts.googleApiKey
-      : effectiveTtsProvider === 'gemini_tts'
-      ? config.tts.geminiApiKey
-      : effectiveTtsProvider === 'mistral'
-      ? config.tts.mistralApiKey
-      : config.tts.openaiApiKey);
-
-  const ttsEnabled = !!(effectiveTtsApiKey);
-
-  // Collect all generated segments for TTS pass
-  const generatedSegments: Array<{
-    id: string;
-    script_text: string;
-    position: number;
-  }> = [];
+  // Collect generated texts for variety tracking
+  const generatedTexts: string[] = [];
 
   // Pre-count total segment slots for progress reporting
   let totalSegmentSlots = 0;
@@ -257,6 +225,8 @@ export async function runGenerationJob(
         next_song: next ? { title: next.song_title, artist: next.song_artist, duration_sec: next.duration_sec } : undefined,
         segment_type,
         custom_template: customTemplate,
+        previousSegmentTexts: generatedTexts.slice(-4),
+        segmentIndex: position,
       };
 
       const systemPrompt = buildSystemPrompt(profile);
@@ -266,8 +236,8 @@ export async function runGenerationJob(
         `[generationWorker] LLM call — provider=${effectiveLlmProvider} model=${effectiveLlmModel} hasKey=${!!effectiveLlmApiKey} segment=${segment_type}`,
       );
 
-      // Progress: LLM phase spans 10% → 60%
-      const llmProgress = 10 + Math.round((segmentsDone / totalSegmentSlots) * 50);
+      // Progress: LLM phase spans 10% → 90% (TTS is now manual per-segment)
+      const llmProgress = 10 + Math.round((segmentsDone / totalSegmentSlots) * 80);
       await reportProgress(llmProgress, `Writing ${segment_type.replace('_', ' ')} (${segmentsDone + 1}/${totalSegmentSlots})…`);
 
       let script_text: string;
@@ -293,39 +263,20 @@ export async function runGenerationJob(
       }
 
       const pos = position++;
-      const { rows: segRows } = await pool.query<{ id: string }>(
+      await pool.query(
         `INSERT INTO dj_segments
            (script_id, playlist_entry_id, segment_type, position, script_text)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id`,
+         VALUES ($1, $2, $3, $4, $5)`,
         [script_id, entry.id, segment_type, pos, script_text],
       );
 
-      generatedSegments.push({ id: segRows[0].id, script_text, position: pos });
+      generatedTexts.push(script_text);
       segmentsDone++;
     }
   }
 
-  await reportProgress(60, 'Script complete — generating audio…');
-
-  // 7. TTS pass — generate audio for each segment
-  if (ttsEnabled) {
-    for (let si = 0; si < generatedSegments.length; si++) {
-      const seg = generatedSegments[si];
-      // Progress: TTS phase spans 60% → 90%
-      const ttsProgress = 60 + Math.round((si / generatedSegments.length) * 30);
-      await reportProgress(ttsProgress, `Generating audio ${si + 1}/${generatedSegments.length}…`);
-      try {
-        await generateSegmentTts(
-          { id: seg.id, position: seg.position, text: seg.script_text, script_id },
-          { provider: effectiveTtsProvider, apiKey: effectiveTtsApiKey, voiceId: effectiveTtsVoiceId },
-        );
-      } catch (ttsErr) {
-        console.error(`[generationWorker] TTS failed for segment ${seg.id}:`, ttsErr);
-        // Continue — text is still saved even if TTS fails
-      }
-    }
-  }
+  // TTS is now generated on demand per-segment via POST /dj/segments/:id/tts
+  // (removed from the generation job so scripts are available faster for review)
 
   await reportProgress(95, 'Finalising…');
 
