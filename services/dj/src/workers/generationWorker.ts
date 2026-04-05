@@ -708,18 +708,6 @@ export async function runGenerationJob(
         // Reset so next periodic fires at stationIdIntervalSec from show start
         lastStationIdAtSec = 0;
       }
-
-      // ── After first entry's song_intro: inject the opening station_id ───────────
-      if (isFirst && segment_type === 'song_intro' && !openingStationIdInserted) {
-        await reportProgress(
-          10 + Math.round((segmentsDone / totalSegmentSlots) * 80),
-          'Writing opening station ID…',
-        );
-        await generateNonSongSegment('station_id');
-        openingStationIdInserted = true;
-        // Reset so next periodic fires at stationIdIntervalSec from show start
-        lastStationIdAtSec = 0;
-      }
     }
 
     // Advance cumulative duration tracker for this song
