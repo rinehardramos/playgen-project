@@ -5,6 +5,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "migrate": "node dist/migrate.js",
     "seed": "node dist/seeds/index.js",
     "seed:playgen": "node dist/seeds/playgen.js"
