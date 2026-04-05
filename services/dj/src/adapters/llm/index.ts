@@ -3,7 +3,7 @@
  */
 import { config } from '../../config.js';
 import type { LlmMessage, LlmOptions } from './openrouter.js';
-import { openRouterLlmComplete } from './openrouter.js';
+import { llmComplete as openRouterLlmComplete } from './openrouter.js';
 import { openAiLlmComplete } from './openai.js';
 import { anthropicLlmComplete } from './anthropic.js';
 import { geminiLlmComplete } from './gemini.js';
