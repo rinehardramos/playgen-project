@@ -2,6 +2,7 @@ import { getPool } from '../db.js';
 import type { DjScript, DjScriptWithSegments, DjSegment, DjSegmentType, DjProfile } from '@playgen/types';
 import { llmComplete } from '../adapters/llm/openrouter.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
+import { config } from '../config.js';
 
 export async function getScript(playlist_id: string): Promise<DjScriptWithSegments | null> {
   const pool = getPool();
@@ -130,7 +131,7 @@ export async function regenerateSegment(
 ): Promise<DjSegment | null> {
   const pool = getPool();
 
-  // Load segment with joined context
+  // Load segment with joined context (including station API key columns for LLM resolution)
   const { rows: segRows } = await pool.query<{
     id: string;
     script_id: string;
@@ -141,11 +142,18 @@ export async function regenerateSegment(
     station_id: string;
     station_name: string;
     station_timezone: string;
+    openrouter_api_key: string | null;
+    openai_api_key: string | null;
+    anthropic_api_key: string | null;
+    gemini_api_key: string | null;
+    mistral_api_key: string | null;
   }>(
     `SELECT
        seg.id, seg.script_id, seg.segment_type, seg.position, seg.playlist_entry_id,
        scr.playlist_id, scr.station_id,
-       st.name AS station_name, st.timezone AS station_timezone
+       st.name AS station_name, st.timezone AS station_timezone,
+       st.openrouter_api_key, st.openai_api_key, st.anthropic_api_key,
+       st.gemini_api_key, st.mistral_api_key
      FROM dj_segments seg
      JOIN dj_scripts scr ON scr.id = seg.script_id
      JOIN stations st ON st.id = scr.station_id
@@ -164,6 +172,28 @@ export async function regenerateSegment(
   );
   const profile = profileRows[0];
   if (!profile) return null;
+
+  // Load per-station settings to resolve effective LLM provider / API key
+  const { rows: settingRows } = await pool.query<{ key: string; value: string }>(
+    `SELECT key, value FROM station_settings WHERE station_id = $1`,
+    [seg.station_id],
+  );
+  const stationSettings = Object.fromEntries(settingRows.map((r) => [r.key, r.value]));
+
+  const effectiveLlmProvider = stationSettings['llm_provider'] ?? config.llm.provider;
+  const effectiveLlmModel = stationSettings['llm_model'] || profile.llm_model;
+  const effectiveLlmApiKey =
+    stationSettings['llm_api_key'] ??
+    (effectiveLlmProvider === 'anthropic'
+      ? seg.anthropic_api_key
+      : effectiveLlmProvider === 'gemini'
+      ? seg.gemini_api_key
+      : effectiveLlmProvider === 'openai'
+      ? seg.openai_api_key
+      : effectiveLlmProvider === 'mistral'
+      ? seg.mistral_api_key
+      : seg.openrouter_api_key) ??
+    undefined;
 
   // Load playlist entries for context
   const { rows: entryRows } = await pool.query<{
@@ -204,10 +234,18 @@ export async function regenerateSegment(
       segment_type: seg.segment_type,
     }) + rejectionContext;
 
-  const newText = await llmComplete([
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userPrompt },
-  ]);
+  const newText = await llmComplete(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    {
+      model: effectiveLlmModel,
+      temperature: profile.llm_temperature != null ? Number(profile.llm_temperature) : undefined,
+      apiKey: effectiveLlmApiKey,
+      provider: effectiveLlmProvider,
+    },
+  );
 
   // Update segment with new text, reset to pending for review
   const { rows: updated } = await pool.query<DjSegment>(

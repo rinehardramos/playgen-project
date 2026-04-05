@@ -1,6 +1,5 @@
-import path from 'path';
-import fs from 'fs/promises';
 import { getTtsAdapter } from '../adapters/tts/openai.js';
+import { getStorageAdapter } from '../lib/storage/index.js';
 import { config } from '../config.js';
 import { getPool } from '../db.js';
 
@@ -41,23 +40,23 @@ export async function generateSegmentTts(
     apiKey: providerCfg.apiKey,
   });
 
-  const audioDir = path.join('/tmp', 'dj-audio', segment.script_id);
-  await fs.mkdir(audioDir, { recursive: true });
-
-  const outputPath = path.join(audioDir, `${segment.position}.mp3`);
   const result = await ttsAdapter.generate({
     voice_id: providerCfg.voiceId,
     text: segment.text,
   });
-
-  await fs.writeFile(outputPath, result.audio_data);
 
   let duration = result.duration_sec;
   if (duration === null) {
     duration = estimateMp3Duration(result.audio_data);
   }
 
-  const audioUrl = `/api/v1/dj/audio/${segment.script_id}/${segment.position}.mp3`;
+  // Write via storage adapter so reads (served via GET /dj/segments/:id/audio)
+  // always resolve against the same base path regardless of provider (local / S3).
+  const storagePath = `${segment.script_id}/${segment.position}.mp3`;
+  const storage = getStorageAdapter();
+  await storage.write(storagePath, result.audio_data);
+
+  const audioUrl = `/api/v1/dj/audio/${storagePath}`;
 
   await getPool().query(
     `UPDATE dj_segments
@@ -88,7 +87,13 @@ export async function loadTtsProviderConfig(
   const provider = settings['tts_provider'] ?? config.tts.provider;
   const apiKey =
     settings['tts_api_key'] ??
-    (provider === 'elevenlabs' ? config.tts.elevenlabsApiKey : config.tts.openaiApiKey);
+    (provider === 'elevenlabs'
+      ? config.tts.elevenlabsApiKey
+      : provider === 'google' || provider === 'gemini_tts'
+      ? config.tts.geminiApiKey
+      : provider === 'mistral'
+      ? config.tts.mistralApiKey
+      : config.tts.openaiApiKey);
   const voiceId = settings['tts_voice_id'] ?? fallbackVoiceId;
 
   if (!apiKey) return null;
