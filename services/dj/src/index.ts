@@ -8,6 +8,7 @@ import { profileRoutes } from './routes/profiles.js';
 import { daypartRoutes } from './routes/dayparts.js';
 import { scriptTemplateRoutes } from './routes/scriptTemplates.js';
 import { scriptRoutes } from './routes/scripts.js';
+import { shoutoutRoutes } from './routes/shoutouts.js';
 import { closeQueue } from './queues/djQueue.js';
 import { scheduleAudioCleanup, closeCleanupQueue } from './queues/audioCleanupQueue.js';
 
@@ -41,6 +42,7 @@ app.register(profileRoutes,        { prefix: '/api/v1' });
 app.register(daypartRoutes,        { prefix: '/api/v1' });
 app.register(scriptTemplateRoutes, { prefix: '/api/v1' });
 app.register(scriptRoutes,         { prefix: '/api/v1' });
+app.register(shoutoutRoutes,       { prefix: '/api/v1' });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 

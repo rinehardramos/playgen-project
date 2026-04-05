@@ -1,9 +1,14 @@
-import type { DjProfile, DjSegmentType, PersonaConfig } from '@playgen/types';
+import type { DjProfile, DjSegmentType, NewsHeadline, PersonaConfig } from '@playgen/types';
 
 export interface SongContext {
   title: string;
   artist: string;
   duration_sec: number | null;
+}
+
+export interface ShoutoutContext {
+  listener_name: string;
+  listener_message: string;
 }
 
 export interface ScriptContext {
@@ -16,6 +21,8 @@ export interface ScriptContext {
   next_song?: SongContext;
   segment_type: DjSegmentType;
   custom_template?: string;  // overrides default prompt when set
+  shoutout?: ShoutoutContext;    // populated for listener_activity segments
+  news_headlines?: NewsHeadline[]; // populated for current_events segments
   /** Texts of recently generated segments — used to enforce variety */
   previousSegmentTexts?: string[];
   /** 0-based position of this segment in the full script */
@@ -130,6 +137,8 @@ const SEGMENT_DEFAULTS: Record<DjSegmentType, string> = {
   time_check: `Call out the time ({{current_hour}}:00) on {{station_name}}. Tie it to the mood, the day, or something listeners might be doing right now — don't just read the clock.`,
   weather_tease: `Tease an upcoming weather update in one sentence. Make it feel relevant, not just a filler announcement.`,
   ad_break: `Announce a short commercial break in a smooth, natural way that doesn't feel like a hard stop.`,
+  current_events: `Briefly mention 1-2 current news headlines in a natural, conversational way on {{station_name}}. Keep it light and relatable — you're a DJ, not a newscaster. Headlines available: {{news_headlines}}`,
+  listener_activity: `Give a shoutout to {{listener_name}} who sent in this message: "{{listener_message}}". Make it feel personal, warm, and on-brand for the station. Keep it to 2-3 sentences.`,
 };
 
 // Simple {{variable}} interpolation
@@ -141,7 +150,15 @@ function interpolate(template: string, ctx: ScriptContext): string {
     .replace(/\{\{prev_song_title\}\}/g, ctx.prev_song?.title ?? '')
     .replace(/\{\{prev_song_artist\}\}/g, ctx.prev_song?.artist ?? '')
     .replace(/\{\{next_song_title\}\}/g, ctx.next_song?.title ?? '')
-    .replace(/\{\{next_song_artist\}\}/g, ctx.next_song?.artist ?? '');
+    .replace(/\{\{next_song_artist\}\}/g, ctx.next_song?.artist ?? '')
+    .replace(/\{\{listener_name\}\}/g, ctx.shoutout?.listener_name ?? 'a listener')
+    .replace(/\{\{listener_message\}\}/g, ctx.shoutout?.listener_message ?? '')
+    .replace(
+      /\{\{news_headlines\}\}/g,
+      ctx.news_headlines?.length
+        ? ctx.news_headlines.map((h) => `"${h.title}"${h.source ? ` (${h.source})` : ''}`).join('; ')
+        : 'no current headlines available',
+    );
 }
 
 export function buildUserPrompt(ctx: ScriptContext): string {

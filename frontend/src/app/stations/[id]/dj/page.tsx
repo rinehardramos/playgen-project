@@ -78,6 +78,13 @@ export default function DjProfilesPage() {
   const [autoApproveLoading, setAutoApproveLoading] = useState(false);
   const [autoApproveError, setAutoApproveError] = useState<string | null>(null);
 
+  // Shoutout state
+  const [shoutouts, setShoutouts] = useState<Array<{ id: string; listener_name: string | null; message: string; platform: string | null; created_at: string }>>([]);
+  const [shoutoutListener, setShoutoutListener] = useState('');
+  const [shoutoutMessage, setShoutoutMessage] = useState('');
+  const [shoutoutSubmitting, setShoutoutSubmitting] = useState(false);
+  const [shoutoutError, setShoutoutError] = useState<string | null>(null);
+
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<DjProfile | null>(null);
@@ -110,6 +117,47 @@ export default function DjProfilesPage() {
       setError((err as ApiError).message ?? 'Failed to load DJ profiles');
     } finally {
       setLoading(false);
+    }
+    fetchShoutouts();
+  }
+
+  async function fetchShoutouts() {
+    try {
+      const data = await api.get<typeof shoutouts>(`/api/v1/dj/shoutouts?station_id=${stationId}`);
+      setShoutouts(data);
+    } catch {
+      // Non-critical — shoutout load failure shouldn't block the page
+    }
+  }
+
+  async function handleSubmitShoutout(e: React.FormEvent) {
+    e.preventDefault();
+    if (!shoutoutMessage.trim()) return;
+    setShoutoutSubmitting(true);
+    setShoutoutError(null);
+    try {
+      await api.post('/api/v1/dj/shoutouts', {
+        station_id: stationId,
+        listener_name: shoutoutListener.trim() || undefined,
+        message: shoutoutMessage.trim(),
+        platform: 'manual',
+      });
+      setShoutoutListener('');
+      setShoutoutMessage('');
+      fetchShoutouts();
+    } catch (err: unknown) {
+      setShoutoutError((err as ApiError).message ?? 'Failed to submit shoutout');
+    } finally {
+      setShoutoutSubmitting(false);
+    }
+  }
+
+  async function handleDismissShoutout(id: string) {
+    try {
+      await api.patch(`/api/v1/dj/shoutouts/${id}`, { status: 'dismissed' });
+      setShoutouts((prev) => prev.filter((s) => s.id !== id));
+    } catch (err: unknown) {
+      alert((err as ApiError).message ?? 'Failed to dismiss shoutout');
     }
   }
 
@@ -242,6 +290,63 @@ export default function DjProfilesPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Listener Shoutouts */}
+      <div className="card p-5 mb-6 border border-[#2a2a40]">
+        <h2 className="text-sm font-semibold text-white mb-1">Listener Shoutouts</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Submit listener messages for the AI DJ to read out during the next script generation.
+        </p>
+
+        <form onSubmit={handleSubmitShoutout} className="flex flex-col sm:flex-row gap-2 mb-4">
+          <input
+            type="text"
+            value={shoutoutListener}
+            onChange={(e) => setShoutoutListener(e.target.value)}
+            placeholder="Listener name (optional)"
+            className="input flex-shrink-0 sm:w-40"
+          />
+          <input
+            type="text"
+            required
+            value={shoutoutMessage}
+            onChange={(e) => setShoutoutMessage(e.target.value)}
+            placeholder="Message from listener…"
+            className="input flex-1"
+          />
+          <button type="submit" disabled={shoutoutSubmitting || !shoutoutMessage.trim()} className="btn-primary whitespace-nowrap">
+            {shoutoutSubmitting ? 'Saving…' : 'Queue Shoutout'}
+          </button>
+        </form>
+
+        {shoutoutError && (
+          <p className="text-xs text-red-400 mb-3">{shoutoutError}</p>
+        )}
+
+        {shoutouts.length > 0 ? (
+          <ul className="space-y-2">
+            {shoutouts.map((s) => (
+              <li key={s.id} className="flex items-start justify-between gap-3 text-sm bg-[#1a1a2e] rounded-lg px-3 py-2 border border-[#2a2a40]">
+                <div className="min-w-0">
+                  {s.listener_name && (
+                    <span className="font-medium text-violet-400 mr-1.5">{s.listener_name}:</span>
+                  )}
+                  <span className="text-gray-300 break-words">{s.message}</span>
+                </div>
+                <button
+                  onClick={() => handleDismissShoutout(s.id)}
+                  className="text-gray-600 hover:text-red-400 text-xs shrink-0 mt-0.5"
+                  title="Dismiss"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-gray-600 italic">No pending shoutouts. Submitted messages will appear here until used in a script.</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

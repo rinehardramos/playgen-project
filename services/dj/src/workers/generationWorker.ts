@@ -1,10 +1,11 @@
 import { getPool } from '../db.js';
 import { llmComplete } from '../adapters/llm/openrouter.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
+import { getNewsProvider } from '../adapters/news/index.js';
 import { config } from '../config.js';
 import { buildManifest } from '../services/manifestService.js';
 import type { DjGenerationJobData, Job } from '../queues/djQueue.js';
-import type { DjProfile, DjSegmentType, DjScriptTemplate } from '@playgen/types';
+import type { DjProfile, DjSegmentType, DjScriptTemplate, NewsHeadline } from '@playgen/types';
 
 /** Fetch all station_settings for a given station into a key→value map (real values, un-masked). */
 async function loadStationSettings(stationId: string): Promise<Record<string, string>> {
@@ -35,6 +36,8 @@ interface StationRow {
   anthropic_api_key: string | null;
   gemini_api_key: string | null;
   mistral_api_key: string | null;
+  news_api_key: string | null;
+  news_provider: string | null;
 }
 
 // Determine which segment types to generate for a given playlist position
@@ -74,7 +77,8 @@ export async function runGenerationJob(
   // 1. Load station info (including API key columns saved via Settings page)
   const { rows: stationRows } = await pool.query<StationRow>(
     `SELECT id, name, timezone, company_id,
-            openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, gemini_api_key, mistral_api_key
+            openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, gemini_api_key, mistral_api_key,
+            news_api_key, news_provider
      FROM stations WHERE id = $1`,
     [data.station_id],
   );
@@ -153,6 +157,25 @@ export async function runGenerationJob(
     templateMap.set(t.segment_type, t.prompt_template);
   }
 
+  // 4b. Load pending listener shoutouts for this station (max 3 per script)
+  interface ShoutoutRow { id: string; listener_name: string | null; message: string; }
+  const { rows: pendingShoutouts } = await pool.query<ShoutoutRow>(
+    `SELECT id, listener_name, message FROM listener_shoutouts
+     WHERE station_id = $1 AND status = 'pending'
+     ORDER BY created_at ASC LIMIT 3`,
+    [data.station_id],
+  );
+
+  // 4c. Fetch current news headlines (best-effort; falls back to mock if unconfigured)
+  let newsHeadlines: NewsHeadline[] = [];
+  try {
+    const newsApiKey = station.news_api_key ?? stationSettings['news_api_key'] ?? null;
+    const newsProvider = getNewsProvider(newsApiKey);
+    newsHeadlines = await newsProvider.fetchHeadlines({ limit: 3 });
+  } catch (err) {
+    console.warn('[generationWorker] News fetch failed (non-fatal):', err);
+  }
+
   // 5. Create the script record
   const { rows: scriptRows } = await pool.query(
     `INSERT INTO dj_scripts
@@ -226,6 +249,9 @@ export async function runGenerationJob(
   for (let i = 0; i < entries.length; i++) {
     totalSegmentSlots += segmentsForEntry(entries[i], entries, i).length;
   }
+  // Add extra segments injected after show_intro
+  totalSegmentSlots += pendingShoutouts.length;
+  if (newsHeadlines.length > 0) totalSegmentSlots += 1;
 
   let segmentsDone = 0;
 
@@ -303,6 +329,131 @@ export async function runGenerationJob(
       generatedSegments.push({ id: segResult.rows[0].id, script_text, position: pos });
       generatedTexts.push(script_text);
       segmentsDone++;
+
+      // Inject current_events and listener shoutout segments immediately after show_intro
+      if (segment_type === 'show_intro') {
+        // Current events segment
+        if (newsHeadlines.length > 0) {
+          const newsProgress = 10 + Math.round((segmentsDone / totalSegmentSlots) * 80);
+          await reportProgress(newsProgress, `Writing current events (${segmentsDone + 1}/${totalSegmentSlots})…`);
+
+          const newsCtx = {
+            station_name: station.name,
+            station_timezone: station.timezone,
+            current_date: currentDate,
+            current_hour: entry.hour,
+            dj_profile: profile,
+            segment_type: 'current_events' as DjSegmentType,
+            custom_template: templateMap.get('current_events'),
+            news_headlines: newsHeadlines,
+            previousSegmentTexts: generatedTexts.slice(-4),
+            segmentIndex: position,
+          };
+
+          const newsSystemPrompt = buildSystemPrompt(profile);
+          const newsUserPrompt = buildUserPrompt(newsCtx) + (data.rejection_notes
+            ? `\n\nIMPORTANT: The previous script was rejected by the reviewer. Their feedback: "${data.rejection_notes}". Please rewrite accordingly.`
+            : '');
+
+          let newsText: string;
+          try {
+            newsText = await llmComplete(
+              [
+                { role: 'system', content: newsSystemPrompt },
+                { role: 'user', content: newsUserPrompt },
+              ],
+              {
+                model: effectiveLlmModel,
+                temperature: profile.llm_temperature != null ? Number(profile.llm_temperature) : undefined,
+                apiKey: effectiveLlmApiKey ?? undefined,
+                provider: effectiveLlmProvider,
+              },
+            );
+          } catch (llmErr) {
+            console.error('[generationWorker] Current events LLM call FAILED:', llmErr);
+            throw llmErr;
+          }
+
+          const newsPos = position++;
+          await pool.query(
+            `INSERT INTO dj_segments
+               (script_id, playlist_entry_id, segment_type, position, script_text)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [script_id, null, 'current_events', newsPos, newsText],
+          );
+
+          generatedTexts.push(newsText);
+          segmentsDone++;
+        }
+      }
+
+      // Inject listener shoutout segments immediately after show_intro
+      if (segment_type === 'show_intro' && pendingShoutouts.length > 0) {
+        for (const shoutout of pendingShoutouts) {
+          const shoutoutProgress = 10 + Math.round((segmentsDone / totalSegmentSlots) * 80);
+          await reportProgress(shoutoutProgress, `Writing listener shoutout (${segmentsDone + 1}/${totalSegmentSlots})…`);
+
+          const shoutoutCtx = {
+            station_name: station.name,
+            station_timezone: station.timezone,
+            current_date: currentDate,
+            current_hour: entry.hour,
+            dj_profile: profile,
+            segment_type: 'listener_activity' as DjSegmentType,
+            custom_template: templateMap.get('listener_activity'),
+            shoutout: {
+              listener_name: shoutout.listener_name ?? 'a listener',
+              listener_message: shoutout.message,
+            },
+            previousSegmentTexts: generatedTexts.slice(-4),
+            segmentIndex: position,
+          };
+
+          const shoutoutSystemPrompt = buildSystemPrompt(profile);
+          const shoutoutUserPrompt = buildUserPrompt(shoutoutCtx) + (data.rejection_notes
+            ? `\n\nIMPORTANT: The previous script was rejected by the reviewer. Their feedback: "${data.rejection_notes}". Please rewrite accordingly.`
+            : '');
+
+          let shoutoutText: string;
+          try {
+            shoutoutText = await llmComplete(
+              [
+                { role: 'system', content: shoutoutSystemPrompt },
+                { role: 'user', content: shoutoutUserPrompt },
+              ],
+              {
+                model: effectiveLlmModel,
+                temperature: profile.llm_temperature != null ? Number(profile.llm_temperature) : undefined,
+                apiKey: effectiveLlmApiKey ?? undefined,
+                provider: effectiveLlmProvider,
+              },
+            );
+          } catch (llmErr) {
+            console.error('[generationWorker] Shoutout LLM call FAILED:', llmErr);
+            throw llmErr;
+          }
+
+          const shoutoutPos = position++;
+          await pool.query(
+            `INSERT INTO dj_segments
+               (script_id, playlist_entry_id, segment_type, position, script_text)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [script_id, null, 'listener_activity', shoutoutPos, shoutoutText],
+          );
+
+          generatedTexts.push(shoutoutText);
+          segmentsDone++;
+        }
+
+        // Mark shoutouts as used
+        const shoutoutIds = pendingShoutouts.map((s) => s.id);
+        await pool.query(
+          `UPDATE listener_shoutouts
+           SET status = 'used', used_in_script_id = $1, updated_at = NOW()
+           WHERE id = ANY($2::uuid[])`,
+          [script_id, shoutoutIds],
+        );
+      }
     }
   }
 
