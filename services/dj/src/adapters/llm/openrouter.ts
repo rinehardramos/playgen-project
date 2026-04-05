@@ -10,8 +10,10 @@ export interface LlmOptions {
   model?: string;
   temperature?: number;
   maxTokens?: number;
-  /** Override the OpenRouter API key (e.g. read from station_settings). */
+  /** Override the API key (e.g. read from station_settings). */
   apiKey?: string;
+  /** LLM provider: 'openrouter' (default) | 'openai' */
+  provider?: string;
 }
 
 let defaultClient: OpenAI | null = null;
@@ -45,6 +47,13 @@ export async function llmComplete(
   messages: LlmMessage[],
   options: LlmOptions = {},
 ): Promise<string> {
+  // Dispatch to OpenAI direct if requested
+  const provider = options.provider ?? config.llm.provider;
+  if (provider === 'openai') {
+    const { openAiLlmComplete } = await import('./openai.js');
+    return openAiLlmComplete(messages, options);
+  }
+
   const c = getClient(options.apiKey);
   const model = options.model ?? config.openRouter.defaultModel;
 
