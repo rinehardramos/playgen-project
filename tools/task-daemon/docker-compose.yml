@@ -1,0 +1,19 @@
+services:
+  task-daemon:
+    build: .
+    container_name: playgen-task-daemon
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      GH_TOKEN: ${GH_TOKEN}
+      GH_REPO: ${GH_REPO:-rinehardramos/playgen-project}
+      CLAUDE_BIN: /usr/local/bin/claude   # wrapper — auto-discovers latest version from /claude-vm
+    volumes:
+      - daemon_state:/state
+      - ../../:/workspace:ro
+      # claude-code-vm dir mounted read-only — wrapper picks latest version automatically
+      - "${HOME}/Library/Application Support/Claude/claude-code-vm:/claude-vm:ro"
+
+volumes:
+  daemon_state:

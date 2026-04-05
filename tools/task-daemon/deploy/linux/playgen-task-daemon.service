@@ -1,0 +1,21 @@
+[Unit]
+Description=PlayGen Task Daemon — autonomous agent pool manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=INSTALL_PATH/tools/task-daemon/deploy/linux/run-daemon.sh
+Restart=always
+RestartSec=30
+
+# Logs go to journald (journalctl --user -u playgen-task-daemon -f)
+StandardOutput=journal
+StandardError=journal
+
+# Environment — override per-install
+Environment="HOME=HOMEDIR"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+
+[Install]
+WantedBy=default.target
