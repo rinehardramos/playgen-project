@@ -126,9 +126,8 @@ export default function ProgramsPage() {
   useEffect(() => {
     const user = getCurrentUser();
     if (!user) { router.push('/login'); return; }
-    api.get<unknown>(`/api/v1/companies/${user.company_id}/stations`)
-      .then((data: unknown) => {
-        const list = data as Station[];
+    api.get<Station[]>('/api/v1/stations')
+      .then((list) => {
         setStations(list);
         if (list.length > 0) setSelectedStation(list[0].id);
       })
@@ -139,8 +138,8 @@ export default function ProgramsPage() {
     if (!selectedStation) return;
     setLoading(true);
     try {
-      const data = await api.get<unknown>(`/api/v1/stations/${selectedStation}/programs`);
-      setPrograms(data as Program[]);
+      const data = await api.get<Program[]>(`/api/v1/stations/${selectedStation}/programs`);
+      setPrograms(data);
     } catch {
       setPrograms([]);
     } finally {
