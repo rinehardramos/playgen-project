@@ -134,7 +134,7 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   const effectiveTtsProvider = stationSettings['tts_provider'] ?? config.tts.provider;
   const effectiveLlmProvider = stationSettings['llm_provider'] ?? config.llm.provider;
   const effectiveTtsVoiceId  = stationSettings['tts_voice_id'] ?? profile.tts_voice_id ?? config.tts.defaultVoice;
-  const effectiveLlmModel    = stationSettings['llm_model'] ?? profile.llm_model;
+  const effectiveLlmModel    = stationSettings['llm_model'] || profile.llm_model;
 
   const effectiveLlmApiKey = stationSettings['llm_api_key']
     ?? (effectiveLlmProvider === 'anthropic' ? station.anthropic_api_key : station.openrouter_api_key)
