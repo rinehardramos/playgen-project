@@ -17,6 +17,7 @@ Before starting any task, an agent MUST:
 - [ ] arch: Program as higher-tier entity — programs + program_episodes (issue #210, feat/issue-210-program-entity) | @claude-code | 2026-04-06 | Migration: 034-035
 
 ## Recently Completed
+- [x] feat(dj): time_check, station_id, joke segment types with interval injection (issues #203, #204, #205, PR #223, claude/sharp-cori) | @claude-code | 2026-04-06 | Migration: 040
 - [x] Google OAuth login (issue #200, feat/issue-200-google-oauth) | @claude-code | 2026-04-05
 - [x] Fix DJ INTERNAL_ERROR: reject handler 422/503 error codes (issue #183, fix/issue-183-dj-error) | @claude-code | 2026-04-05
 - [x] Agent workflow improvements — P0 daemon fixes + CLAUDE.md rules (issue #158, feat/issue-158-workflow-improvements) | @claude-code | 2026-04-05
