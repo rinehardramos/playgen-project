@@ -10,7 +10,14 @@ export const config = {
     password: process.env.REDIS_PASSWORD ?? undefined,
   },
 
-  // OpenRouter (LLM)
+  // LLM providers
+  llm: {
+    /** 'openrouter' (default) | 'openai' */
+    provider: process.env.LLM_PROVIDER ?? 'openrouter',
+    openaiApiKey: process.env.OPENAI_API_KEY ?? '',
+  },
+
+  // OpenRouter (LLM via OpenRouter gateway)
   openRouter: {
     apiKey: process.env.OPENROUTER_API_KEY ?? '',
     baseUrl: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
@@ -19,11 +26,13 @@ export const config = {
     siteName: process.env.OPENROUTER_SITE_NAME ?? 'PlayGen',
   },
 
-  // TTS (OpenAI — pluggable via adapter)
+  // TTS (pluggable via adapter)
   tts: {
+    /** 'openai' (default) | 'elevenlabs' | 'google' */
     provider: process.env.TTS_PROVIDER ?? 'openai',
     openaiApiKey: process.env.OPENAI_API_KEY ?? '',
     elevenlabsApiKey: process.env.ELEVENLABS_API_KEY ?? '',
+    googleApiKey: process.env.GOOGLE_TTS_API_KEY ?? '',
     defaultVoice: process.env.TTS_DEFAULT_VOICE ?? 'alloy',
   },
 

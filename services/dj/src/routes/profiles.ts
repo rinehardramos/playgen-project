@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@playgen/middleware';
 import * as profileService from '../services/profileService.js';
 import { listElevenLabsVoices } from '../adapters/tts/elevenlabs.js';
+import { GOOGLE_TTS_VOICES } from '../adapters/tts/google.js';
 import { config } from '../config.js';
 import { getPool } from '../db.js';
 
@@ -66,6 +67,6 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
 
     const elevenlabsVoices = await listElevenLabsVoices(elevenLabsKey || undefined);
 
-    return [...OPENAI_VOICES, ...elevenlabsVoices];
+    return [...OPENAI_VOICES, ...elevenlabsVoices, ...GOOGLE_TTS_VOICES];
   });
 }

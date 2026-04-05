@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { config } from '../../config.js';
 import { ElevenLabsTtsAdapter } from './elevenlabs.js';
+import { GoogleTtsAdapter } from './google.js';
 import type { TtsAdapter, TtsOptions, TtsResult } from './interface.js';
 
 export interface TtsAdapterOverrides {
@@ -32,8 +33,7 @@ export class OpenAiTtsAdapter implements TtsAdapter {
 export function getTtsAdapter(overrides?: TtsAdapterOverrides): TtsAdapter {
   const provider = overrides?.provider ?? config.tts.provider;
   if (provider === 'openai') return new OpenAiTtsAdapter(overrides?.apiKey);
-  if (provider === 'elevenlabs') {
-    return new ElevenLabsTtsAdapter(overrides?.apiKey);
-  }
+  if (provider === 'elevenlabs') return new ElevenLabsTtsAdapter(overrides?.apiKey);
+  if (provider === 'google') return new GoogleTtsAdapter(overrides?.apiKey);
   throw new Error(`TTS provider "${provider}" not yet implemented`);
 }
