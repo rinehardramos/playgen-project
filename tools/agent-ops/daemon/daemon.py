@@ -15,7 +15,7 @@ Pool behaviour:
   - ticket-feat only when feature issues exist
   - merge only when PRs are open
 """
-import os, time, json, subprocess, urllib.request
+import os, re, time, json, subprocess, urllib.request
 from datetime import datetime, timezone, timedelta
 
 # ── Config loading ────────────────────────────────────────────────────────────
@@ -179,8 +179,11 @@ def slot_status(slot_id: str) -> str:
     except Exception:
         tail = ""
 
-    if any(p in tail for p in ["hit your limit", "usage limit", "resets 9am", "resets 9 am"]):
+    if re.search(r"(hit your limit|usage limit|limit.*reset|resets?\s*9\s*am|resets?\s*tomorrow)", tail):
         return "limit_hit"
+    # Detect agent waiting for human approval (permission prompt)
+    if any(p in tail for p in ["do you want to proceed", "allow tool", "(y/n)", "approve or deny", "press enter to"]):
+        return "needs_input"
     if idle < RUNNING_IDLE_SECS:
         return "running"
     if idle < COMPLETED_IDLE_SECS:
@@ -193,6 +196,8 @@ def needs_spawn(slot_id: str) -> tuple:
     status = slot_status(slot_id)
     if status == "running":
         return False, "running — skip"
+    if status == "needs_input":
+        return False, "needs_input — waiting for human approval"
     if status == "limit_hit":
         return True,  "limit_hit — re-spawn"
     if status == "completed":
@@ -223,6 +228,43 @@ def spawn(slot_id: str, prompt: str) -> bool:
     except Exception as e:
         _log("spawn_error", f"{slot_id}: {e}")
         return False
+
+
+# ── Agent coordination helpers ────────────────────────────────────────────────
+
+def read_active_work() -> str:
+    """Return the 'Active Work' section lines from agent-collab.md."""
+    collab_path = os.path.join(WORKDIR, COLLAB_FILE)
+    try:
+        with open(collab_path) as f:
+            content = f.read()
+        # Extract lines between "## Active Work" and the next "##" section
+        match = re.search(r"## Active Work\n(.*?)(?=\n## |\Z)", content, re.DOTALL)
+        if match:
+            lines = match.group(1).strip()
+            return lines if lines else "none"
+        return "none"
+    except Exception:
+        return "unavailable"
+
+
+def flush_pending_reports():
+    """Send any agent report files written to /state/*-report.txt via Telegram."""
+    report_dir = "/state"
+    try:
+        for fname in os.listdir(report_dir):
+            if fname.endswith("-report.txt"):
+                fpath = os.path.join(report_dir, fname)
+                try:
+                    with open(fpath) as f:
+                        text = f.read().strip()
+                    if text:
+                        tg_send(f"📋 Agent report [{fname}]:\n{text}")
+                    os.remove(fpath)
+                except Exception as e:
+                    print(f"[flush_reports] {fname}: {e}", flush=True)
+    except Exception:
+        pass
 
 
 # ── Prompt Builders ───────────────────────────────────────────────────────────
@@ -281,24 +323,32 @@ def prompt_merge(feature_prs, dep_prs) -> str:
     if not parts:
         return None
 
+    typecheck_cmd = TECH.get("typecheck_command", "pnpm run typecheck")
+    pkg_mgr       = TECH.get("package_manager", "pnpm")
+
     return (
         f"You are the PR/merge checker for {PROJECT_NAME} at {WORKDIR}. "
         f"export PATH=/opt/homebrew/bin:$PATH. "
         f"{'. '.join(parts)}. "
         f"For each PR: gh pr checks → wait if pending → resolve conflicts "
         f"(keep main for CHANGELOG/{COLLAB_FILE.split('/')[-1]}, "
-        f"{TECH.get('package_manager', 'pnpm')} install for lockfile) → "
+        f"{pkg_mgr} install for lockfile) → "
+        f"run `{typecheck_cmd}` after conflict resolution (must pass before merge) → "
+        f"MIGRATION CHECK: if PR touches shared/db/migrations/*.sql, verify the migration number "
+        f"is reserved in the 'Migration Reservation' section of {COLLAB_FILE} and no other open "
+        f"PR claims the same number — if conflict, close the older PR with a comment → "
         f"gh pr merge --squash --delete-branch. "
-        f"Dep PRs: merge if green, close if major breaking change. "
+        f"Dep PRs: merge if minor/patch bump and CI green; close if major version bump. "
         f"Merge feature PRs first (highest risk), then deps. One at a time."
     )
 
 
 def prompt_pm(bugs, feats, feature_prs, dep_prs) -> str:
     """Project manager — board sync, agent coordination, ticket prioritization."""
-    bug_list  = " ".join(f"#{i['number']}" for i in bugs[:10])
-    feat_list = " ".join(f"#{i['number']}" for i in feats[:10])
-    pr_list   = " ".join(f"#{p['number']}" for p in feature_prs[:8])
+    bug_list      = " ".join(f"#{i['number']}" for i in bugs[:10])
+    feat_list     = " ".join(f"#{i['number']}" for i in feats[:10])
+    pr_list       = " ".join(f"#{p['number']}" for p in feature_prs[:8])
+    active_work   = read_active_work()
 
     col = BOARD_COLUMNS
     done_col     = col.get("done", "")
@@ -324,13 +374,15 @@ def prompt_pm(bugs, feats, feature_prs, dep_prs) -> str:
         f"2. TICKET PRIORITIZATION — Update labels and priority order:\n"
         f"   Current bugs: {bug_list or 'none'}\n"
         f"   Current features: {feat_list or 'none'}\n"
+        f"   Currently active claims:\n{active_work}\n"
         f"   - Add 'bug' label to any issue with 'fix', 'error', 'crash', 'broken' in title\n"
         f"   - Add 'P1' label to any enhancement issue that closes a user-facing gap\n"
         f"   - Add 'P0' label to any production-breaking bug\n"
-        f"   - Close duplicate issues (same topic, keep newest)\n\n"
+        f"   - Close duplicate issues (same topic, keep newest)\n"
+        f"   - NEVER recommend tickets already listed in active claims above\n\n"
 
         f"3. AGENT COORDINATION — Read and update {COLLAB_FILE}:\n"
-        f"   - Check 'Active Work' section for stale claims (>24h with no PR)\n"
+        f"   - Check 'Active Work' section for stale claims (branch not in open PRs = stale)\n"
         f"   - For stale claims: remove from Active Work, move to Recently Completed or re-open\n"
         f"   - Write a 'Next Recommended Tickets' section at the top of {COLLAB_FILE}:\n"
         f"     * List top 2 bugs for ticket-bug workers (by P0/P1 label, then creation date)\n"
@@ -342,10 +394,8 @@ def prompt_pm(bugs, feats, feature_prs, dep_prs) -> str:
         f"   - If two PRs target the same issue → comment on the older one, close it as duplicate\n"
         f"   - If a PR has been open >48h with no review → add 'needs-review' label\n\n"
 
-        f"5. REPORT — Send a summary to Telegram:\n"
-        f"   curl -s -X POST 'https://api.telegram.org/bot{TG_TOKEN}/sendMessage' \\\n"
-        f"   -H 'Content-Type: application/json' \\\n"
-        f"   -d '{{\"chat_id\":\"{TG_CHAT}\",\"text\":\"PM REPORT: board_changes | priority_updates | coordination_notes\"}}'\n"
+        f"5. REPORT — Write summary to /state/pm-report.txt (NOT via curl/Telegram — daemon will send it):\n"
+        f"   echo 'PM REPORT: <board_changes> | <priority_updates> | <coordination_notes>' > /state/pm-report.txt\n"
         f"   Keep under 500 chars. Include counts: X board moves, Y label updates, Z stale claims cleared.\n\n"
 
         f"Be thorough but efficient. Do NOT implement any code — only manage coordination and labels."
@@ -359,10 +409,8 @@ def prompt_health() -> str:
         f"1. {HEALTH_SCRIPT} 2>&1 | tail -20 "
         f"2. gh run list --limit 5 --json status,conclusion,headBranch "
         f"   --jq '.[] | \"\\(.headBranch[:25]): \\(.status)/\\(.conclusion)\"' "
-        f"3. Send summary to Telegram (keep <400 chars): "
-        f"curl -s -X POST 'https://api.telegram.org/bot{TG_TOKEN}/sendMessage' "
-        f"-H 'Content-Type: application/json' "
-        f"-d '{{\"chat_id\":\"{TG_CHAT}\",\"text\":\"HEALTH SUMMARY\"}}'. Done."
+        f"3. Write a summary (<400 chars) to /state/health-0-report.txt — "
+        f"   the daemon will forward it to Telegram. Done."
     )
 
 
@@ -383,10 +431,9 @@ def prompt_monitor() -> str:
         f"4. If a crash is identified and fixable (config error, missing env var, OOM): "
         f"   open a GitHub issue labelled 'bug P0' with title 'CRASH: <service> - <reason>' "
         f"   and assign it to the bug worker queue.\n"
-        f"5. Send a Telegram summary (under 500 chars):\n"
-        f"   curl -s -X POST 'https://api.telegram.org/bot{TG_TOKEN}/sendMessage' \\\n"
-        f"   -H 'Content-Type: application/json' \\\n"
-        f"   -d '{{\"chat_id\":\"{TG_CHAT}\",\"text\":\"MONITOR: X/Y services healthy | issues found | actions taken\"}}'\n"
+        f"5. Write a Telegram summary (under 500 chars) to /state/monitor-0-report.txt — "
+        f"   format: 'MONITOR: X/Y services healthy | issues found | actions taken'\n"
+        f"   The daemon will forward it to Telegram.\n"
         f"Do NOT push any code — only investigate, report, and open issues."
     )
 
@@ -419,6 +466,9 @@ def build_prompt(slot_id: str, slot_type: str, slot_index: int,
 
 def manage_pool():
     """Evaluate every slot in POOL_CFG and spawn/skip as needed."""
+    # Forward any agent report files written during the previous cycle
+    flush_pending_reports()
+
     bugs, feats, feature_prs, dep_prs = fetch_work()
 
     # Persist snapshot
@@ -500,6 +550,10 @@ def manage_pool():
     tg_send("🤖 Pool status:\n" + "\n".join(results))
     if not claude_ok:
         tg_send("⚠️  Claude CLI not mounted — agents not auto-spawned. Set CLAUDE_BIN.")
+    # Alert for any slot waiting for human input
+    blocked = [r for r in results if "needs_input" in r]
+    if blocked:
+        tg_send("🔔 Agent blocked — waiting for human approval:\n" + "\n".join(blocked))
 
 
 # ── Scheduler ─────────────────────────────────────────────────────────────────

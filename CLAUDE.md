@@ -58,6 +58,20 @@ When adding `"@playgen/X": "workspace:*"` to a service's deps, ALSO update its D
 - Use `KnowledgeBaseClient` to push a synthesized `MemoryEntry` into the `agent_insights` collection.
 - This creates a permanent semantic immune system, ensuring future agents naturally retrieve the exact fix if identical tracebacks ever surface.
 
+### 8. Agent Checkpoint Protocol
+- After completing each task unit (merged PR, resolved issue, completed sub-task), write a checkpoint to `/state/{slot_id}-checkpoint.md`
+- Checkpoint format: `## Checkpoint\nCompleted: [list]\nNext: [next task]\nState: [any relevant context]`
+- On re-spawn after limit_hit, read your checkpoint file first and resume from where you left off
+
+### 9. Telegram Report via File (not curl)
+- NEVER embed the Telegram bot token in a shell command within your prompt output
+- To send a Telegram message from an agent, write the message to `/state/{slot_id}-report.txt`
+- The daemon will read this file at the next reset window and send the message via `tg_send()`
+
+### 10. Migration Conflict Prevention
+- Before merging any PR that touches `shared/db/migrations/`, check the Migration Reservation section in `tasks/agent-collab.md`
+- If two open PRs claim the same migration number, close the older one with a comment explaining the conflict
+
 ## Task Management & Organization
 
 1. **Plan First**: Write plan to `tasks/todo.md` with checkable items
