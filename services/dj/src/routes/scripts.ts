@@ -3,7 +3,7 @@ import { authenticate } from '@playgen/middleware';
 import * as scriptService from '../services/scriptService.js';
 import * as manifestService from '../services/manifestService.js';
 import { getDefaultProfile } from '../services/profileService.js';
-import { enqueueDjGeneration } from '../queues/djQueue.js';
+import { enqueueDjGeneration, djQueue } from '../queues/djQueue.js';
 import { generateSegmentTts, loadTtsProviderConfig } from '../services/ttsService.js';
 import type { ReviewScriptRequest, GenerateScriptRequest } from '@playgen/types';
 import { getPool } from '../db.js';
@@ -11,6 +11,36 @@ import { getStorageAdapter } from '../lib/storage/index.js';
 
 export async function scriptRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate);
+
+  // ─── Job status endpoint ─────────────────────────────────────────────────
+
+  // GET /dj/jobs/:jobId/status — poll BullMQ job state + progress
+  app.get<{ Params: { jobId: string } }>(
+    '/dj/jobs/:jobId/status',
+    async (req, reply) => {
+      const { jobId } = req.params;
+      const job = await djQueue.getJob(jobId);
+      if (!job) {
+        return reply.notFound('Job not found');
+      }
+
+      const state = await job.getState();
+      const progress = job.progress as { pct?: number; step?: string } | number | null;
+      const pct = typeof progress === 'number' ? progress : (progress as { pct?: number })?.pct ?? 0;
+      const step = typeof progress === 'object' && progress !== null ? (progress as { step?: string })?.step ?? '' : '';
+
+      return {
+        job_id: jobId,
+        state,           // 'waiting' | 'active' | 'completed' | 'failed' | 'delayed' | 'unknown'
+        pct,             // 0–100
+        step,            // human-readable description of current step
+        error: state === 'failed' ? (job.failedReason ?? 'Generation failed') : null,
+        playlist_id: job.data.playlist_id,
+      };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Get segment audio stream
   app.get<{ Params: { id: string } }>(

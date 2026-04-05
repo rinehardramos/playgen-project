@@ -4,7 +4,7 @@ import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import { config } from '../config.js';
 import { generateSegmentTts } from '../services/ttsService.js';
 import { buildManifest } from '../services/manifestService.js';
-import type { DjGenerationJobData } from '../queues/djQueue.js';
+import type { DjGenerationJobData, Job } from '../queues/djQueue.js';
 import type { DjProfile, DjSegmentType, DjScriptTemplate } from '@playgen/types';
 
 /** Fetch all station_settings for a given station into a key→value map (real values, un-masked). */
@@ -55,9 +55,22 @@ function segmentsForEntry(
   return types;
 }
 
-export async function runGenerationJob(data: DjGenerationJobData): Promise<void> {
+export async function runGenerationJob(
+  data: DjGenerationJobData,
+  job?: Job<DjGenerationJobData>,
+): Promise<void> {
   const pool = getPool();
   const start = Date.now();
+
+  const reportProgress = async (pct: number, step: string) => {
+    try {
+      await job?.updateProgress({ pct, step });
+    } catch {
+      // Non-critical — don't let progress update failures abort the job
+    }
+  };
+
+  await reportProgress(5, 'Loading station config…');
 
   // 1. Load station info (including API key columns saved via Settings page)
   const { rows: stationRows } = await pool.query<StationRow>(
@@ -86,6 +99,8 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
     profile = await getDefaultProfile(station.company_id);
   }
   if (!profile) throw new Error('No DJ profile found for station');
+
+  await reportProgress(10, 'Loading playlist…');
 
   // 3. Load playlist entries with song data
   const { rows: entries } = await pool.query<PlaylistEntryRow>(
@@ -179,6 +194,14 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
     position: number;
   }> = [];
 
+  // Pre-count total segment slots for progress reporting
+  let totalSegmentSlots = 0;
+  for (let i = 0; i < entries.length; i++) {
+    totalSegmentSlots += segmentsForEntry(entries[i], entries, i).length;
+  }
+
+  let segmentsDone = 0;
+
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     const prev = entries[i - 1];
@@ -213,6 +236,10 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
         `[generationWorker] LLM call — provider=${effectiveLlmProvider} model=${effectiveLlmModel} hasKey=${!!effectiveLlmApiKey} segment=${segment_type}`,
       );
 
+      // Progress: LLM phase spans 10% → 60%
+      const llmProgress = 10 + Math.round((segmentsDone / totalSegmentSlots) * 50);
+      await reportProgress(llmProgress, `Writing ${segment_type.replace('_', ' ')} (${segmentsDone + 1}/${totalSegmentSlots})…`);
+
       let script_text: string;
       try {
         script_text = await llmComplete(
@@ -245,12 +272,19 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
       );
 
       generatedSegments.push({ id: segRows[0].id, script_text, position: pos });
+      segmentsDone++;
     }
   }
 
+  await reportProgress(60, 'Script complete — generating audio…');
+
   // 7. TTS pass — generate audio for each segment
   if (ttsEnabled) {
-    for (const seg of generatedSegments) {
+    for (let si = 0; si < generatedSegments.length; si++) {
+      const seg = generatedSegments[si];
+      // Progress: TTS phase spans 60% → 90%
+      const ttsProgress = 60 + Math.round((si / generatedSegments.length) * 30);
+      await reportProgress(ttsProgress, `Generating audio ${si + 1}/${generatedSegments.length}…`);
       try {
         await generateSegmentTts(
           { id: seg.id, position: seg.position, text: seg.script_text, script_id },
@@ -262,6 +296,8 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
       }
     }
   }
+
+  await reportProgress(95, 'Finalising…');
 
   // 8. Update script with final segment count + generation time
   const generation_ms = Date.now() - start;
@@ -276,4 +312,6 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   buildManifest(script_id).catch((err) =>
     console.error('[generationWorker] Manifest build failed:', err),
   );
+
+  await reportProgress(100, 'Done');
 }

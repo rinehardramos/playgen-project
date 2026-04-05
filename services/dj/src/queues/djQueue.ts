@@ -2,6 +2,8 @@ import { Queue, Worker, Job } from 'bullmq';
 import { config } from '../config.js';
 import { runGenerationJob } from '../workers/generationWorker.js';
 
+export type { Job };
+
 export interface DjGenerationJobData {
   playlist_id: string;
   station_id: string;
@@ -32,7 +34,7 @@ const djQueue = new Queue<DjGenerationJobData>(QUEUE_NAME, {
 
 const djWorker = new Worker<DjGenerationJobData>(
   QUEUE_NAME,
-  async (job: Job<DjGenerationJobData>) => runGenerationJob(job.data),
+  async (job: Job<DjGenerationJobData>) => runGenerationJob(job.data, job),
   { connection: redisConnection, concurrency: 2 },
 );
 
@@ -43,6 +45,8 @@ djWorker.on('completed', (job) => {
 djWorker.on('failed', (job, err) => {
   console.error(`[djQueue] Job ${job?.id} failed — playlist=${job?.data.playlist_id}`, err);
 });
+
+export { djQueue };
 
 export async function enqueueDjGeneration(data: DjGenerationJobData): Promise<string> {
   const job = await djQueue.add('generate-script', data, {

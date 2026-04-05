@@ -113,6 +113,7 @@ export default function PlaylistDetailPage() {
   const [djLoading, setDjLoading] = useState(false);
   const [djError, setDjError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<{ pct: number; step: string }>({ pct: 0, step: '' });
   const [stationAutoApprove, setStationAutoApprove] = useState(false);
   const [musicWidgetEntryId, setMusicWidgetEntryId] = useState<string | null>(null);
 
@@ -136,28 +137,70 @@ export default function PlaylistDetailPage() {
   async function handleGenerateScript() {
     if (!playlist) return;
     setGenerating(true);
+    setGenerationProgress({ pct: 0, step: 'Queuing job…' });
     setDjError(null);
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      if (pollTimer) clearInterval(pollTimer);
+      if (safetyTimer) clearTimeout(safetyTimer);
+    };
+
     try {
-      await api.post(`/api/v1/dj/playlists/${playlistId}/generate`, {
-        playlist_id: playlistId,
-      });
-      // Poll for completion
-      const poll = setInterval(async () => {
+      const { job_id } = await api.post<{ job_id: string; status: string }>(
+        `/api/v1/dj/playlists/${playlistId}/generate`,
+        { playlist_id: playlistId },
+      );
+
+      setGenerationProgress({ pct: 5, step: 'Job queued — waiting for worker…' });
+
+      pollTimer = setInterval(async () => {
         try {
-          const script = await api.get<DjScript>(`/api/v1/dj/playlists/${playlistId}/script`);
-          // Accept pending_review (TTS deferred until approval) or fully completed scripts
-          if (script && script.total_segments > 0 &&
-              (script.generation_ms != null || script.review_status === 'pending_review')) {
-            setDjScript(script);
+          const status = await api.get<{
+            state: string;
+            pct: number;
+            step: string;
+            error: string | null;
+            playlist_id: string;
+          }>(`/api/v1/dj/jobs/${job_id}/status`);
+
+          setGenerationProgress({ pct: status.pct, step: status.step });
+
+          if (status.state === 'failed') {
+            cleanup();
             setGenerating(false);
-            clearInterval(poll);
+            setDjError(status.error ?? 'DJ script generation failed. Check your API key and provider settings.');
+            return;
           }
-        } catch { /* still generating */ }
-      }, 3000);
-      // Safety timeout
-      setTimeout(() => { clearInterval(poll); setGenerating(false); }, 120000);
+
+          if (status.state === 'completed') {
+            // Fetch the actual script now that the job is done
+            try {
+              const script = await api.get<DjScript>(`/api/v1/dj/playlists/${playlistId}/script`);
+              if (script && script.total_segments > 0) {
+                setDjScript(script);
+              } else {
+                setDjError('Script was generated but has 0 segments. Check your LLM provider and API key settings.');
+              }
+            } catch {
+              setDjError('Generation completed but could not load the script. Please refresh.');
+            }
+            cleanup();
+            setGenerating(false);
+          }
+        } catch { /* poll error — keep trying */ }
+      }, 2000);
+
+      // Safety timeout: 3 minutes
+      safetyTimer = setTimeout(() => {
+        cleanup();
+        setGenerating(false);
+        setDjError('Generation timed out after 3 minutes. Check your LLM provider settings.');
+      }, 180000);
     } catch (err: unknown) {
-      setDjError((err as ApiError).message ?? 'Failed to generate script');
+      cleanup();
+      setDjError((err as ApiError).message ?? 'Failed to start script generation');
       setGenerating(false);
     }
   }
@@ -443,16 +486,32 @@ export default function PlaylistDetailPage() {
             </div>
           )}
 
-          {/* Generating spinner */}
-          {(djLoading || generating) && (
+          {/* Loading existing script */}
+          {djLoading && !generating && (
             <div className="card flex flex-col items-center justify-center py-16 gap-3">
+              <div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-gray-400 text-sm">Loading script…</p>
+            </div>
+          )}
+
+          {/* Generating — progress bar */}
+          {generating && (
+            <div className="card py-10 px-8 flex flex-col items-center gap-5">
               <div className="w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-gray-400 text-sm">
-                {generating
-                  ? stationAutoApprove
-                    ? 'Generating DJ script and audio…'
-                    : 'Generating DJ script via OpenRouter…'
-                  : 'Loading script...'}
+              <div className="w-full max-w-sm space-y-2">
+                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>{generationProgress.step || 'Starting…'}</span>
+                  <span>{generationProgress.pct}%</span>
+                </div>
+                <div className="h-2 bg-[#24243a] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-violet-500 rounded-full transition-all duration-500"
+                    style={{ width: `${generationProgress.pct}%` }}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-600">
+                {stationAutoApprove ? 'Generating script and audio…' : 'Generating DJ script…'}
               </p>
             </div>
           )}
