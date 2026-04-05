@@ -168,8 +168,8 @@ importers:
         specifier: workspace:*
         version: link:../../shared/types
       bullmq:
-        specifier: ^5.4.0
-        version: 5.72.1
+        specifier: ^5.73.0
+        version: 5.73.0
       fastify:
         specifier: ^5.8.4
         version: 5.8.4
