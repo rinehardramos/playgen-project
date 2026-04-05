@@ -89,6 +89,7 @@ def handle(text: str):
             "/ci — last 5 CI runs\n"
             "/issues — open bugs and features\n"
             "/pool — daemon pool status\n"
+            "/report — latest PM report\n"
             "/merge <pr_num> — squash-merge a PR\n"
             "/help — this message"
         )
@@ -136,6 +137,17 @@ def handle(text: str):
         )
         return f"📋 Open Issues:\n\nBugs:\n{bugs or 'none'}\n\nFeatures:\n{feats or 'none'}"
 
+    elif text == "/report":
+        report_file = "/state/pm-report.txt"
+        if os.path.exists(report_file):
+            try:
+                with open(report_file) as f:
+                    content = f.read().strip()
+                return f"📋 PM Report:\n{content[:3800]}"
+            except Exception as e:
+                return f"Error reading PM report: {e}"
+        return "📋 No PM report available."
+
     elif text == "/pool":
         # Read pool status from state file
         state_file = "/state/agent-state.json"
@@ -172,7 +184,20 @@ def handle(text: str):
             except Exception as e:
                 registry_info = f"\nRegistry read error: {e}"
 
-        return f"🤖 Pool Status:\n{info}{registry_info}"
+        # PM report timestamp
+        report_file = "/state/pm-report.txt"
+        if os.path.exists(report_file):
+            try:
+                import datetime
+                mtime = os.path.getmtime(report_file)
+                ts = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+                pm_report_info = f"\n\nLast PM report: {ts}"
+            except Exception:
+                pm_report_info = ""
+        else:
+            pm_report_info = "\n\nLast PM report: none yet"
+
+        return f"🤖 Pool Status:\n{info}{registry_info}{pm_report_info}"
 
     elif text.startswith("/merge "):
         parts = text.split()
@@ -192,7 +217,7 @@ def main():
     print(f"🟢 {PROJECT_NAME} Telegram bot polling started", flush=True)
     tg_send(
         f"🟢 {PROJECT_NAME} bot online.\n"
-        f"Commands: /status /health /prs /ci /issues /pool /merge <pr> /help"
+        f"Commands: /status /health /prs /ci /issues /pool /report /merge <pr> /help"
     )
 
     while True:
