@@ -4,19 +4,27 @@ import { getStorageAdapter } from '../lib/storage/index.js';
 export interface ManifestItem {
   type: 'song' | 'dj_segment';
   id: string;
+  hour?: number;
+  position?: number;
   title?: string;
   artist?: string;
-  url?: string;
-  duration_sec: number;
+  file_path?: string;
+  duration_ms: number;
+  cumulative_ms: number;
+}
+
+export interface ShowManifest {
+  total_duration_ms: number;
+  items: ManifestItem[];
 }
 
 export async function buildManifest(scriptId: string): Promise<string> {
   const pool = getPool();
-  
+
   // 1. Get script and segments
   const { rows: scriptRows } = await pool.query(
-    `SELECT s.*, st.company_id FROM dj_scripts s 
-     JOIN stations st ON st.id = s.station_id 
+    `SELECT s.*, st.company_id FROM dj_scripts s
+     JOIN stations st ON st.id = s.station_id
      WHERE s.id = $1`,
     [scriptId]
   );
@@ -38,54 +46,70 @@ export async function buildManifest(scriptId: string): Promise<string> {
     [script.playlist_id]
   );
 
-  // 3. Interleave
-  const manifest: ManifestItem[] = [];
-  let totalDuration = 0;
+  // 3. Interleave — track cumulative timing in milliseconds
+  const items: ManifestItem[] = [];
+  let cumulativeMs = 0;
+
+  const audioPrefix = '/api/v1/dj/audio/';
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
-    
+
     // Find segments associated with this entry
     const entrySegments = segments.filter(s => s.playlist_entry_id === entry.id);
-    
+
     // show_intro and song_intro/transition come BEFORE the song
     const beforeSegments = entrySegments.filter(s => s.segment_type !== 'show_outro');
     for (const seg of beforeSegments) {
       if (seg.audio_url) {
-        manifest.push({
+        const durationMs = Math.round((parseFloat(seg.audio_duration_sec) || 0) * 1000);
+        const filePath = seg.audio_url.startsWith(audioPrefix)
+          ? seg.audio_url.substring(audioPrefix.length)
+          : seg.audio_url;
+        items.push({
           type: 'dj_segment',
           id: seg.id,
           title: `DJ: ${seg.segment_type}`,
-          url: seg.audio_url,
-          duration_sec: parseFloat(seg.audio_duration_sec) || 0,
+          file_path: filePath,
+          duration_ms: durationMs,
+          cumulative_ms: cumulativeMs,
         });
-        totalDuration += parseFloat(seg.audio_duration_sec) || 0;
+        cumulativeMs += durationMs;
       }
     }
 
     // The song itself
-    manifest.push({
+    const songDurationMs = Math.round((entry.duration_sec || 0) * 1000);
+    items.push({
       type: 'song',
       id: entry.id,
+      hour: entry.hour,
+      position: entry.position,
       title: entry.title,
       artist: entry.artist,
-      duration_sec: entry.duration_sec || 0,
+      duration_ms: songDurationMs,
+      cumulative_ms: cumulativeMs,
     });
-    totalDuration += entry.duration_sec || 0;
+    cumulativeMs += songDurationMs;
 
     // show_outro comes AFTER the very last song
     if (i === entries.length - 1) {
       const afterSegments = entrySegments.filter(s => s.segment_type === 'show_outro');
       for (const seg of afterSegments) {
         if (seg.audio_url) {
-          manifest.push({
+          const durationMs = Math.round((parseFloat(seg.audio_duration_sec) || 0) * 1000);
+          const filePath = seg.audio_url.startsWith(audioPrefix)
+            ? seg.audio_url.substring(audioPrefix.length)
+            : seg.audio_url;
+          items.push({
             type: 'dj_segment',
             id: seg.id,
             title: 'DJ: Show Outro',
-            url: seg.audio_url,
-            duration_sec: parseFloat(seg.audio_duration_sec) || 0,
+            file_path: filePath,
+            duration_ms: durationMs,
+            cumulative_ms: cumulativeMs,
           });
-          totalDuration += parseFloat(seg.audio_duration_sec) || 0;
+          cumulativeMs += durationMs;
         }
       }
     }
@@ -93,10 +117,11 @@ export async function buildManifest(scriptId: string): Promise<string> {
 
   // 4. Save to dj_show_manifests
   const storage = getStorageAdapter();
-  const manifestJson = JSON.stringify(manifest);
+  const totalDurationSec = cumulativeMs / 1000;
+  const manifestPayload: ShowManifest = { total_duration_ms: cumulativeMs, items };
   const manifestPath = `${script.company_id}/${script.station_id}/${script.id}_manifest.json`;
-  
-  await storage.write(manifestPath, Buffer.from(manifestJson));
+
+  await storage.write(manifestPath, Buffer.from(JSON.stringify(manifestPayload)));
   const manifestUrl = storage.getPublicUrl(manifestPath);
 
   const { rows: manifestRows } = await pool.query(
@@ -105,7 +130,7 @@ export async function buildManifest(scriptId: string): Promise<string> {
      ON CONFLICT (script_id) DO UPDATE SET
        status = 'ready', manifest_url = $3, total_duration_sec = $4, built_at = NOW(), updated_at = NOW()
      RETURNING id`,
-    [scriptId, script.station_id, manifestUrl, totalDuration]
+    [scriptId, script.station_id, manifestUrl, totalDurationSec]
   );
 
   return manifestRows[0].id;

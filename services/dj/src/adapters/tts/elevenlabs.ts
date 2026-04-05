@@ -1,7 +1,21 @@
-import fs from 'fs/promises';
-import path from 'path';
 import { config } from '../../config.js';
 import type { TtsAdapter, TtsOptions, TtsResult } from './interface.js';
+
+export interface ElevenLabsVoice {
+  id: string;
+  name: string;
+  provider: 'elevenlabs';
+}
+
+// Fallback list when the ElevenLabs API is unavailable or no key is configured
+const FALLBACK_VOICES: ElevenLabsVoice[] = [
+  { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', provider: 'elevenlabs' },
+  { id: 'AZnzlk1XjtKozAtGqeoR', name: 'Nicole', provider: 'elevenlabs' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', provider: 'elevenlabs' },
+  { id: 'MF3mGyEYCl7XYW7Lecd_', name: 'Elli', provider: 'elevenlabs' },
+  { id: 'D38z5RcWu1voky8WS1ja', name: 'Fin', provider: 'elevenlabs' },
+  { id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy', provider: 'elevenlabs' },
+];
 
 export class ElevenLabsTtsAdapter implements TtsAdapter {
   private apiKey: string;
@@ -24,8 +38,8 @@ export class ElevenLabsTtsAdapter implements TtsAdapter {
         text: opts.text,
         model_id: 'eleven_monolingual_v1',
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
+          stability: opts.stability ?? 0.5,
+          similarity_boost: opts.similarity_boost ?? 0.75,
         },
       }),
     });
@@ -42,4 +56,27 @@ export class ElevenLabsTtsAdapter implements TtsAdapter {
 
     return { audio_data: buffer, duration_sec };
   }
+
+  /** Fetch available voices from the ElevenLabs API. Falls back to a curated list on error. */
+  async listVoices(): Promise<ElevenLabsVoice[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/voices`, {
+        headers: { 'xi-api-key': this.apiKey },
+      });
+      if (!response.ok) return FALLBACK_VOICES;
+      const data = await response.json() as { voices?: Array<{ voice_id: string; name: string }> };
+      if (!Array.isArray(data.voices)) return FALLBACK_VOICES;
+      return data.voices.map(v => ({ id: v.voice_id, name: v.name, provider: 'elevenlabs' as const }));
+    } catch {
+      return FALLBACK_VOICES;
+    }
+  }
+}
+
+/** List ElevenLabs voices using the provided API key, with fallback to curated list. */
+export async function listElevenLabsVoices(apiKey?: string): Promise<ElevenLabsVoice[]> {
+  const key = apiKey ?? config.tts.elevenlabsApiKey;
+  if (!key) return FALLBACK_VOICES;
+  const adapter = new ElevenLabsTtsAdapter(key);
+  return adapter.listVoices();
 }

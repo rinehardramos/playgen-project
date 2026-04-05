@@ -13,6 +13,7 @@ Before starting any task, an agent MUST:
 ## Active Work
 - [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
 - [ ] Re-generate single playlist slot (issue #132, feat/issue-132-slot-regen) | @claude-code | 2026-04-05
+- [x] Manifest builder + ElevenLabs TTS adapter (issue #16, feat/issue-16-manifest-builder-elevenlabs) | @claude-code | 2026-04-05
 - [ ] Generation failure alerting — endpoint + UI red badge (issue #133, feat/issue-133-generation-failure-alerting) | @claude-code | 2026-04-05
 - [ ] Category distribution report by date + chart (issue #134, feat/issue-134-category-distribution-by-date) | @claude-code | 2026-04-05
 - [ ] DJ Show Player component (issue #21, feat/issue-21-dj-show-player) | @claude-code | 2026-04-05
