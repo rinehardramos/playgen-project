@@ -1,0 +1,21 @@
+{
+  "name": "@playgen/billing",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@playgen/types": "workspace:*",
+    "ioredis": "^5.3.2",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/pg": "^8.11.2",
+    "vitest": "^4.1.2"
+  }
+}

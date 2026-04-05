@@ -22,7 +22,8 @@ vi.mock('../db', () => ({
 }));
 
 // Import authService after the mock is in place.
-import { login, AuthError } from './authService';
+import { login, AuthError, issueTokenPair } from './authService';
+import jwt from 'jsonwebtoken';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -178,5 +179,188 @@ describe('login', () => {
     await login('test@example.com', plainPassword);
 
     expect(mockQuery.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ─── issueTokenPair ───────────────────────────────────────────────────────────
+
+describe('issueTokenPair — thin JWT shape', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  /**
+   * Helper: build a sync UserRow (no bcrypt needed) for issueTokenPair tests.
+   * perm_version defaults to 1, is_active to true.
+   */
+  function makeUserRowSync(overrides: Partial<{
+    id: string;
+    company_id: string;
+    role_id: string;
+    role_code: string;
+    role_permissions: string[];
+    email: string;
+    display_name: string;
+    password_hash: string;
+    station_ids: string[];
+    perm_version: number;
+    is_active: boolean;
+  }> = {}) {
+    return {
+      id: 'user-uuid-100',
+      company_id: 'company-uuid-100',
+      role_id: 'role-uuid-100',
+      role_code: 'station_admin',
+      role_permissions: ['playlist:read'],
+      email: 'staff@example.com',
+      display_name: 'Staff User',
+      password_hash: '$2b$12$placeholder',
+      station_ids: ['station-1'],
+      perm_version: 1,
+      is_active: true,
+      ...overrides,
+    };
+  }
+
+  it('access token contains sub, cid, rc, tier, pv fields', async () => {
+    const user = makeUserRowSync({ role_code: 'station_admin', perm_version: 1 });
+
+    // Tier query → starter
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ tier: 'starter' }] })
+      // INSERT refresh_tokens
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { access_token } = await issueTokenPair(user as Parameters<typeof issueTokenPair>[0]);
+    const decoded = jwt.decode(access_token) as Record<string, unknown>;
+
+    expect(decoded).toHaveProperty('sub', user.id);
+    expect(decoded).toHaveProperty('cid', user.company_id);
+    expect(decoded).toHaveProperty('rc', 'station_admin');
+    expect(decoded).toHaveProperty('tier', 'starter');
+    expect(decoded).toHaveProperty('pv', 1);
+  });
+
+  it('access token does NOT contain permissions or station_ids fields', async () => {
+    const user = makeUserRowSync({ role_code: 'station_admin' });
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ tier: 'starter' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { access_token } = await issueTokenPair(user as Parameters<typeof issueTokenPair>[0]);
+    const decoded = jwt.decode(access_token) as Record<string, unknown>;
+
+    expect(decoded).not.toHaveProperty('permissions');
+    expect(decoded).not.toHaveProperty('station_ids');
+    expect(decoded).not.toHaveProperty('role_permissions');
+  });
+
+  it('station_admin: sys field is NOT present in token', async () => {
+    const user = makeUserRowSync({ role_code: 'station_admin' });
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ tier: 'starter' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { access_token } = await issueTokenPair(user as Parameters<typeof issueTokenPair>[0]);
+    const decoded = jwt.decode(access_token) as Record<string, unknown>;
+
+    expect(decoded).not.toHaveProperty('sys');
+  });
+
+  it('company_admin: sys=true is present in token', async () => {
+    const user = makeUserRowSync({ role_code: 'company_admin' });
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ tier: 'professional' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { access_token } = await issueTokenPair(user as Parameters<typeof issueTokenPair>[0]);
+    const decoded = jwt.decode(access_token) as Record<string, unknown>;
+
+    expect(decoded).toHaveProperty('sys', true);
+  });
+
+  it('super_admin: sys=true is present in token', async () => {
+    const user = makeUserRowSync({ role_code: 'super_admin' });
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ tier: 'enterprise' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { access_token } = await issueTokenPair(user as Parameters<typeof issueTokenPair>[0]);
+    const decoded = jwt.decode(access_token) as Record<string, unknown>;
+
+    expect(decoded).toHaveProperty('sys', true);
+  });
+
+  it('scheduler role: sys field is NOT present in token', async () => {
+    const user = makeUserRowSync({ role_code: 'scheduler' });
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ tier: 'starter' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { access_token } = await issueTokenPair(user as Parameters<typeof issueTokenPair>[0]);
+    const decoded = jwt.decode(access_token) as Record<string, unknown>;
+
+    expect(decoded).not.toHaveProperty('sys');
+  });
+
+  it('tier comes from subscriptions table query — reflects DB value in token', async () => {
+    const user = makeUserRowSync({ role_code: 'station_admin' });
+
+    // DB returns 'enterprise'
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ tier: 'enterprise' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { access_token } = await issueTokenPair(user as Parameters<typeof issueTokenPair>[0]);
+    const decoded = jwt.decode(access_token) as Record<string, unknown>;
+
+    expect(decoded).toHaveProperty('tier', 'enterprise');
+  });
+
+  it('falls back to "free" tier when no active subscription found', async () => {
+    const user = makeUserRowSync({ role_code: 'station_admin' });
+
+    // Tier query returns empty rows
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { access_token } = await issueTokenPair(user as Parameters<typeof issueTokenPair>[0]);
+    const decoded = jwt.decode(access_token) as Record<string, unknown>;
+
+    expect(decoded).toHaveProperty('tier', 'free');
+  });
+
+  it('perm_version in token matches user.perm_version', async () => {
+    const user = makeUserRowSync({ role_code: 'station_admin', perm_version: 7 });
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ tier: 'starter' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { access_token } = await issueTokenPair(user as Parameters<typeof issueTokenPair>[0]);
+    const decoded = jwt.decode(access_token) as Record<string, unknown>;
+
+    expect(decoded).toHaveProperty('pv', 7);
+  });
+
+  it('returns both access_token and refresh_token', async () => {
+    const user = makeUserRowSync();
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ tier: 'starter' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await issueTokenPair(user as Parameters<typeof issueTokenPair>[0]);
+
+    expect(result).toHaveProperty('access_token');
+    expect(result).toHaveProperty('refresh_token');
+    expect(typeof result.access_token).toBe('string');
+    expect(typeof result.refresh_token).toBe('string');
   });
 });

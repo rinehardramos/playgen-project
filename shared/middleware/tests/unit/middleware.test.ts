@@ -5,6 +5,8 @@
  * are tested by constructing minimal mock Fastify request/reply objects.
  * Real JWTs are signed with jsonwebtoken so the middleware's jwt.verify call
  * exercises the actual verification path.
+ *
+ * Updated for thin JWT format: sub, cid, rc, tier, pv, sys?
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -24,9 +26,19 @@ const TEST_SECRET = 'dev-access-secret-change-in-prod';
 // Ensure the middleware reads the same secret we sign with
 beforeEach(() => {
   delete process.env.JWT_ACCESS_SECRET;
+  vi.clearAllMocks();
 });
 
-function signToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
+type ThinPayload = {
+  sub: string;
+  cid: string;
+  rc: string;
+  tier: 'free' | 'starter' | 'professional' | 'enterprise';
+  pv: number;
+  sys?: true;
+};
+
+function signToken(payload: ThinPayload): string {
   return jwt.sign(payload as object, TEST_SECRET, { expiresIn: '15m' });
 }
 
@@ -60,23 +72,19 @@ function makeMockReply(): MockReply {
   return reply;
 }
 
-type DeepPartial<T> = {
-  [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
-};
-
 function makeMockRequest(overrides: {
   headers?: Record<string, string | undefined>;
-  user?: JwtPayload;
+  user?: Partial<JwtPayload>;
   params?: Record<string, string>;
-}): {
-  headers: Record<string, string | undefined>;
-  user: JwtPayload;
-  params: Record<string, string>;
-} {
+  server?: Record<string, unknown>;
+  resolvedPerms?: { companyWide: string[]; accessibleStationIds: string[] };
+}) {
   return {
     headers: overrides.headers ?? {},
     user: overrides.user ?? ({} as JwtPayload),
     params: overrides.params ?? {},
+    server: overrides.server ?? {},
+    resolvedPerms: overrides.resolvedPerms,
   };
 }
 
@@ -110,7 +118,6 @@ describe('authenticate', () => {
 
     await authenticate(req as never, reply as never);
 
-    // jwt.verify('', secret) throws — should still result in 401
     expect(reply.code).toHaveBeenCalledWith(401);
   });
 
@@ -127,7 +134,7 @@ describe('authenticate', () => {
   });
 
   it('returns 401 for a token signed with the wrong secret', async () => {
-    const token = jwt.sign({ sub: 'user-1', company_id: 'c-1', station_ids: [], role_code: 'viewer', permissions: [] }, 'wrong-secret', { expiresIn: '1h' });
+    const token = jwt.sign({ sub: 'user-1', cid: 'c-1', rc: 'viewer', tier: 'free', pv: 1 }, 'wrong-secret', { expiresIn: '1h' });
     const req = makeMockRequest({ headers: { authorization: `Bearer ${token}` } });
     const reply = makeMockReply();
 
@@ -137,12 +144,12 @@ describe('authenticate', () => {
   });
 
   it('sets req.user and does NOT call reply.code when token is valid', async () => {
-    const payload: Omit<JwtPayload, 'iat' | 'exp'> = {
+    const payload: ThinPayload = {
       sub: 'user-uuid-001',
-      company_id: 'company-uuid-001',
-      station_ids: ['station-uuid-001'],
-      role_code: 'scheduler',
-      permissions: ['playlist:read', 'playlist:write'],
+      cid: 'company-uuid-001',
+      rc: 'scheduler',
+      tier: 'free',
+      pv: 1,
     };
     const token = signToken(payload);
     const req = makeMockRequest({ headers: { authorization: `Bearer ${token}` } });
@@ -151,18 +158,19 @@ describe('authenticate', () => {
     await authenticate(req as never, reply as never);
 
     expect(reply.code).not.toHaveBeenCalled();
-    expect((req as unknown as { user: JwtPayload }).user.sub).toBe('user-uuid-001');
-    expect((req as unknown as { user: JwtPayload }).user.company_id).toBe('company-uuid-001');
-    expect((req as unknown as { user: JwtPayload }).user.permissions).toContain('playlist:read');
+    const user = (req as unknown as { user: ThinPayload }).user;
+    expect(user.sub).toBe('user-uuid-001');
+    expect(user.cid).toBe('company-uuid-001');
+    expect(user.rc).toBe('scheduler');
   });
 
-  it('decodes all JwtPayload fields correctly from a valid token', async () => {
-    const payload: Omit<JwtPayload, 'iat' | 'exp'> = {
+  it('decodes all thin JWT fields correctly from a valid token', async () => {
+    const payload: ThinPayload = {
       sub: 'user-uuid-002',
-      company_id: 'company-uuid-002',
-      station_ids: ['s-1', 's-2'],
-      role_code: 'station_admin',
-      permissions: ['library:read', 'library:write', 'template:read'],
+      cid: 'company-uuid-002',
+      rc: 'station_admin',
+      tier: 'professional',
+      pv: 3,
     };
     const token = signToken(payload);
     const req = makeMockRequest({ headers: { authorization: `Bearer ${token}` } });
@@ -170,31 +178,31 @@ describe('authenticate', () => {
 
     await authenticate(req as never, reply as never);
 
-    const user = (req as unknown as { user: JwtPayload }).user;
-    expect(user.station_ids).toEqual(['s-1', 's-2']);
-    expect(user.role_code).toBe('station_admin');
+    const user = (req as unknown as { user: ThinPayload }).user;
+    expect(user.tier).toBe('professional');
+    expect(user.rc).toBe('station_admin');
+    expect(user.pv).toBe(3);
   });
 });
 
 // ─── requirePermission ────────────────────────────────────────────────────────
 
 describe('requirePermission', () => {
-  function makeAuthedRequest(permissions: string[]): ReturnType<typeof makeMockRequest> {
-    const token = signToken({
+  function makeAuthedRequest(roleCode: string, sys?: true): ReturnType<typeof makeMockRequest> {
+    const req = makeMockRequest({});
+    (req as unknown as { user: ThinPayload }).user = {
       sub: 'u-1',
-      company_id: 'c-1',
-      station_ids: [],
-      role_code: 'scheduler',
-      permissions,
-    });
-    const req = makeMockRequest({ headers: { authorization: `Bearer ${token}` } });
-    // Simulate that authenticate already ran and set req.user
-    (req as unknown as { user: JwtPayload }).user = jwt.verify(token, TEST_SECRET) as JwtPayload;
+      cid: 'c-1',
+      rc: roleCode,
+      tier: 'free',
+      pv: 1,
+      ...(sys ? { sys } : {}),
+    };
     return req;
   }
 
-  it('does NOT call reply.code when user has the required permission', async () => {
-    const req = makeAuthedRequest(['playlist:read', 'playlist:write']);
+  it('does NOT call reply.code when user has the required permission (station_admin → playlist:read)', async () => {
+    const req = makeAuthedRequest('station_admin');
     const reply = makeMockReply();
     const hook = requirePermission('playlist:read');
 
@@ -203,8 +211,8 @@ describe('requirePermission', () => {
     expect(reply.code).not.toHaveBeenCalled();
   });
 
-  it('returns 403 when user lacks the required permission', async () => {
-    const req = makeAuthedRequest(['playlist:read']);
+  it('returns 403 when user lacks the required permission (viewer → playlist:write)', async () => {
+    const req = makeAuthedRequest('viewer');
     const reply = makeMockReply();
     const hook = requirePermission('playlist:write');
 
@@ -216,8 +224,8 @@ describe('requirePermission', () => {
     );
   });
 
-  it('returns 403 when user has an empty permissions array', async () => {
-    const req = makeAuthedRequest([]);
+  it('returns 403 when user has an unknown role code', async () => {
+    const req = makeAuthedRequest('unknown_role');
     const reply = makeMockReply();
     const hook = requirePermission('library:write');
 
@@ -226,10 +234,20 @@ describe('requirePermission', () => {
     expect(reply.code).toHaveBeenCalledWith(403);
   });
 
-  it('passes when user has the exact permission and nothing else', async () => {
-    const req = makeAuthedRequest(['rules:write']);
+  it('passes when user has the exact permission and nothing else (scheduler → playlist:read)', async () => {
+    const req = makeAuthedRequest('scheduler');
     const reply = makeMockReply();
-    const hook = requirePermission('rules:write');
+    const hook = requirePermission('playlist:read');
+
+    await hook(req as never, reply as never);
+
+    expect(reply.code).not.toHaveBeenCalled();
+  });
+
+  it('sys=true bypasses permission check entirely', async () => {
+    const req = makeAuthedRequest('company_admin', true);
+    const reply = makeMockReply();
+    const hook = requirePermission('billing:write');
 
     await hook(req as never, reply as never);
 
@@ -238,9 +256,40 @@ describe('requirePermission', () => {
 
   it('returns 403 when req.user is not populated (no authenticate step)', async () => {
     const req = makeMockRequest({});
-    // req.user is the default empty object — no permissions array
     const reply = makeMockReply();
     const hook = requirePermission('playlist:read');
+
+    await hook(req as never, reply as never);
+
+    // Empty user object has no rc field → ROLE_PERMISSIONS[undefined] = [] → 403
+    expect(reply.code).toHaveBeenCalledWith(403);
+  });
+
+  it('uses resolvedPerms.companyWide when present', async () => {
+    const req = makeMockRequest({
+      resolvedPerms: { companyWide: ['dj:write'], accessibleStationIds: [] },
+    });
+    (req as unknown as { user: ThinPayload }).user = {
+      sub: 'u-1', cid: 'c-1', rc: 'viewer', tier: 'free', pv: 1,
+    };
+    const reply = makeMockReply();
+    const hook = requirePermission('dj:write');
+
+    await hook(req as never, reply as never);
+
+    expect(reply.code).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when resolvedPerms.companyWide does not include permission', async () => {
+    const req = makeMockRequest({
+      resolvedPerms: { companyWide: ['library:read'], accessibleStationIds: [] },
+    });
+    (req as unknown as { user: ThinPayload }).user = {
+      sub: 'u-1', cid: 'c-1', rc: 'company_admin', tier: 'free', pv: 1,
+      // Note: no sys flag — so resolvedPerms path is used
+    };
+    const reply = makeMockReply();
+    const hook = requirePermission('billing:write');
 
     await hook(req as never, reply as never);
 
@@ -251,24 +300,11 @@ describe('requirePermission', () => {
 // ─── requireStationAccess ─────────────────────────────────────────────────────
 
 describe('requireStationAccess', () => {
-  function makeUserReq(
-    role: JwtPayload['role_code'],
-    stationIds: string[],
-    paramStationId: string,
-  ) {
-    const req = makeMockRequest({ params: { id: paramStationId } });
-    (req as unknown as { user: JwtPayload }).user = {
-      sub: 'u-1',
-      company_id: 'c-1',
-      station_ids: stationIds,
-      role_code: role,
-      permissions: [],
+  it('sys=true (super_admin) always passes regardless of station_id param', async () => {
+    const req = makeMockRequest({ params: { id: 'any-station-id' } });
+    (req as unknown as { user: ThinPayload }).user = {
+      sub: 'u-1', cid: 'c-1', rc: 'super_admin', tier: 'enterprise', pv: 1, sys: true,
     };
-    return req;
-  }
-
-  it('super_admin always passes regardless of station_id param', async () => {
-    const req = makeUserReq('super_admin', [], 'any-station-id');
     const reply = makeMockReply();
     const hook = requireStationAccess();
 
@@ -277,8 +313,11 @@ describe('requireStationAccess', () => {
     expect(reply.code).not.toHaveBeenCalled();
   });
 
-  it('company_admin always passes regardless of station_id param', async () => {
-    const req = makeUserReq('company_admin', [], 'any-station-id');
+  it('sys=true (company_admin) always passes regardless of station_id param', async () => {
+    const req = makeMockRequest({ params: { id: 'any-station-id' } });
+    (req as unknown as { user: ThinPayload }).user = {
+      sub: 'u-1', cid: 'c-1', rc: 'company_admin', tier: 'starter', pv: 1, sys: true,
+    };
     const reply = makeMockReply();
     const hook = requireStationAccess();
 
@@ -287,8 +326,14 @@ describe('requireStationAccess', () => {
     expect(reply.code).not.toHaveBeenCalled();
   });
 
-  it('station_admin with matching station_id in station_ids passes', async () => {
-    const req = makeUserReq('station_admin', ['station-aaa', 'station-bbb'], 'station-aaa');
+  it('passes when resolvedPerms includes the station', async () => {
+    const req = makeMockRequest({
+      params: { id: 'station-aaa' },
+      resolvedPerms: { companyWide: [], accessibleStationIds: ['station-aaa', 'station-bbb'] },
+    });
+    (req as unknown as { user: ThinPayload }).user = {
+      sub: 'u-1', cid: 'c-1', rc: 'station_admin', tier: 'free', pv: 1,
+    };
     const reply = makeMockReply();
     const hook = requireStationAccess();
 
@@ -297,8 +342,14 @@ describe('requireStationAccess', () => {
     expect(reply.code).not.toHaveBeenCalled();
   });
 
-  it('station_admin with non-matching station_id returns 403', async () => {
-    const req = makeUserReq('station_admin', ['station-aaa'], 'station-zzz');
+  it('returns 403 when resolvedPerms does not include the station', async () => {
+    const req = makeMockRequest({
+      params: { id: 'station-zzz' },
+      resolvedPerms: { companyWide: [], accessibleStationIds: ['station-aaa'] },
+    });
+    (req as unknown as { user: ThinPayload }).user = {
+      sub: 'u-1', cid: 'c-1', rc: 'station_admin', tier: 'free', pv: 1,
+    };
     const reply = makeMockReply();
     const hook = requireStationAccess();
 
@@ -310,25 +361,10 @@ describe('requireStationAccess', () => {
     );
   });
 
-  it('scheduler role with non-matching station_id returns 403', async () => {
-    const req = makeUserReq('scheduler', ['station-111'], 'station-999');
-    const reply = makeMockReply();
-    const hook = requireStationAccess();
-
-    await hook(req as never, reply as never);
-
-    expect(reply.code).toHaveBeenCalledWith(403);
-  });
-
   it('passes when no stationId param is present in route params', async () => {
-    // No :id or :station_id param — middleware should early-return without error
     const req = makeMockRequest({ params: {} });
-    (req as unknown as { user: JwtPayload }).user = {
-      sub: 'u-1',
-      company_id: 'c-1',
-      station_ids: [],
-      role_code: 'viewer',
-      permissions: [],
+    (req as unknown as { user: ThinPayload }).user = {
+      sub: 'u-1', cid: 'c-1', rc: 'viewer', tier: 'free', pv: 1,
     };
     const reply = makeMockReply();
     const hook = requireStationAccess();
@@ -339,13 +375,12 @@ describe('requireStationAccess', () => {
   });
 
   it('resolves station_id from params.station_id key (not just params.id)', async () => {
-    const req = makeMockRequest({ params: { station_id: 'station-xyz' } });
-    (req as unknown as { user: JwtPayload }).user = {
-      sub: 'u-1',
-      company_id: 'c-1',
-      station_ids: ['station-xyz'],
-      role_code: 'scheduler',
-      permissions: [],
+    const req = makeMockRequest({
+      params: { station_id: 'station-xyz' },
+      resolvedPerms: { companyWide: [], accessibleStationIds: ['station-xyz'] },
+    });
+    (req as unknown as { user: ThinPayload }).user = {
+      sub: 'u-1', cid: 'c-1', rc: 'scheduler', tier: 'free', pv: 1,
     };
     const reply = makeMockReply();
     const hook = requireStationAccess();
@@ -360,24 +395,26 @@ describe('requireStationAccess', () => {
 
 describe('requireCompanyMatch', () => {
   function makeCompanyReq(
-    role: JwtPayload['role_code'],
+    rc: string,
     userCompanyId: string,
     paramCompanyId: string,
     paramKey: 'company_id' | 'id' = 'company_id',
+    sys?: true,
   ) {
     const req = makeMockRequest({ params: { [paramKey]: paramCompanyId } });
-    (req as unknown as { user: JwtPayload }).user = {
+    (req as unknown as { user: ThinPayload }).user = {
       sub: 'u-1',
-      company_id: userCompanyId,
-      station_ids: [],
-      role_code: role,
-      permissions: [],
+      cid: userCompanyId,
+      rc,
+      tier: 'free',
+      pv: 1,
+      ...(sys ? { sys } : {}),
     };
     return req;
   }
 
-  it('super_admin always passes', async () => {
-    const req = makeCompanyReq('super_admin', 'c-1', 'c-999');
+  it('sys=true always passes regardless of company param', async () => {
+    const req = makeCompanyReq('super_admin', 'c-1', 'c-999', 'company_id', true);
     const reply = makeMockReply();
     const hook = requireCompanyMatch();
 
@@ -421,12 +458,8 @@ describe('requireCompanyMatch', () => {
 
   it('passes when no company param is present', async () => {
     const req = makeMockRequest({ params: {} });
-    (req as unknown as { user: JwtPayload }).user = {
-      sub: 'u-1',
-      company_id: 'c-1',
-      station_ids: [],
-      role_code: 'viewer',
-      permissions: [],
+    (req as unknown as { user: ThinPayload }).user = {
+      sub: 'u-1', cid: 'c-1', rc: 'viewer', tier: 'free', pv: 1,
     };
     const reply = makeMockReply();
     const hook = requireCompanyMatch();

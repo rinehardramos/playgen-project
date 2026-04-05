@@ -79,7 +79,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     '/dj/scripts/:id/audio',
     async (req, reply) => {
       const { id } = req.params;
-      const { company_id } = req.user as { company_id: string };
+      const company_id = req.user.cid;
       const pool = getPool();
 
       // Verify tenant ownership and get playlist date for the filename

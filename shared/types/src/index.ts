@@ -1,13 +1,57 @@
-// ─── Auth ────────────────────────────────────────────────────────────────────
+// ─── Subscription & Tier ─────────────────────────────────────────────────────
+
+export type SubscriptionTier = 'free' | 'starter' | 'professional' | 'enterprise';
+export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'trialing' | 'paused';
+export type AccountType = 'individual' | 'corporate';
+
+export interface Subscription {
+  id: string;
+  company_id: string;
+  stripe_subscription_id: string | null;
+  tier: SubscriptionTier;
+  status: SubscriptionStatus;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TierLimits {
+  tier: SubscriptionTier;
+  max_stations: number;
+  max_users: number;
+  max_songs: number;
+  max_sub_stations: number;
+  feature_dj: boolean;
+  feature_analytics: boolean;
+  feature_s3: boolean;
+  feature_api_keys: boolean;
+  feature_custom_roles: boolean;
+  feature_hierarchy: boolean;
+}
+
+export type TierFeature = 'dj' | 'analytics' | 's3' | 'api_keys' | 'custom_roles' | 'hierarchy';
+export type TierResource = 'stations' | 'users' | 'songs';
+
+export interface TierCheckResult {
+  allowed: boolean;
+  current: number;
+  limit: number;
+  tier: SubscriptionTier;
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export interface JwtPayload {
-  sub: string;          // user id
-  company_id: string;
-  station_ids: string[];
-  role_code: RoleCode;
-  permissions: string[];
-  iat?: number;
-  exp?: number;
+  sub: string;      // user ID
+  cid: string;      // company_id
+  rc: string;       // role_code
+  tier: SubscriptionTier;  // subscription tier
+  sys?: true;       // present only for super_admin / company_admin
+  pv: number;       // perm_version — detects stale caches
+  iat: number;
+  exp: number;
 }
 
 export interface TokenPair {
@@ -22,70 +66,117 @@ export type RoleCode =
   | 'company_admin'
   | 'station_admin'
   | 'scheduler'
-  | 'viewer';
+  | 'viewer'
+  | 'general_manager'
+  | 'program_director'
+  | 'music_director'
+  | 'traffic_manager'
+  | 'on_air_talent'
+  | 'viewer_template';
 
-export const PERMISSIONS = {
-  COMPANY_READ: 'company:read',
-  COMPANY_WRITE: 'company:write',
-  STATION_READ: 'station:read',
-  STATION_WRITE: 'station:write',
-  LIBRARY_READ: 'library:read',
-  LIBRARY_WRITE: 'library:write',
-  TEMPLATE_READ: 'template:read',
-  TEMPLATE_WRITE: 'template:write',
-  PLAYLIST_READ: 'playlist:read',
-  PLAYLIST_WRITE: 'playlist:write',
-  PLAYLIST_APPROVE: 'playlist:approve',
-  PLAYLIST_EXPORT: 'playlist:export',
-  ANALYTICS_READ: 'analytics:read',
-  USERS_READ: 'users:read',
-  USERS_WRITE: 'users:write',
-  RULES_READ: 'rules:read',
-  RULES_WRITE: 'rules:write',
-} as const;
+export const PERMISSIONS = [
+  'company:read', 'company:write',
+  'station:read', 'station:write', 'station:create', 'station:delete',
+  'library:read', 'library:write', 'library:delete',
+  'template:read', 'template:write',
+  'playlist:read', 'playlist:write', 'playlist:approve', 'playlist:export',
+  'analytics:read', 'analytics:export',
+  'users:read', 'users:write', 'users:invite',
+  'roles:read', 'roles:write',
+  'rules:read', 'rules:write',
+  'dj:read', 'dj:write', 'dj:approve', 'dj:config',
+  'settings:read', 'settings:write',
+  'billing:read', 'billing:write',
+] as const;
 
-export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
+export type Permission_Code = typeof PERMISSIONS[number];
 
-export const ROLE_PERMISSIONS: Record<RoleCode, Permission[]> = {
-  super_admin: Object.values(PERMISSIONS) as Permission[],
-  company_admin: [
-    'company:read', 'company:write',
-    'station:read', 'station:write',
-    'library:read', 'library:write',
-    'template:read', 'template:write',
-    'playlist:read', 'playlist:write', 'playlist:approve', 'playlist:export',
-    'analytics:read',
-    'users:read', 'users:write',
-    'rules:read', 'rules:write',
-  ],
+export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+  super_admin: PERMISSIONS,
+  company_admin: PERMISSIONS,
   station_admin: [
     'station:read', 'station:write',
-    'library:read', 'library:write',
+    'library:read', 'library:write', 'library:delete',
     'template:read', 'template:write',
     'playlist:read', 'playlist:write', 'playlist:approve', 'playlist:export',
     'analytics:read',
-    'users:read',
+    'users:read', 'users:write', 'users:invite',
+    'roles:read',
     'rules:read', 'rules:write',
+    'dj:read', 'dj:write', 'dj:approve', 'dj:config',
+    'settings:read', 'settings:write',
   ],
-  scheduler: [
-    'library:read',
-    'template:read',
-    'playlist:read', 'playlist:write', 'playlist:export',
+  scheduler: ['playlist:read', 'playlist:write', 'template:read', 'rules:read'],
+  viewer: ['library:read', 'template:read', 'playlist:read', 'analytics:read'],
+  general_manager: [
+    'station:read', 'station:write',
+    'library:read', 'library:write', 'library:delete',
+    'template:read', 'template:write',
+    'playlist:read', 'playlist:write', 'playlist:approve', 'playlist:export',
+    'analytics:read', 'analytics:export',
+    'users:read', 'users:write', 'users:invite',
+    'roles:read',
+    'rules:read', 'rules:write',
+    'dj:read', 'dj:write', 'dj:approve', 'dj:config',
+    'settings:read', 'settings:write',
+  ],
+  program_director: [
+    'library:read', 'library:write', 'library:delete',
+    'template:read', 'template:write',
+    'playlist:read', 'playlist:write', 'playlist:approve', 'playlist:export',
     'analytics:read',
+    'rules:read', 'rules:write',
+    'dj:read', 'dj:write', 'dj:approve',
   ],
-  viewer: [
-    'library:read',
-    'playlist:read',
-    'analytics:read',
+  music_director: ['library:read', 'library:write', 'template:read', 'playlist:read', 'rules:read', 'dj:read'],
+  traffic_manager: [
+    'library:read', 'template:read',
+    'playlist:read', 'playlist:write', 'playlist:approve', 'playlist:export',
+    'analytics:read', 'rules:read',
   ],
+  on_air_talent: ['library:read', 'playlist:read', 'dj:read', 'dj:write'],
+  viewer_template: ['library:read', 'template:read', 'playlist:read', 'analytics:read'],
 };
 
+// ─── Permissions ─────────────────────────────────────────────────────────────
+
+export interface Permission {
+  id: string;
+  code: string;
+  resource: string;
+  action: string;
+  label: string;
+  description: string | null;
+  category: string;
+  sort_order: number;
+}
+
+export interface UserStationAssignment {
+  id: string;
+  user_id: string;
+  station_id: string;
+  role_override_id: string | null;
+  assigned_by: string | null;
+  created_at: string;
+}
+
+export interface ResolvedPermissions {
+  companyWide: string[];                        // permission codes for company-wide access
+  stationSpecific: Map<string, string[]>;       // stationId → permission codes
+  accessibleStationIds: string[];
+}
+
 // ─── Company & Station ───────────────────────────────────────────────────────
+
+export type StationType = 'group' | 'market' | 'cluster' | 'station' | 'subchannel';
 
 export interface Company {
   id: string;
   name: string;
   slug: string;
+  account_type?: AccountType;
+  stripe_customer_id?: string | null;
+  settings?: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -101,6 +192,11 @@ export interface Station {
   is_active: boolean;
   dj_enabled: boolean;
   dj_auto_approve: boolean;
+  parent_station_id?: string | null;
+  station_type?: StationType;
+  depth?: number;
+  inherit_library?: boolean;
+  sort_order?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -108,9 +204,12 @@ export interface Station {
 export interface Role {
   id: string;
   company_id: string | null;
-  code: RoleCode;
+  code: RoleCode | string;
   label: string;
-  permissions: Permission[];
+  permissions: string[];
+  is_system?: boolean;
+  is_template?: boolean;
+  description?: string | null;
 }
 
 export interface User {
@@ -120,6 +219,8 @@ export interface User {
   email: string;
   display_name: string;
   station_ids: string[];
+  default_station_id?: string | null;
+  perm_version?: number;
   is_active: boolean;
   last_login_at: Date | null;
   created_at: Date;
