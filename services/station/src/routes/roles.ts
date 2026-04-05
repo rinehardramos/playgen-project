@@ -23,8 +23,13 @@ export async function roleRoutes(app: FastifyInstance) {
    *   - template roles (company_id IS NULL, is_template = TRUE)
    *   - custom roles scoped to this company
    */
-  app.get('/companies/:id/roles', { onRequest: [requirePermission('roles:read')] }, async (req, _reply) => {
+  app.get('/companies/:id/roles', { onRequest: [requirePermission('roles:read')] }, async (req, reply) => {
     const { id: companyId } = req.params as { id: string };
+
+    // Tenant isolation: non-system users can only view roles for their own company
+    if (!req.user.sys && req.user.cid !== companyId) {
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Company access denied' } });
+    }
 
     const { rows } = await getPool().query<RoleRow>(
       `SELECT id, company_id, code, label, permissions, is_system, is_template, description
@@ -52,6 +57,11 @@ export async function roleRoutes(app: FastifyInstance) {
       permissions: string[];
       description?: string;
     };
+
+    // Tenant isolation: non-system users can only create roles for their own company
+    if (!req.user.sys && req.user.cid !== companyId) {
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Company access denied' } });
+    }
 
     if (!body.code || !body.label || !Array.isArray(body.permissions)) {
       return reply.code(400).send({
@@ -249,6 +259,11 @@ export async function roleRoutes(app: FastifyInstance) {
       code: string;
       label?: string;
     };
+
+    // Tenant isolation: non-system users can only clone roles into their own company
+    if (!req.user.sys && req.user.cid !== companyId) {
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Company access denied' } });
+    }
 
     if (!body.source_role_id || !body.code) {
       return reply.code(400).send({
