@@ -51,7 +51,9 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // List voices: OpenAI (static) + ElevenLabs (live API if key configured, else fallback)
-  app.get<{ Querystring: { station_id?: string } }>('/dj/tts/voices', async (req, reply) => {
+  app.get<{ Querystring: { station_id?: string } }>('/dj/tts/voices', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     // Allow station-level API key override for ElevenLabs
     let elevenLabsKey = config.tts.elevenlabsApiKey;
     if (req.query.station_id) {
