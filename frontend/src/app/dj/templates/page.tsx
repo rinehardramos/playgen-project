@@ -15,6 +15,9 @@ const SEGMENT_TYPES = [
   'time_check',
   'weather_tease',
   'ad_break',
+  'current_events',
+  'listener_activity',
+  'joke',
 ] as const;
 
 type SegmentType = (typeof SEGMENT_TYPES)[number];

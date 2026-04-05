@@ -27,6 +27,9 @@ const SEGMENT_COLORS: Record<string, { bg: string; border: string; text: string 
   time_check:       { bg: 'bg-emerald-600', border: 'border-emerald-400', text: 'text-emerald-100'},
   weather_tease:    { bg: 'bg-sky-600',     border: 'border-sky-400',     text: 'text-sky-100'    },
   ad_break:         { bg: 'bg-orange-600',  border: 'border-orange-400',  text: 'text-orange-100' },
+  current_events:   { bg: 'bg-rose-600',    border: 'border-rose-400',    text: 'text-rose-100'   },
+  listener_activity:{ bg: 'bg-pink-600',    border: 'border-pink-400',    text: 'text-pink-100'   },
+  joke:             { bg: 'bg-yellow-500',  border: 'border-yellow-400',  text: 'text-yellow-100' },
 };
 
 const DEFAULT_COLOR = { bg: 'bg-gray-600', border: 'border-gray-400', text: 'text-gray-100' };

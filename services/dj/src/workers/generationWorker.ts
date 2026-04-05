@@ -1,4 +1,5 @@
 import { getPool } from '../db.js';
+import { getSocialProviders } from '../adapters/social/index.js';
 import { llmComplete } from '../adapters/llm/openrouter.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import type { StationIdentity } from '../lib/promptBuilder.js';
@@ -321,6 +322,32 @@ export async function runGenerationJob(
     [data.station_id],
   );
 
+  // 4c. Fetch social posts from connected Facebook/Twitter accounts (non-fatal if unavailable)
+  interface SocialShoutout { listener_name: string | null; message: string; }
+  const socialShoutouts: SocialShoutout[] = [];
+  try {
+    const socialProviders = await getSocialProviders(data.station_id, pool);
+    for (const provider of socialProviders) {
+      const posts = await provider.fetchPosts({ since_hours: 24, limit: 3 });
+      for (const post of posts) {
+        socialShoutouts.push({
+          listener_name: post.author_name ?? post.author_handle,
+          message: post.text,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[generationWorker] Social fetch failed (non-fatal):', err);
+  }
+
+  // Merge manual shoutouts with social posts (manual first, then social, max 3 total)
+  const allListenerContent: ShoutoutRow[] = [
+    ...pendingShoutouts,
+    ...socialShoutouts
+      .filter((s) => !pendingShoutouts.some((p) => p.message === s.message))
+      .map((s) => ({ id: '', listener_name: s.listener_name, message: s.message })),
+  ].slice(0, 3);
+
   // 5. Create the script record
   const { rows: scriptRows } = await pool.query(
     `INSERT INTO dj_scripts
@@ -387,6 +414,8 @@ export async function runGenerationJob(
   const stationIdIntervalSec = (personaConfig.station_id_interval_minutes ?? 30) * 60;
   /** Cumulative show content seconds between time_check injections (default 60 min). */
   const timeCheckIntervalSec = (personaConfig.time_check_interval_minutes ?? 60) * 60;
+  /** Joke style sourced from persona_config. Defaults to 'witty'. */
+  const jokeStyle: string = personaConfig.joke_style ?? 'witty';
 
   // Collect all generated segments for variety context
   const generatedSegments: Array<{
@@ -402,8 +431,8 @@ export async function runGenerationJob(
   for (let i = 0; i < entries.length; i++) {
     totalSegmentSlots += segmentsForEntry(entries[i], entries, i).length;
   }
-  // Add shoutout segments (injected after show_intro)
-  totalSegmentSlots += pendingShoutouts.length;
+  // Add shoutout segments (injected after show_intro — includes manual + social)
+  totalSegmentSlots += allListenerContent.length;
 
   let segmentsDone = 0;
 
@@ -428,6 +457,7 @@ export async function runGenerationJob(
       dj_profile: profile!,
       segment_type,
       custom_template: customTemplate,
+      joke_style: jokeStyle,
       previousSegmentTexts: generatedTexts.slice(-4),
       segmentIndex: position,
     };
@@ -544,6 +574,7 @@ export async function runGenerationJob(
         custom_template: customTemplate,
         weather: weatherData,
         news_items: newsItems,
+        joke_style: jokeStyle,
         previousSegmentTexts: generatedTexts.slice(-4),
         segmentIndex: position,
       };
@@ -594,9 +625,9 @@ export async function runGenerationJob(
       generatedTexts.push(script_text);
       segmentsDone++;
 
-      // Inject listener shoutout segments immediately after show_intro
-      if (segment_type === 'show_intro' && pendingShoutouts.length > 0) {
-        for (const shoutout of pendingShoutouts) {
+      // Inject listener shoutout segments immediately after show_intro (manual + social)
+      if (segment_type === 'show_intro' && allListenerContent.length > 0) {
+        for (const shoutout of allListenerContent) {
           const shoutoutProgress = 10 + Math.round((segmentsDone / totalSegmentSlots) * 80);
           await reportProgress(shoutoutProgress, `Writing listener shoutout (${segmentsDone + 1}/${totalSegmentSlots})…`);
 
@@ -654,14 +685,16 @@ export async function runGenerationJob(
           segmentsDone++;
         }
 
-        // Mark shoutouts as used
-        const shoutoutIds = pendingShoutouts.map((s) => s.id);
-        await pool.query(
-          `UPDATE listener_shoutouts
-           SET status = 'used', used_in_script_id = $1, updated_at = NOW()
-           WHERE id = ANY($2::uuid[])`,
-          [script_id, shoutoutIds],
-        );
+        // Mark manual shoutouts as used (social posts have no DB id — skip them)
+        const manualShoutoutIds = pendingShoutouts.map((s) => s.id).filter(Boolean);
+        if (manualShoutoutIds.length > 0) {
+          await pool.query(
+            `UPDATE listener_shoutouts
+             SET status = 'used', used_in_script_id = $1, updated_at = NOW()
+             WHERE id = ANY($2::uuid[])`,
+            [script_id, manualShoutoutIds],
+          );
+        }
       }
 
       // ── After first entry's song_intro: inject the opening station_id ───────────

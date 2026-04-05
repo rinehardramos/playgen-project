@@ -14,6 +14,7 @@ BEGIN
     id, company_id, name, personality, voice_style,
     llm_model, llm_temperature,
     tts_provider, tts_voice_id,
+    persona_config,
     is_default, is_active
   ) VALUES (
     alex_id,
@@ -28,6 +29,7 @@ BEGIN
     0.80,
     'openai',
     'alloy',
+    '{"joke_style":"witty","humor_level":7,"energy_level":7,"formality":"casual"}'::jsonb,
     TRUE,
     TRUE
   )

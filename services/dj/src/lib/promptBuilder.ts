@@ -44,6 +44,8 @@ export interface ScriptContext {
   previousSegmentTexts?: string[];
   /** 0-based position of this segment in the full script */
   segmentIndex?: number;
+  /** Joke style — sourced from persona_config.joke_style, used for joke segments. */
+  joke_style?: string;
 }
 
 // Map energy level (1-10) to descriptive text
@@ -155,9 +157,10 @@ const SEGMENT_DEFAULTS: Record<DjSegmentType, string> = {
   weather_tease: `{{#weather}}Give a quick weather update for {{station_city}}: {{weather_summary}}. Keep it conversational and brief.{{/weather}}{{^weather}}Tease an upcoming weather update in one sentence.{{/weather}}`,
   ad_break: `Announce a short commercial break in a smooth, natural way that doesn't feel like a hard stop.`,
   adlib: `Drop a quick, spontaneous on-air comment — a shout-out, a fun fact, or a playful observation. Keep it under 2 sentences. Be natural, like you just thought of it.`,
-  joke: `Tell a short, clean, family-friendly joke that fits the vibe of {{station_name}}. One setup, one punchline.`,
+  joke: `Tell a short {{joke_style}} joke. Keep it 1-3 lines — punchy and in-character as {{dj_name}} on {{station_name}}.{{#city}} You can optionally weave in a reference to {{city}} if it fits naturally.{{/city}} Do not explain the joke or break character after delivering it.`,
   current_events: `Briefly mention 1-2 current news headlines in a natural, conversational way on {{station_name}}. Keep it light and relatable — you're a DJ, not a newscaster. Headlines available: {{news_headlines}}`,
-  listener_activity: `Give a shoutout to {{listener_name}} who sent in this message: "{{listener_message}}". Make it feel personal, warm, and on-brand for the station. Keep it to 2-3 sentences.`,};
+  listener_activity: `Give a shoutout to {{listener_name}} who sent in this message: "{{listener_message}}". Make it feel personal, warm, and on-brand for the station. Keep it to 2-3 sentences.`,
+};
 
 /** Build the station ID suffix from identity fields, e.g. " — DWRR, 97.1 FM, The Sound of Manila". */
 function buildStationIdSuffix(identity?: StationIdentity | null): string {
@@ -202,7 +205,18 @@ function interpolate(template: string, ctx: ScriptContext): string {
   const newsHeadline1 = ctx.news_items?.[0]?.headline ?? '';
   const newsHeadline2 = ctx.news_items?.[1]?.headline ?? '';
 
-  return resolved
+  const city = ctx.station_identity?.city ?? '';
+  const jokeStyle = ctx.joke_style ?? 'witty';
+
+  // Handle optional city block: {{#city}}...{{/city}} — rendered only when city is present
+  let result = resolved;
+  if (city) {
+    result = result.replace(/\{\{#city\}\}([\s\S]*?)\{\{\/city\}\}/g, '$1');
+  } else {
+    result = result.replace(/\{\{#city\}\}[\s\S]*?\{\{\/city\}\}/g, '');
+  }
+
+  return result
     .replace(/\{\{station_name\}\}/g, ctx.station_name)
     .replace(/\{\{station_city\}\}/g, ctx.station_city ?? ctx.station_name)
     .replace(/\{\{current_date\}\}/g, ctx.current_date)
@@ -212,7 +226,9 @@ function interpolate(template: string, ctx: ScriptContext): string {
     .replace(/\{\{callsign\}\}/g, ctx.station_identity?.callsign ?? '')
     .replace(/\{\{tagline\}\}/g, ctx.station_identity?.tagline ?? '')
     .replace(/\{\{frequency\}\}/g, ctx.station_identity?.frequency ?? '')
-    .replace(/\{\{city\}\}/g, ctx.station_identity?.city ?? '')
+    .replace(/\{\{city\}\}/g, city)
+    .replace(/\{\{dj_name\}\}/g, ctx.dj_profile.name)
+    .replace(/\{\{joke_style\}\}/g, jokeStyle)
     .replace(/\{\{prev_song_title\}\}/g, ctx.prev_song?.title ?? '')
     .replace(/\{\{prev_song_artist\}\}/g, ctx.prev_song?.artist ?? '')
     .replace(/\{\{next_song_title\}\}/g, ctx.next_song?.title ?? '')

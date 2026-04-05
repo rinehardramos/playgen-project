@@ -11,6 +11,9 @@ const SEGMENT_TYPE_LABELS: Record<string, string> = {
   time_check: 'Time Check',
   weather_tease: 'Weather',
   ad_break: 'Ad Break',
+  current_events: 'Current Events',
+  listener_activity: 'Listener Shoutout',
+  joke: 'Joke',
 };
 
 export default function DjPlayer() {
