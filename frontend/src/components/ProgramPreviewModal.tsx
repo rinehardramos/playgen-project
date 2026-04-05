@@ -1,29 +1,20 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import {
+  buildTimeline,
+  DJ_COLORS,
+  SONG_STYLE,
+  formatTimeSec as formatTime,
+  formatDurSec as formatDur,
+  DEFAULT_DJ_SEC,
+  DEFAULT_SONG_SEC,
+  type TimelineItem,
+  type TimelineDjSegment as DjSegment,
+  type TimelinePlaylistEntry,
+} from '@/lib/timeline';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type DjSegmentType =
-  | 'show_intro'
-  | 'song_intro'
-  | 'song_transition'
-  | 'show_outro'
-  | 'station_id'
-  | 'time_check'
-  | 'weather_tease'
-  | 'ad_break';
-
-interface DjSegment {
-  id: string;
-  playlist_entry_id: string | null;
-  segment_type: DjSegmentType;
-  position: number;
-  script_text: string;
-  edited_text: string | null;
-  audio_url: string | null;
-  audio_duration_sec: number | null;
-}
 
 interface DjScript {
   id: string;
@@ -32,14 +23,7 @@ interface DjScript {
   total_segments: number;
 }
 
-export interface PreviewPlaylistEntry {
-  id: string;
-  hour: number;
-  position: number;
-  song_title: string;
-  song_artist: string;
-  duration_sec: number | null;
-}
+export interface PreviewPlaylistEntry extends TimelinePlaylistEntry {}
 
 interface ProgramPreviewModalProps {
   script: DjScript;
@@ -55,106 +39,12 @@ const PX_PER_SEC = 4;
 const MIN_DJ_PX = 80;
 /** Minimum song block width */
 const MIN_SONG_PX = 140;
-/** Default DJ segment duration when audio hasn't been generated yet */
-const DEFAULT_DJ_SEC = 20;
-/** Default song duration (3 min 30 s) when duration_sec is unknown */
-const DEFAULT_SONG_SEC = 210;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatTime(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.round(sec % 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-function formatDur(sec: number): string {
-  if (sec < 60) return `${Math.round(sec)}s`;
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
-}
 
 function blockPx(durationSec: number, min: number): number {
   return Math.max(min, Math.round(durationSec * PX_PER_SEC));
 }
-
-// ─── Timeline item types ──────────────────────────────────────────────────────
-
-type TimelineItem =
-  | { kind: 'dj'; segment: DjSegment; durationSec: number }
-  | { kind: 'song'; entry: PreviewPlaylistEntry; durationSec: number }
-  | { kind: 'gap'; durationSec: number };
-
-/**
- * Build an ordered list of DJ segments interleaved with songs.
- *
- * Ordering rationale (mirrors generationWorker.ts logic):
- *   show_intro → song_intro → Song[0] → song_transition → Song[1] → … → Song[N-1] → show_outro
- *
- * After a `song_intro` or `song_transition` segment, the linked playlist entry plays.
- * A configurable padding gap is inserted between every item.
- */
-function buildTimeline(
-  script: DjScript,
-  entries: PreviewPlaylistEntry[],
-  paddingSec: number,
-): TimelineItem[] {
-  const segments = [...script.segments].sort((a, b) => a.position - b.position);
-  const sortedEntries = [...entries].sort((a, b) =>
-    a.hour !== b.hour ? a.hour - b.hour : a.position - b.position,
-  );
-
-  const items: TimelineItem[] = [];
-
-  for (const seg of segments) {
-    const durationSec = seg.audio_duration_sec ?? DEFAULT_DJ_SEC;
-
-    if (items.length > 0 && paddingSec > 0) {
-      items.push({ kind: 'gap', durationSec: paddingSec });
-    }
-
-    items.push({ kind: 'dj', segment: seg, durationSec });
-
-    // song_intro introduces Song[0]; song_transition bridges to the linked song
-    if (seg.segment_type === 'song_intro' || seg.segment_type === 'song_transition') {
-      const linked = seg.playlist_entry_id
-        ? sortedEntries.find((e) => e.id === seg.playlist_entry_id)
-        : null;
-
-      if (linked) {
-        const songDur = linked.duration_sec ?? DEFAULT_SONG_SEC;
-        if (paddingSec > 0) {
-          items.push({ kind: 'gap', durationSec: paddingSec });
-        }
-        items.push({ kind: 'song', entry: linked, durationSec: songDur });
-      }
-    }
-  }
-
-  return items;
-}
-
-// ─── Colors ───────────────────────────────────────────────────────────────────
-
-const DJ_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  show_intro:      { bg: 'bg-violet-700',  border: 'border-violet-500',  text: 'text-violet-100'  },
-  song_intro:      { bg: 'bg-purple-700',  border: 'border-purple-500',  text: 'text-purple-100'  },
-  song_transition: { bg: 'bg-indigo-700',  border: 'border-indigo-500',  text: 'text-indigo-100'  },
-  show_outro:      { bg: 'bg-violet-800',  border: 'border-violet-600',  text: 'text-violet-100'  },
-  station_id:      { bg: 'bg-amber-700',   border: 'border-amber-500',   text: 'text-amber-100'   },
-  time_check:      { bg: 'bg-emerald-700', border: 'border-emerald-500', text: 'text-emerald-100' },
-  weather_tease:   { bg: 'bg-sky-700',     border: 'border-sky-500',     text: 'text-sky-100'     },
-  ad_break:        { bg: 'bg-orange-700',  border: 'border-orange-500',  text: 'text-orange-100'  },
-};
-
-const SONG_STYLE = {
-  bg: 'bg-slate-700',
-  border: 'border-slate-500',
-  text: 'text-slate-200',
-};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -173,7 +63,7 @@ export default function ProgramPreviewModal({
   const playQueueRef = useRef<DjSegment[]>([]);
   const playIdxRef = useRef<number>(0);
 
-  const timeline = buildTimeline(script, entries, paddingSec);
+  const timeline = buildTimeline(script.segments, entries, paddingSec);
   const totalDurationSec = timeline.reduce((s, item) => s + item.durationSec, 0);
 
   const djSegmentsWithAudio = script.segments
