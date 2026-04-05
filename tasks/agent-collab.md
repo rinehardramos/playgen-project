@@ -13,7 +13,6 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
-- [ ] S3 storage adapter + audio cleanup job (issue #24, feat/issue-24-s3-storage) | @claude-code | 2026-04-05
 - [ ] Deployment monitoring agent — Vercel + Railway error alerting (issue #166, feat/issue-166-deployment-monitor) | @claude-code | 2026-04-05
 - [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
 - [ ] Script review UI (issue #31, feat/issue-31-script-review-ui) | @claude-code | 2026-04-05
@@ -22,6 +21,7 @@ Before starting any task, an agent MUST:
 - [ ] Category distribution report by date + chart (issue #134, feat/issue-134-category-distribution-by-date) | @claude-code | 2026-04-05
 
 ## Recently Completed
+- [x] S3 storage adapter + audio cleanup job (issue #24, PR #176) | @claude-code | 2026-04-05
 - [x] Script template management UI (issue #20, PR #150) | @claude-code | 2026-04-05
 - [x] DJ Show Player with volume control (issue #21, PR #151) | @claude-code | 2026-04-05
 - [x] Spotify/Apple Music embed widgets (issue #22, PR #155) | @claude-code | 2026-04-05
