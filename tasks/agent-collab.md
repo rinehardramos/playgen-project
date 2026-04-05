@@ -16,14 +16,7 @@ Before starting any task, an agent MUST:
 - [ ] Deployment monitoring agent — Vercel + Railway error alerting (issue #166, feat/issue-166-deployment-monitor) | @claude-code | 2026-04-05
 - [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
 - [ ] Re-generate single playlist slot (issue #132, feat/issue-132-slot-regen) | @claude-code | 2026-04-05
-<<<<<<< HEAD
 - [ ] Generation failure alerting — endpoint + UI red badge (issue #133, feat/issue-133-generation-failure-alerting) | @claude-code | 2026-04-05
-=======
-- [x] Manifest builder + ElevenLabs TTS adapter (issue #16, feat/issue-16-manifest-builder-elevenlabs) | @claude-code | 2026-04-05
-- [x] Generation failure alerting — endpoint + UI red badge + /me fix + nginx fix (issue #133, PR #163) | @claude-code | 2026-04-05
-- [ ] PM ceremonies: DSU, sprint planning, sprint review (issue #164, PR #165) | @claude-code | 2026-04-05
-- [x] Deployment monitoring agent — Vercel + Railway error alerting (issue #166, PR #169) | @claude-code | 2026-04-05
->>>>>>> 687da1c (chore: mandate rigorous local pre-PR testing (typecheck+lint+tests+Docker))
 - [ ] Category distribution report by date + chart (issue #134, feat/issue-134-category-distribution-by-date) | @claude-code | 2026-04-05
 
 ## Recently Completed

@@ -257,6 +257,7 @@ export type DjSegmentType =
   | 'weather_tease'
   | 'ad_break';
 export type DjReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'auto_approved';
+export type DjSegmentReviewStatus = 'pending' | 'approved' | 'edited' | 'rejected';
 export type ManifestStatus = 'building' | 'ready' | 'failed';
 export type TtsProvider = 'openai' | 'elevenlabs';
 export type StorageProvider = 'local' | 's3';
@@ -335,6 +336,7 @@ export interface DjSegment {
   position: number;
   script_text: string;
   edited_text: string | null;
+  segment_review_status: DjSegmentReviewStatus;
   audio_url: string | null;
   audio_duration_sec: number | null;
   tts_provider: TtsProvider | null;
