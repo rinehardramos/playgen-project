@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildTestApp, makeTestToken, closePool } from './helpers.js';
 
-const COMPANY_ID = 'integ-test-company-profiles';
+const COMPANY_ID = '00000000-1111-0000-0000-000000000001';
 const TOKEN = makeTestToken({ company_id: COMPANY_ID });
 const AUTH_HEADER = `Bearer ${TOKEN}`;
 

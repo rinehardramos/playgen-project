@@ -26,6 +26,16 @@ export async function seedDjPersona(pool: Pool): Promise<void> {
       return;
     }
 
+    // Check that default station exists before seeding daypart assignments
+    const stationExists = await client.query(
+      'SELECT id FROM stations WHERE id = $1',
+      [DEFAULT_STATION_ID],
+    );
+    if (!stationExists.rowCount) {
+      console.warn('[seed] Default station not found, skipping DJ persona seed.');
+      return;
+    }
+
     const alexPersonaConfig = {
       catchphrases: [
         "Keep it locked right here!",
