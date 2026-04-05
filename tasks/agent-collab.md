@@ -15,6 +15,7 @@ Before starting any task, an agent MUST:
 ## Active Work
 - [ ] Deployment monitoring agent — Vercel + Railway error alerting (issue #166, feat/issue-166-deployment-monitor) | @claude-code | 2026-04-05
 - [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
+- [ ] Script review UI (issue #31, feat/issue-31-script-review-ui) | @claude-code | 2026-04-05
 - [ ] Re-generate single playlist slot (issue #132, feat/issue-132-slot-regen) | @claude-code | 2026-04-05
 - [ ] Generation failure alerting — endpoint + UI red badge (issue #133, feat/issue-133-generation-failure-alerting) | @claude-code | 2026-04-05
 - [ ] Category distribution report by date + chart (issue #134, feat/issue-134-category-distribution-by-date) | @claude-code | 2026-04-05

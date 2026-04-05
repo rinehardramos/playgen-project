@@ -4,6 +4,7 @@ import {
   getOverplayedSongs,
   getUnderplayedSongs,
   getCategoryDistribution,
+  getCategoryDistributionByDate,
   getSongHistory,
 } from './analyticsService';
 
@@ -169,6 +170,72 @@ describe('getCategoryDistribution', () => {
     const result = await getCategoryDistribution('station-1', 7);
 
     expect(result).toEqual([]);
+  });
+});
+
+describe('getCategoryDistributionByDate', () => {
+  it('returns category distribution with percentage as a number for a specific date', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        { category_code: 'POP', category_label: 'Pop Music', total_plays: 48, percentage: '75.00' },
+        { category_code: 'RNB', category_label: 'R&B', total_plays: 16, percentage: '25.00' },
+      ],
+    });
+
+    const result = await getCategoryDistributionByDate('station-1', '2026-04-05');
+
+    expect(result).toHaveLength(2);
+
+    expect(result[0].category_code).toBe('POP');
+    expect(result[0].category_label).toBe('Pop Music');
+    expect(result[0].total_plays).toBe(48);
+    expect(typeof result[0].percentage).toBe('number');
+    expect(result[0].percentage).toBe(75);
+
+    expect(result[1].category_code).toBe('RNB');
+    expect(typeof result[1].percentage).toBe('number');
+    expect(result[1].percentage).toBe(25);
+  });
+
+  it('returns an empty array when no playlist is scheduled for the date', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const result = await getCategoryDistributionByDate('station-1', '2026-01-01');
+
+    expect(result).toEqual([]);
+  });
+
+  it('returns zero percentage when grand total is 0', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        { category_code: 'POP', category_label: 'Pop Music', total_plays: 0, percentage: '0.00' },
+      ],
+    });
+
+    const result = await getCategoryDistributionByDate('station-1', '2026-04-05');
+
+    expect(result[0].percentage).toBe(0);
+  });
+
+  it('queries with the correct stationId and date parameters', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await getCategoryDistributionByDate('station-abc', '2026-03-15');
+
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('pl.station_id = $1'),
+      ['station-abc', '2026-03-15'],
+    );
+  });
+
+  it('uses playlist_entries (not play_history) for the count', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await getCategoryDistributionByDate('station-1', '2026-04-05');
+
+    const [sql] = mockQuery.mock.calls[0] as [string, string[]];
+    expect(sql).toContain('playlist_entries');
+    expect(sql).not.toContain('play_history');
   });
 });
 
