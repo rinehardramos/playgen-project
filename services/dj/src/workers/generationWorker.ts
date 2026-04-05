@@ -30,6 +30,10 @@ interface StationRow {
   name: string;
   timezone: string;
   company_id: string;
+  openrouter_api_key: string | null;
+  openai_api_key: string | null;
+  elevenlabs_api_key: string | null;
+  anthropic_api_key: string | null;
 }
 
 // Determine which segment types to generate for a given playlist position
@@ -53,9 +57,11 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   const pool = getPool();
   const start = Date.now();
 
-  // 1. Load station info
+  // 1. Load station info (including API key columns saved via Settings page)
   const { rows: stationRows } = await pool.query<StationRow>(
-    `SELECT id, name, timezone, company_id FROM stations WHERE id = $1`,
+    `SELECT id, name, timezone, company_id,
+            openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key
+     FROM stations WHERE id = $1`,
     [data.station_id],
   );
   const station = stationRows[0];
@@ -121,13 +127,22 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
   const currentDate = new Date().toISOString().split('T')[0];
   let position = 0;
 
-  // Resolve effective TTS / LLM config: station setting overrides fall back to env vars.
+  // Resolve effective TTS / LLM config:
+  //   1. station_settings table (per-station override, keyed by string)
+  //   2. stations table columns (saved via the Settings page)
+  //   3. environment-variable defaults from config
   const effectiveTtsProvider = stationSettings['tts_provider'] ?? config.tts.provider;
-  const effectiveTtsApiKey   = stationSettings['tts_api_key']
-    ?? (effectiveTtsProvider === 'elevenlabs' ? config.tts.elevenlabsApiKey : config.tts.openaiApiKey);
+  const effectiveLlmProvider = stationSettings['llm_provider'] ?? config.llm.provider;
   const effectiveTtsVoiceId  = stationSettings['tts_voice_id'] ?? profile.tts_voice_id ?? config.tts.defaultVoice;
   const effectiveLlmModel    = stationSettings['llm_model'] ?? profile.llm_model;
-  const effectiveLlmApiKey   = stationSettings['llm_api_key'] ?? undefined;
+
+  const effectiveLlmApiKey = stationSettings['llm_api_key']
+    ?? (effectiveLlmProvider === 'anthropic' ? station.anthropic_api_key : station.openrouter_api_key)
+    ?? undefined;
+
+  const effectiveTtsApiKey = stationSettings['tts_api_key']
+    ?? (effectiveTtsProvider === 'elevenlabs' ? station.elevenlabs_api_key : station.openai_api_key)
+    ?? (effectiveTtsProvider === 'elevenlabs' ? config.tts.elevenlabsApiKey : config.tts.openaiApiKey);
 
   const ttsEnabled = !!(effectiveTtsApiKey);
 
@@ -176,7 +191,8 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
         {
           model: effectiveLlmModel,
           temperature: profile.llm_temperature,
-          apiKey: effectiveLlmApiKey,
+          apiKey: effectiveLlmApiKey ?? undefined,
+          provider: effectiveLlmProvider,
         },
       );
 
