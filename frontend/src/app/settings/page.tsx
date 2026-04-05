@@ -35,6 +35,7 @@ interface DjSettings {
   llm_provider: string;
   llm_model: string;
   tts_provider: string;
+  tts_model: string;
   tts_voice_id: string;
 }
 
@@ -64,6 +65,7 @@ const DEFAULT_DJ: DjSettings = {
   llm_provider: 'openrouter',
   llm_model: '',
   tts_provider: 'openai',
+  tts_model: '',
   tts_voice_id: '',
 };
 
@@ -165,6 +167,7 @@ export default function SettingsPage() {
         llm_provider: map['llm_provider'] ?? DEFAULT_DJ.llm_provider,
         llm_model:    map['llm_model']    ?? DEFAULT_DJ.llm_model,
         tts_provider: map['tts_provider'] ?? DEFAULT_DJ.tts_provider,
+        tts_model:    map['tts_model']    ?? DEFAULT_DJ.tts_model,
         tts_voice_id: map['tts_voice_id'] ?? DEFAULT_DJ.tts_voice_id,
       });
     } catch {
@@ -224,6 +227,7 @@ export default function SettingsPage() {
         { key: 'llm_provider', is_secret: false },
         { key: 'llm_model',    is_secret: false },
         { key: 'tts_provider', is_secret: false },
+        { key: 'tts_model',    is_secret: false },
         { key: 'tts_voice_id', is_secret: false },
       ];
       await Promise.all(
@@ -586,6 +590,38 @@ export default function SettingsPage() {
                       <option value="gemini_tts">Gemini Native TTS (uses Gemini API Key — higher quality)</option>
                       <option value="mistral">Mistral Voxtral (uses Mistral API Key)</option>
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">TTS Model</label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      {dj.tts_provider === 'elevenlabs'
+                        ? 'ElevenLabs model ID, e.g. eleven_monolingual_v1, eleven_multilingual_v2, eleven_turbo_v2'
+                        : dj.tts_provider === 'gemini_tts'
+                        ? 'Gemini TTS model, e.g. gemini-2.5-flash-preview-tts, gemini-2.5-pro-preview-tts'
+                        : dj.tts_provider === 'mistral'
+                        ? 'Mistral model, e.g. voxtral-mini-tts-2603'
+                        : dj.tts_provider === 'google'
+                        ? 'Leave blank to use provider default'
+                        : 'OpenAI model: tts-1 (fast), tts-1-hd (high quality), gpt-4o-mini-tts'}
+                    </p>
+                    <input
+                      type="text"
+                      value={dj.tts_model}
+                      onChange={(e) => setDj((p) => ({ ...p, tts_model: e.target.value }))}
+                      className="input w-full"
+                      placeholder={
+                        dj.tts_provider === 'elevenlabs'
+                          ? 'eleven_monolingual_v1'
+                          : dj.tts_provider === 'gemini_tts'
+                          ? 'gemini-2.5-flash-preview-tts'
+                          : dj.tts_provider === 'mistral'
+                          ? 'voxtral-mini-tts-2603'
+                          : dj.tts_provider === 'google'
+                          ? '(uses provider default)'
+                          : 'tts-1'
+                      }
+                    />
                   </div>
 
                   <div>

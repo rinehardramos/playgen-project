@@ -19,10 +19,12 @@ const FALLBACK_VOICES: ElevenLabsVoice[] = [
 
 export class ElevenLabsTtsAdapter implements TtsAdapter {
   private apiKey: string;
+  private model: string;
   private baseUrl = 'https://api.elevenlabs.io/v1';
 
-  constructor(apiKey?: string) {
+  constructor(apiKey?: string, model?: string) {
     this.apiKey = apiKey ?? config.tts.elevenlabsApiKey;
+    this.model = model ?? 'eleven_monolingual_v1';
     if (!this.apiKey) throw new Error('ELEVENLABS_API_KEY is required for ElevenLabs TTS');
   }
 
@@ -36,7 +38,7 @@ export class ElevenLabsTtsAdapter implements TtsAdapter {
       },
       body: JSON.stringify({
         text: opts.text,
-        model_id: 'eleven_monolingual_v1',
+        model_id: opts.model ?? this.model,
         voice_settings: {
           stability: opts.stability ?? 0.5,
           similarity_boost: opts.similarity_boost ?? 0.75,

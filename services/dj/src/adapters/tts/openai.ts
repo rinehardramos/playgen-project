@@ -10,6 +10,7 @@ export interface TtsAdapterOverrides {
   provider?: string;
   apiKey?: string;
   voiceId?: string;
+  model?: string;
 }
 
 export class OpenAiTtsAdapter implements TtsAdapter {
@@ -21,7 +22,7 @@ export class OpenAiTtsAdapter implements TtsAdapter {
 
   async generate(opts: TtsOptions): Promise<TtsResult> {
     const response = await this.client.audio.speech.create({
-      model: 'tts-1',
+      model: (opts.model ?? 'tts-1') as 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts',
       voice: opts.voice_id as 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer',
       input: opts.text,
       response_format: 'mp3',
@@ -35,9 +36,9 @@ export class OpenAiTtsAdapter implements TtsAdapter {
 export function getTtsAdapter(overrides?: TtsAdapterOverrides): TtsAdapter {
   const provider = overrides?.provider ?? config.tts.provider;
   if (provider === 'openai') return new OpenAiTtsAdapter(overrides?.apiKey);
-  if (provider === 'elevenlabs') return new ElevenLabsTtsAdapter(overrides?.apiKey);
+  if (provider === 'elevenlabs') return new ElevenLabsTtsAdapter(overrides?.apiKey, overrides?.model);
   if (provider === 'google') return new GoogleTtsAdapter(overrides?.apiKey);
-  if (provider === 'gemini_tts') return new GeminiTtsAdapter(overrides?.apiKey);
-  if (provider === 'mistral') return new MistralTtsAdapter(overrides?.apiKey);
+  if (provider === 'gemini_tts') return new GeminiTtsAdapter(overrides?.apiKey, overrides?.model);
+  if (provider === 'mistral') return new MistralTtsAdapter(overrides?.apiKey, overrides?.model);
   throw new Error(`TTS provider "${provider}" not yet implemented`);
 }

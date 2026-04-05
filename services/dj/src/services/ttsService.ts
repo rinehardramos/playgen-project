@@ -78,22 +78,41 @@ export async function loadTtsProviderConfig(
   stationId: string,
   fallbackVoiceId: string,
 ): Promise<TtsProviderConfig | null> {
-  const { rows } = await getPool().query<{ key: string; value: string }>(
+  const pool = getPool();
+
+  // Load per-station key-value settings (tts_provider, tts_voice_id, tts_api_key override)
+  const { rows: settingRows } = await pool.query<{ key: string; value: string }>(
     `SELECT key, value FROM station_settings WHERE station_id = $1`,
     [stationId],
   );
-  const settings = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  const settings = Object.fromEntries(settingRows.map((r) => [r.key, r.value]));
+
+  // Load station-level API key columns (saved via the Settings page)
+  const { rows: stationRows } = await pool.query<{
+    elevenlabs_api_key: string | null;
+    openai_api_key: string | null;
+    gemini_api_key: string | null;
+    mistral_api_key: string | null;
+  }>(
+    `SELECT elevenlabs_api_key, openai_api_key, gemini_api_key, mistral_api_key
+     FROM stations WHERE id = $1`,
+    [stationId],
+  );
+  const stationKeys = stationRows[0] ?? {};
 
   const provider = settings['tts_provider'] ?? config.tts.provider;
+
+  // Priority: explicit tts_api_key setting → station column → env var
   const apiKey =
     settings['tts_api_key'] ??
     (provider === 'elevenlabs'
-      ? config.tts.elevenlabsApiKey
+      ? (stationKeys.elevenlabs_api_key ?? config.tts.elevenlabsApiKey)
       : provider === 'google' || provider === 'gemini_tts'
-      ? config.tts.geminiApiKey
+      ? (stationKeys.gemini_api_key ?? config.tts.geminiApiKey)
       : provider === 'mistral'
-      ? config.tts.mistralApiKey
-      : config.tts.openaiApiKey);
+      ? (stationKeys.mistral_api_key ?? config.tts.mistralApiKey)
+      : (stationKeys.openai_api_key ?? config.tts.openaiApiKey));
+
   const voiceId = settings['tts_voice_id'] ?? fallbackVoiceId;
 
   if (!apiKey) return null;
