@@ -16,6 +16,10 @@ export interface ScriptContext {
   next_song?: SongContext;
   segment_type: DjSegmentType;
   custom_template?: string;  // overrides default prompt when set
+  /** Texts of recently generated segments — used to enforce variety */
+  previousSegmentTexts?: string[];
+  /** 0-based position of this segment in the full script */
+  segmentIndex?: number;
 }
 
 // Map energy level (1-10) to descriptive text
@@ -106,19 +110,26 @@ export function buildSystemPrompt(profile: DjProfile): string {
 - Be concise: most segments should be 1-3 sentences
 - Never break the fourth wall or mention that you are an AI`);
 
+  lines.push('');
+  lines.push(`VARIETY IS ESSENTIAL — every segment must feel distinct:
+- NEVER open two segments with the same word or phrase (e.g. do not say "Hey" every time)
+- Mix your approach: sometimes lead with a song fact, a question, an observation, a callback to the last track, a time/vibe reference, or an atmosphere-setting line — not just a greeting
+- Vary sentence structure and energy between segments — punchy one moment, warm the next
+- Write like a real DJ who naturally sounds different every time they open their mouth`);
+
   return lines.join('\n').trim();
 }
 
 // Default prompt templates per segment type
 const SEGMENT_DEFAULTS: Record<DjSegmentType, string> = {
-  show_intro: `Open the show for {{station_name}} on {{current_date}}. Set the mood and welcome listeners.`,
-  song_intro: `Introduce "{{next_song_title}}" by {{next_song_artist}}. Keep it short and hype it up.`,
-  song_transition: `Bridge from "{{prev_song_title}}" by {{prev_song_artist}} to "{{next_song_title}}" by {{next_song_artist}}. Make it feel seamless.`,
-  show_outro: `Close out the show on {{station_name}}. Thank listeners and tease what's coming up.`,
-  station_id: `Give the station ID for {{station_name}} in a short, punchy line.`,
-  time_check: `Call out the time — it's {{current_hour}}:00 — on {{station_name}}.`,
-  weather_tease: `Tease an upcoming weather update in one sentence.`,
-  ad_break: `Announce a short commercial break in a smooth, non-intrusive way.`,
+  show_intro: `Open the show for {{station_name}} on {{current_date}}. Set the mood and welcome listeners in. The very first song up is "{{next_song_title}}" by {{next_song_artist}} — you can tease it or jump straight into the vibe.`,
+  song_intro: `You just played "{{prev_song_title}}" by {{prev_song_artist}}. Now set up "{{next_song_title}}" by {{next_song_artist}}. Pick ONE creative angle: a fun fact about the artist, what makes this track special, a feeling it evokes, or a sharp observation — then hand off to the song. Do NOT just say what the song is called again.`,
+  song_transition: `Bridge from "{{prev_song_title}}" by {{prev_song_artist}} to "{{next_song_title}}" by {{next_song_artist}}. Comment on what you just heard, then pivot naturally to what's coming. Make it feel like one continuous conversation.`,
+  show_outro: `Wrap up the show on {{station_name}}. Thank listeners genuinely, give a feel for what's next or who's on after you, and sign off with personality.`,
+  station_id: `Give the station ID for {{station_name}} in a short, punchy line. Make it memorable — not just the name.`,
+  time_check: `Call out the time ({{current_hour}}:00) on {{station_name}}. Tie it to the mood, the day, or something listeners might be doing right now — don't just read the clock.`,
+  weather_tease: `Tease an upcoming weather update in one sentence. Make it feel relevant, not just a filler announcement.`,
+  ad_break: `Announce a short commercial break in a smooth, natural way that doesn't feel like a hard stop.`,
 };
 
 // Simple {{variable}} interpolation
@@ -135,5 +146,15 @@ function interpolate(template: string, ctx: ScriptContext): string {
 
 export function buildUserPrompt(ctx: ScriptContext): string {
   const template = ctx.custom_template ?? SEGMENT_DEFAULTS[ctx.segment_type];
-  return interpolate(template, ctx);
+  let prompt = interpolate(template, ctx);
+
+  // Append the last few generated segment texts so the LLM avoids repetition.
+  // Limit to 4 previous segments to keep the context window manageable.
+  if (ctx.previousSegmentTexts && ctx.previousSegmentTexts.length > 0) {
+    const recent = ctx.previousSegmentTexts.slice(-4);
+    const list = recent.map((t, i) => `${i + 1}. "${t}"`).join('\n');
+    prompt += `\n\nPrevious segments you already wrote (your new segment MUST open differently and feel distinct from all of these):\n${list}`;
+  }
+
+  return prompt;
 }
