@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   login,
   logout,
@@ -8,6 +8,8 @@ import {
   acceptInvite,
   AuthError,
 } from '../services/authService';
+import { authenticate } from '@playgen/middleware';
+import { getPool } from '../db';
 
 export async function authRoutes(app: FastifyInstance) {
   app.post('/auth/login', {
@@ -146,4 +148,58 @@ export async function authRoutes(app: FastifyInstance) {
       throw err;
     }
   });
+
+  // ── GET /me — current user profile ────────────────────────────────────────
+  app.get('/me', { preHandler: [authenticate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const pool = getPool();
+    const { rows } = await pool.query(
+      `SELECT u.id, u.email, u.display_name, r.label AS role_label
+       FROM users u
+       JOIN roles r ON r.id = u.role_id
+       WHERE u.id = $1 AND u.is_active = true`,
+      [req.user.sub],
+    );
+    if (!rows[0]) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+    return reply.code(200).send(rows[0]);
+  });
+
+  // ── PUT /me — update display_name and/or password ─────────────────────────
+  app.put<{ Body: { display_name?: string; password?: string } }>(
+    '/me',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            display_name: { type: 'string', minLength: 1, maxLength: 255 },
+            password: { type: 'string', minLength: 8 },
+          },
+        },
+      },
+      preHandler: [authenticate],
+    },
+    async (req, reply) => {
+      const { display_name, password } = req.body;
+      const pool = getPool();
+      const userId = req.user.sub;
+
+      if (display_name !== undefined) {
+        await pool.query(
+          `UPDATE users SET display_name = $1, updated_at = NOW() WHERE id = $2`,
+          [display_name, userId],
+        );
+      }
+
+      if (password) {
+        const bcrypt = await import('bcryptjs');
+        const hash = await bcrypt.hash(password, 12);
+        await pool.query(
+          `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+          [hash, userId],
+        );
+      }
+
+      return reply.code(200).send({ message: 'Profile updated' });
+    },
+  );
 }
