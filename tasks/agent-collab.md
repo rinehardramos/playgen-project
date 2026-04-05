@@ -18,6 +18,7 @@ Before starting any task, an agent MUST:
 - [ ] Category distribution report by date + chart (issue #134, feat/issue-134-category-distribution-by-date) | @claude-code | 2026-04-05
 - [ ] DJ Show Player component (issue #21, feat/issue-21-dj-show-player) | @claude-code | 2026-04-05
 - [ ] Spotify/Apple Music widgets (issue #22, feat/issue-22-music-widgets) | @claude-code | 2026-04-05
+- [x] Deploy DJ service on Railway — fix @fastify/static + rate-limit Fastify 5.x compat (issue #100, fix/issue-100-dj-fastify-compat) | @claude-code | 2026-04-05
 - [ ] Visual show timeline + audio export (issue #23, feat/issue-23-show-timeline) | @claude-code | 2026-04-05
 
 ## Recently Completed
