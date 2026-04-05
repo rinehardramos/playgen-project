@@ -1,6 +1,7 @@
 import { getPool } from '../db.js';
 import { llmComplete } from '../adapters/llm/openrouter.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
+import type { StationIdentity } from '../lib/promptBuilder.js';
 import { config } from '../config.js';
 import { buildManifest } from '../services/manifestService.js';
 import type { DjGenerationJobData, Job } from '../queues/djQueue.js';
@@ -28,6 +29,7 @@ interface StationRow {
   id: string;
   name: string;
   timezone: string;
+  locale_code: string | null;
   company_id: string;
   openrouter_api_key: string | null;
   openai_api_key: string | null;
@@ -35,9 +37,36 @@ interface StationRow {
   anthropic_api_key: string | null;
   gemini_api_key: string | null;
   mistral_api_key: string | null;
+  // Station identity fields (migration 039)
+  callsign: string | null;
+  tagline: string | null;
+  frequency: string | null;
+  city: string | null;
 }
 
-// Determine which segment types to generate for a given playlist position
+/**
+ * Format a Date object to a human-readable time string using the station's locale/timezone.
+ * Produces a 12hr clock for most locales (e.g. "3:47 PM"), falling back to UTC on error.
+ */
+function formatLocalTime(date: Date, timezone: string, localeCode?: string | null): string {
+  try {
+    const locale = localeCode ?? 'en-US';
+    return date.toLocaleTimeString(locale, {
+      timeZone: timezone,
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    // Graceful fallback — unsupported timezone or locale
+    return date.toLocaleTimeString('en-US', {
+      timeZone: 'UTC',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+}
+
+// Determine which song-linked segment types to generate for a given playlist position
 function segmentsForEntry(
   entry: PlaylistEntryRow,
   entries: PlaylistEntryRow[],
@@ -71,15 +100,23 @@ export async function runGenerationJob(
 
   await reportProgress(5, 'Loading station config…');
 
-  // 1. Load station info (including API key columns saved via Settings page)
+  // 1. Load station info (including API key columns + station identity columns from migration 039)
   const { rows: stationRows } = await pool.query<StationRow>(
-    `SELECT id, name, timezone, company_id,
-            openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, gemini_api_key, mistral_api_key
+    `SELECT id, name, timezone, locale_code, company_id,
+            openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, gemini_api_key, mistral_api_key,
+            callsign, tagline, frequency, city
      FROM stations WHERE id = $1`,
     [data.station_id],
   );
   const station = stationRows[0];
   if (!station) throw new Error(`Station ${data.station_id} not found`);
+
+  const stationIdentity: StationIdentity = {
+    callsign: station.callsign,
+    tagline: station.tagline,
+    frequency: station.frequency,
+    city: station.city,
+  };
 
   // 1b. Load per-station settings (API key overrides, model, TTS provider, etc.)
   const stationSettings = await loadStationSettings(data.station_id);
@@ -219,9 +256,17 @@ export async function runGenerationJob(
       ? config.tts.mistralApiKey
       : config.tts.openaiApiKey);
 
-  const _ttsEnabled = !!(effectiveTtsApiKey);
+  // ttsEnabled kept as a reference for future use (TTS is generated on-demand per segment)
+  void !!(effectiveTtsApiKey);
 
-  // Collect all generated segments for TTS pass + variety context
+  // ── Interval configuration for station_id and time_check segments ────────────
+  const personaConfig = profile.persona_config ?? {};
+  /** Cumulative show content seconds between station_id injections (default 30 min). */
+  const stationIdIntervalSec = (personaConfig.station_id_interval_minutes ?? 30) * 60;
+  /** Cumulative show content seconds between time_check injections (default 60 min). */
+  const timeCheckIntervalSec = (personaConfig.time_check_interval_minutes ?? 60) * 60;
+
+  // Collect all generated segments for variety context
   const generatedSegments: Array<{
     id: string;
     script_text: string;
@@ -230,7 +275,7 @@ export async function runGenerationJob(
   // Running list of generated texts — passed to each LLM call to enforce variety
   const generatedTexts: string[] = [];
 
-  // Pre-count total segment slots for progress reporting
+  // Pre-count total segment slots for progress reporting (approximate — non-song segments added dynamically)
   let totalSegmentSlots = 0;
   for (let i = 0; i < entries.length; i++) {
     totalSegmentSlots += segmentsForEntry(entries[i], entries, i).length;
@@ -240,11 +285,118 @@ export async function runGenerationJob(
 
   let segmentsDone = 0;
 
+  // ── Helper: LLM-generate and INSERT a non-song segment (station_id / time_check) ─
+  async function generateNonSongSegment(
+    segment_type: DjSegmentType,
+    overrides?: { current_time_local?: string; current_hour?: number },
+  ): Promise<void> {
+    const customTemplate = templateMap.get(segment_type);
+    let rejectionContext = '';
+    if (data.rejection_notes) {
+      rejectionContext = `\n\nIMPORTANT: The previous script was rejected by the reviewer. Their feedback: "${data.rejection_notes}". Please rewrite accordingly.`;
+    }
+    const ctx = {
+      station_name: station.name,
+      station_timezone: station.timezone,
+      station_identity: stationIdentity,
+      current_date: currentDate,
+      current_hour: overrides?.current_hour ?? 0,
+      current_time_local: overrides?.current_time_local,
+      dj_profile: profile!,
+      segment_type,
+      custom_template: customTemplate,
+      previousSegmentTexts: generatedTexts.slice(-4),
+      segmentIndex: position,
+    };
+    const systemPrompt = buildSystemPrompt(profile!);
+    const userPrompt = buildUserPrompt(ctx) + rejectionContext;
+    console.info(
+      `[generationWorker] LLM call — provider=${effectiveLlmProvider} model=${effectiveLlmModel} hasKey=${!!effectiveLlmApiKey} segment=${segment_type} (non-song)`,
+    );
+    let script_text: string;
+    try {
+      script_text = await llmComplete(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        {
+          model: effectiveLlmModel,
+          temperature: profile!.llm_temperature != null ? Number(profile!.llm_temperature) : undefined,
+          apiKey: effectiveLlmApiKey ?? undefined,
+          provider: effectiveLlmProvider,
+        },
+      );
+    } catch (llmErr) {
+      console.error(
+        `[generationWorker] LLM call FAILED — provider=${effectiveLlmProvider} model=${effectiveLlmModel} error:`,
+        llmErr,
+      );
+      throw llmErr;
+    }
+    const pos = position++;
+    const segResult = await pool.query(
+      `INSERT INTO dj_segments
+         (script_id, playlist_entry_id, segment_type, position, script_text)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
+      [script_id, null, segment_type, pos, script_text],
+    );
+    generatedSegments.push({ id: segResult.rows[0].id, script_text, position: pos });
+    generatedTexts.push(script_text);
+  }
+
+  // ── Tracking state for periodic segment injection ─────────────────────────────
+  /** Cumulative content duration in seconds for all songs processed so far. */
+  let cumulativeSec = 0;
+  /** Cumulative seconds at the last station_id injection. */
+  let lastStationIdAtSec = 0;
+  /** Cumulative seconds at the last time_check injection. */
+  let lastTimeCheckAtSec = 0;
+  /** Whether the opening station_id (right after first song_intro) has been inserted. */
+  let openingStationIdInserted = false;
+
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     const prev = entries[i - 1];
     const next = entries[i + 1];
+    const isFirst = i === 0;
     const segmentTypes = segmentsForEntry(entry, entries, i);
+
+    // ── Inject non-song segments BEFORE this song (not at show open) ──────────
+    if (!isFirst) {
+      // time_check: fire when cumulative show content has crossed a new interval boundary
+      const secSinceLastTimeCheck = cumulativeSec - lastTimeCheckAtSec;
+      if (timeCheckIntervalSec > 0 && secSinceLastTimeCheck >= timeCheckIntervalSec) {
+        const now = new Date();
+        const timeLocal = formatLocalTime(now, station.timezone, station.locale_code);
+        const hourLocal = parseInt(
+          now.toLocaleString('en-US', { timeZone: station.timezone, hour: 'numeric', hour12: false }),
+          10,
+        );
+        await reportProgress(
+          10 + Math.round((segmentsDone / totalSegmentSlots) * 80),
+          'Writing time check…',
+        );
+        await generateNonSongSegment('time_check', { current_time_local: timeLocal, current_hour: hourLocal });
+        lastTimeCheckAtSec = cumulativeSec;
+      }
+
+      // station_id: fire periodically after the opening station_id has been inserted
+      const secSinceLastStationId = cumulativeSec - lastStationIdAtSec;
+      if (
+        openingStationIdInserted &&
+        stationIdIntervalSec > 0 &&
+        secSinceLastStationId >= stationIdIntervalSec
+      ) {
+        await reportProgress(
+          10 + Math.round((segmentsDone / totalSegmentSlots) * 80),
+          'Writing station ID…',
+        );
+        await generateNonSongSegment('station_id');
+        lastStationIdAtSec = cumulativeSec;
+      }
+    }
 
     for (const segment_type of segmentTypes) {
       const customTemplate = templateMap.get(segment_type);
@@ -258,6 +410,7 @@ export async function runGenerationJob(
       const ctx = {
         station_name: station.name,
         station_timezone: station.timezone,
+        station_identity: stationIdentity,
         current_date: currentDate,
         current_hour: entry.hour,
         dj_profile: profile,
@@ -324,6 +477,7 @@ export async function runGenerationJob(
           const shoutoutCtx = {
             station_name: station.name,
             station_timezone: station.timezone,
+            station_identity: stationIdentity,
             current_date: currentDate,
             current_hour: entry.hour,
             dj_profile: profile,
@@ -382,7 +536,22 @@ export async function runGenerationJob(
           [script_id, shoutoutIds],
         );
       }
+
+      // ── After first entry's song_intro: inject the opening station_id ───────────
+      if (isFirst && segment_type === 'song_intro' && !openingStationIdInserted) {
+        await reportProgress(
+          10 + Math.round((segmentsDone / totalSegmentSlots) * 80),
+          'Writing opening station ID…',
+        );
+        await generateNonSongSegment('station_id');
+        openingStationIdInserted = true;
+        // Reset so next periodic fires at stationIdIntervalSec from show start
+        lastStationIdAtSec = 0;
+      }
     }
+
+    // Advance cumulative duration tracker for this song
+    cumulativeSec += entry.duration_sec ?? 0;
   }
 
   // TTS is now generated on demand per-segment via POST /dj/segments/:id/tts

@@ -416,6 +416,10 @@ export interface PersonaConfig {
   humor_level?: number;        // 1-10
   formality?: 'casual' | 'balanced' | 'formal';
   backstory?: string;
+  /** How often (in minutes of cumulative show content) to inject a station_id segment. Default: 30. */
+  station_id_interval_minutes?: number;
+  /** How often (in minutes of cumulative show content) to inject a time_check segment. Default: 60. */
+  time_check_interval_minutes?: number;
 }
 
 export interface DjProfile {

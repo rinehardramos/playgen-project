@@ -107,9 +107,11 @@ describe('generationWorker', () => {
     });
 
     // For 1 entry, segmentsForEntry returns ['show_intro', 'song_intro', 'show_outro']
+    // After song_intro the opening station_id is injected (non-song, uses null playlist_entry_id)
     // 6. Segment inserts
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-1' }] }); // show_intro
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-2' }] }); // song_intro
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-si' }] }); // opening station_id (non-song)
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-3' }] }); // show_outro
 
     // 7. Final script update
@@ -180,6 +182,7 @@ describe('generationWorker', () => {
     // 6b. Mark shoutout as used
     mockQuery.mockResolvedValueOnce({ rows: [] });
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-2' }] }); // song_intro RETURNING id
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-si' }] }); // opening station_id (non-song)
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-3' }] }); // show_outro RETURNING id
 
     // 7. Final script update
