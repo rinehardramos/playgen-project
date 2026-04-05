@@ -366,6 +366,31 @@ def prompt_health() -> str:
     )
 
 
+def prompt_monitor() -> str:
+    deploy    = DEPLOY
+    gateway   = deploy.get("gateway_url_env", "GATEWAY_URL")
+    frontend  = deploy.get("frontend_url_env", "FRONTEND_URL")
+    monitor_script = TECH.get("monitor_script", "bash scripts/deployment-monitor.sh")
+    return (
+        f"You are the deployment monitor for {PROJECT_NAME} at {WORKDIR}. "
+        f"export PATH=/opt/homebrew/bin:$PATH. "
+        f"Run the deployment monitor and investigate any failures:\n"
+        f"1. {monitor_script} 2>&1\n"
+        f"2. If any service failed: check recent CI runs — "
+        f"   gh run list --limit 10 --json status,conclusion,headBranch,createdAt | jq .\n"
+        f"3. For each failed service, check its Railway logs if RAILWAY_TOKEN is set:\n"
+        f"   Look at the last deployment logs for crash signatures.\n"
+        f"4. If a crash is identified and fixable (config error, missing env var, OOM): "
+        f"   open a GitHub issue labelled 'bug P0' with title 'CRASH: <service> - <reason>' "
+        f"   and assign it to the bug worker queue.\n"
+        f"5. Send a Telegram summary (under 500 chars):\n"
+        f"   curl -s -X POST 'https://api.telegram.org/bot{TG_TOKEN}/sendMessage' \\\n"
+        f"   -H 'Content-Type: application/json' \\\n"
+        f"   -d '{{\"chat_id\":\"{TG_CHAT}\",\"text\":\"MONITOR: X/Y services healthy | issues found | actions taken\"}}'\n"
+        f"Do NOT push any code — only investigate, report, and open issues."
+    )
+
+
 def build_prompt(slot_id: str, slot_type: str, slot_index: int,
                  bugs, feats, feature_prs, dep_prs):
     """Dispatch to the right prompt builder based on slot type."""
@@ -379,6 +404,8 @@ def build_prompt(slot_id: str, slot_type: str, slot_index: int,
         return prompt_merge(feature_prs, dep_prs)
     elif slot_type == "health":
         return prompt_health()
+    elif slot_type == "monitor":
+        return prompt_monitor()
     else:
         # Custom slot type: build a generic prompt
         return (
@@ -426,6 +453,7 @@ def manage_pool():
             "ticket-feat": bool(feats),
             "merge":       bool(feature_prs or dep_prs),
             "health":      True,
+            "monitor":     True,
         }.get(slot_type, True)  # unknown types always have work
 
         # ticket-bug-1 only when bugs actually exist
