@@ -369,10 +369,89 @@ class TestPromptBuilders:
         assert "#10" in p
         assert "#66" in p
 
-    def test_prompt_pm_includes_board_ids(self):
-        p = daemon.prompt_pm([], [], [], [])
+    def test_prompt_pm_board_sync_includes_board_ids(self):
+        p = daemon.prompt_pm([], [], [], [], mode="board_sync")
         assert "PVT_kwHOAXQAu84BTrFP" in p
         assert "PVTSSF_lAHOAXQAu84BTrFPzhA4e9s" in p
+
+    def test_prompt_pm_dsu_contains_ceremony_markers(self):
+        p = daemon.prompt_pm([], [], [], [], mode="dsu")
+        assert "YESTERDAY" in p
+        assert "TODAY" in p
+        assert "BLOCKERS" in p
+        assert "DSU" in p
+        assert "sendMessage" in p
+
+    def test_prompt_pm_sprint_planning_contains_markers(self):
+        p = daemon.prompt_pm([], [], [], [], mode="sprint_planning")
+        assert "SPRINT PLANNING" in p
+        assert "SPRINT CAPACITY" in p
+        assert "sprint-plan.md" in p
+        assert "sendMessage" in p
+
+    def test_prompt_pm_sprint_review_contains_markers(self):
+        p = daemon.prompt_pm([], [], [], [], mode="sprint_review")
+        assert "SPRINT REVIEW" in p
+        assert "WHAT WAS COMPLETED" in p
+        assert "PLANNED vs ACTUAL" in p
+        assert "sprint-plan.md" in p
+        assert "sendMessage" in p
+
+    def test_pm_mode_sprint_planning_monday_midnight(self):
+        manila = timezone(timedelta(hours=8))
+        monday_midnight = datetime(2026, 4, 6, 0, 5, tzinfo=manila)
+        with patch("daemon.datetime") as mock:
+            mock.now.return_value = monday_midnight
+            mock.fromisoformat = datetime.fromisoformat
+            assert daemon.pm_mode() == "sprint_planning"
+
+    def test_pm_mode_sprint_review_sunday_evening(self):
+        manila = timezone(timedelta(hours=8))
+        sunday_eve = datetime(2026, 4, 12, 19, 5, tzinfo=manila)
+        with patch("daemon.datetime") as mock:
+            mock.now.return_value = sunday_eve
+            mock.fromisoformat = datetime.fromisoformat
+            assert daemon.pm_mode() == "sprint_review"
+
+    def test_pm_mode_dsu_weekday_morning(self):
+        manila = timezone(timedelta(hours=8))
+        wednesday_nine = datetime(2026, 4, 8, 9, 5, tzinfo=manila)
+        with patch("daemon.datetime") as mock:
+            mock.now.return_value = wednesday_nine
+            mock.fromisoformat = datetime.fromisoformat
+            assert daemon.pm_mode() == "dsu"
+
+    def test_pm_mode_board_sync_otherwise(self):
+        manila = timezone(timedelta(hours=8))
+        wednesday_afternoon = datetime(2026, 4, 8, 14, 5, tzinfo=manila)
+        with patch("daemon.datetime") as mock:
+            mock.now.return_value = wednesday_afternoon
+            mock.fromisoformat = datetime.fromisoformat
+            assert daemon.pm_mode() == "board_sync"
+
+    def test_handle_pm_dsu_spawns_pm0(self, monkeypatch):
+        monkeypatch.setattr(daemon, "fetch_work", lambda: ([], [], [], []))
+        spawned = []
+        monkeypatch.setattr(daemon, "spawn", lambda slot, p: spawned.append((slot, p)) or True)
+        result = daemon._handle_cmd("/pm dsu")
+        assert result is not None
+        assert "pm-0" in result
+        assert len(spawned) == 1
+        assert spawned[0][0] == "pm-0"
+        assert "DSU" in spawned[0][1]
+
+    def test_handle_pm_invalid_subcommand(self):
+        result = daemon._handle_cmd("/pm invalid")
+        assert result is not None
+        assert "Usage" in result
+
+    def test_handle_pm_plan_uses_sprint_planning_mode(self, monkeypatch):
+        monkeypatch.setattr(daemon, "fetch_work", lambda: ([], [], [], []))
+        spawned = []
+        monkeypatch.setattr(daemon, "spawn", lambda slot, p: spawned.append((slot, p)) or True)
+        daemon._handle_cmd("/pm plan")
+        assert len(spawned) == 1
+        assert "SPRINT PLANNING" in spawned[0][1]
 
     def test_prompt_health_includes_tg_token(self):
         p = daemon.prompt_health()
