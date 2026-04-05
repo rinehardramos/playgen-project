@@ -23,7 +23,8 @@ export class OpenAiTtsAdapter implements TtsAdapter {
   async generate(opts: TtsOptions): Promise<TtsResult> {
     const response = await this.client.audio.speech.create({
       model: (opts.model ?? 'tts-1') as 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts',
-      voice: opts.voice_id as 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer',
+      // OpenAI has expanded its voice list — use a string cast so new voices work at runtime
+      voice: opts.voice_id as 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer' | 'ash' | 'sage' | 'coral',
       input: opts.text,
       response_format: 'mp3',
     });
