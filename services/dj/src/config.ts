@@ -33,7 +33,13 @@ export const config = {
     localPath: process.env.STORAGE_LOCAL_PATH ?? (process.env.NODE_ENV === 'production' ? '/app/data/audio' : '/tmp/playgen-dj'),
     s3Bucket: process.env.S3_BUCKET ?? '',
     s3Region: process.env.S3_REGION ?? 'us-east-1',
+    s3Prefix: process.env.S3_PREFIX ?? 'dj-audio',
+    awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
+    awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
   },
+
+  // Audio cleanup
+  audioRetentionDays: Number(process.env.AUDIO_RETENTION_DAYS ?? 30),
 
   // JWT (shared secret with auth-service)
   jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-me',

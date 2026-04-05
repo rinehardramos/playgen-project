@@ -9,6 +9,7 @@ import { daypartRoutes } from './routes/dayparts.js';
 import { scriptTemplateRoutes } from './routes/scriptTemplates.js';
 import { scriptRoutes } from './routes/scripts.js';
 import { closeQueue } from './queues/djQueue.js';
+import { scheduleAudioCleanup, closeCleanupQueue } from './queues/audioCleanupQueue.js';
 
 const app = Fastify({
   logger: {
@@ -61,6 +62,7 @@ async function shutdown(signal: string): Promise<void> {
   app.log.info(`Received ${signal}, shutting down gracefully`);
   try {
     await closeQueue();
+    await closeCleanupQueue();
     await app.close();
     process.exit(0);
   } catch (err) {
@@ -80,6 +82,9 @@ app.listen({ port: config.port, host: '0.0.0.0' }, (err) => {
     process.exit(1);
   }
   app.log.info(`dj-service listening on port ${config.port}`);
+  scheduleAudioCleanup().catch((schedErr) => {
+    app.log.error(schedErr, 'Failed to schedule audio cleanup job');
+  });
 });
 
 export default app;
