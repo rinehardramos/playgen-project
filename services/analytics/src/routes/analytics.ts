@@ -66,7 +66,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
   app.get('/dashboard/stats', {
     onRequest: [requirePermission('analytics:read')],
   }, async (req) => {
-    const { company_id } = req.user;
+    const company_id = req.user.cid;
     return analyticsService.getDashboardStats(company_id);
   });
 }

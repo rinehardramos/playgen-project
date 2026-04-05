@@ -14,6 +14,7 @@ Before starting any task, an agent MUST:
 
 ## Active Work
 - [ ] Fix DJ Script generation INTERNAL_ERROR — missing API key validation + unmasked LLM errors (issue #183, fix/issue-183) | @claude-code | 2026-04-05
+- [ ] Tiered user permission system — subscriptions, custom roles, station hierarchy, thin JWT (issue #216, feat/issue-216-tiered-permissions) | @claude-code | 2026-04-06
 
 ## Recently Completed
 - [x] Google OAuth login (issue #200, feat/issue-200-google-oauth) | @claude-code | 2026-04-05
