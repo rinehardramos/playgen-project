@@ -54,7 +54,7 @@ export default function NewProgramPage() {
   useEffect(() => {
     const user = getCurrentUser();
     if (!user) { router.push('/login'); return; }
-    api(`/api/v1/companies/${user.company_id}/stations`)
+    api.get<unknown>(`/api/v1/companies/${user.company_id}/stations`)
       .then((data: unknown) => {
         const list = data as Station[];
         setStations(list);
@@ -65,7 +65,7 @@ export default function NewProgramPage() {
 
   useEffect(() => {
     if (!selectedStation) return;
-    api(`/api/v1/stations/${selectedStation}/templates`)
+    api.get<unknown>(`/api/v1/stations/${selectedStation}/templates`)
       .then((data: unknown) => setTemplates(data as Template[]))
       .catch(() => setTemplates([]));
   }, [selectedStation]);
@@ -84,17 +84,14 @@ export default function NewProgramPage() {
     setSaving(true);
     setError('');
     try {
-      const program = await api(`/api/v1/stations/${selectedStation}/programs`, {
-        method: 'POST',
-        body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || null,
-          active_days: activeDays,
-          start_hour: startHour,
-          end_hour: endHour,
-          template_id: templateId || null,
-          color_tag: colorTag,
-        }),
+      const program = await api.post<unknown>(`/api/v1/stations/${selectedStation}/programs`, {
+        name: name.trim(),
+        description: description.trim() || null,
+        active_days: activeDays,
+        start_hour: startHour,
+        end_hour: endHour,
+        template_id: templateId || null,
+        color_tag: colorTag,
       }) as { id: string };
       router.push(`/programs/${program.id}/clock`);
     } catch (err: unknown) {

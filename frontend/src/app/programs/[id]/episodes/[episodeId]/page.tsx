@@ -263,20 +263,20 @@ export default function EpisodeDetailPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const ep = await api(`/api/v1/program-episodes/${episodeId}`) as ProgramEpisode;
+      const ep = await api.get<unknown>(`/api/v1/program-episodes/${episodeId}`) as ProgramEpisode;
       setEpisode(ep);
       setEditTitle(ep.episode_title ?? '');
 
       const [prog, pl] = await Promise.all([
-        api(`/api/v1/programs/${ep.program_id}`) as Promise<Program>,
-        api(`/api/v1/playlists/${ep.playlist_id}`) as Promise<Playlist>,
+        api.get<unknown>(`/api/v1/programs/${ep.program_id}`) as Promise<Program>,
+        api.get<unknown>(`/api/v1/playlists/${ep.playlist_id}`) as Promise<Playlist>,
       ]);
       setProgram(prog);
       setPlaylist(pl);
 
       const [ents, scripts] = await Promise.all([
-        api(`/api/v1/playlists/${ep.playlist_id}/entries`) as Promise<PlaylistEntryWithSong[]>,
-        api(`/api/v1/dj/scripts?playlist_id=${ep.playlist_id}`) as Promise<DjScript[]>,
+        api.get<unknown>(`/api/v1/playlists/${ep.playlist_id}/entries`) as Promise<PlaylistEntryWithSong[]>,
+        api.get<unknown>(`/api/v1/dj/scripts?playlist_id=${ep.playlist_id}`) as Promise<DjScript[]>,
       ]);
       setEntries(ents);
       setScript(scripts[0] ?? null);
@@ -294,7 +294,7 @@ export default function EpisodeDetailPage() {
     if (playlist?.status !== 'generating') return;
     const t = setInterval(async () => {
       try {
-        const pl = await api(`/api/v1/playlists/${playlist.id}`) as Playlist;
+        const pl = await api.get<unknown>(`/api/v1/playlists/${playlist.id}`) as Playlist;
         setPlaylist(pl);
         if (pl.status !== 'generating') {
           clearInterval(t);
@@ -309,10 +309,7 @@ export default function EpisodeDetailPage() {
     if (!episode) return;
     setSavingTitle(true);
     try {
-      const updated = await api(`/api/v1/program-episodes/${episode.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ episode_title: editTitle || null }),
-      }) as ProgramEpisode;
+      const updated = await api.put<unknown>(`/api/v1/program-episodes/${episode.id}`, { episode_title: editTitle || null }) as ProgramEpisode;
       setEpisode(updated);
     } finally {
       setSavingTitle(false);
@@ -323,7 +320,7 @@ export default function EpisodeDetailPage() {
     if (!episode) return;
     setPublishing(true);
     try {
-      const updated = await api(`/api/v1/program-episodes/${episode.id}/publish`, { method: 'POST' }) as ProgramEpisode;
+      const updated = await api.post<unknown>(`/api/v1/program-episodes/${episode.id}/publish`, {}) as ProgramEpisode;
       setEpisode(updated);
     } finally {
       setPublishing(false);
@@ -450,10 +447,7 @@ export default function EpisodeDetailPage() {
                 onClick={async () => {
                   setGeneratingScript(true);
                   try {
-                    await api('/api/v1/dj/scripts/generate', {
-                      method: 'POST',
-                      body: JSON.stringify({ playlist_id: playlist.id }),
-                    });
+                    await api.post<unknown>('/api/v1/dj/scripts/generate', { playlist_id: playlist.id });
                     await load();
                   } finally {
                     setGeneratingScript(false);

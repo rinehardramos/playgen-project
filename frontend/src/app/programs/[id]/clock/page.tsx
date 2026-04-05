@@ -147,8 +147,8 @@ export default function ShowClockEditorPage() {
   const load = useCallback(async () => {
     try {
       const [prog, clockData] = await Promise.all([
-        api(`/api/v1/programs/${id}`) as Promise<Program>,
-        api(`/api/v1/programs/${id}/clocks`) as Promise<ShowClock[]>,
+        api.get<unknown>(`/api/v1/programs/${id}`) as Promise<Program>,
+        api.get<unknown>(`/api/v1/programs/${id}/clocks`) as Promise<ShowClock[]>,
       ]);
       setProgram(prog);
       // Normalise slots for the form
@@ -166,7 +166,7 @@ export default function ShowClockEditorPage() {
         })),
       })));
       // Load categories for this station
-      const cats = await api(`/api/v1/stations/${prog.station_id}/categories`) as Category[];
+      const cats = await api.get<unknown>(`/api/v1/stations/${prog.station_id}/categories`) as Category[];
       setCategories(cats);
     } catch {
       router.push(`/programs/${id}`);
@@ -227,15 +227,9 @@ export default function ShowClockEditorPage() {
         })),
       };
       if (current.id) {
-        await api(`/api/v1/programs/${id}/clocks/${current.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+        await api.put<unknown>(`/api/v1/programs/${id}/clocks/${current.id}`, payload);
       } else {
-        const created = await api(`/api/v1/programs/${id}/clocks`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        }) as ShowClock;
+        const created = await api.post<unknown>(`/api/v1/programs/${id}/clocks`, payload) as ShowClock;
         setClocks(prev => {
           const next = [...prev];
           next[activeClock] = { ...next[activeClock], id: created.id };
@@ -254,10 +248,7 @@ export default function ShowClockEditorPage() {
     if (!newClockName.trim()) return;
     setAddingClock(true);
     try {
-      const created = await api(`/api/v1/programs/${id}/clocks`, {
-        method: 'POST',
-        body: JSON.stringify({ name: newClockName.trim(), is_default: false, slots: [] }),
-      }) as ShowClock;
+      const created = await api.post<unknown>(`/api/v1/programs/${id}/clocks`, { name: newClockName.trim(), is_default: false, slots: [] }) as ShowClock;
       setClocks(prev => [...prev, { ...created, slots: [] }]);
       setActiveClock(clocks.length);
       setNewClockName('');
@@ -298,10 +289,7 @@ export default function ShowClockEditorPage() {
           </p>
           <button
             onClick={async () => {
-              const created = await api(`/api/v1/programs/${id}/clocks`, {
-                method: 'POST',
-                body: JSON.stringify({ name: 'Standard Hour', is_default: true, slots: [] }),
-              }) as ShowClock;
+              const created = await api.post<unknown>(`/api/v1/programs/${id}/clocks`, { name: 'Standard Hour', is_default: true, slots: [] }) as ShowClock;
               setClocks([{ ...created, slots: [] }]);
               setActiveClock(0);
             }}
