@@ -15,8 +15,12 @@ Before starting any task, an agent MUST:
 - [ ] Re-generate single playlist slot (issue #132, feat/issue-132-slot-regen) | @claude-code | 2026-04-05
 - [ ] Generation failure alerting — endpoint + UI red badge (issue #133, feat/issue-133-generation-failure-alerting) | @claude-code | 2026-04-05
 - [ ] Category distribution report by date + chart (issue #134, feat/issue-134-category-distribution-by-date) | @claude-code | 2026-04-05
+- [ ] DJ Show Player component (issue #21, feat/issue-21-dj-show-player) | @claude-code | 2026-04-05
+- [ ] Spotify/Apple Music widgets (issue #22, feat/issue-22-music-widgets) | @claude-code | 2026-04-05
+- [ ] Visual show timeline + audio export (issue #23, feat/issue-23-show-timeline) | @claude-code | 2026-04-05
 
 ## Recently Completed
+- [x] Script template management UI (issue #20, feat/issue-20-script-template-ui) | @claude-code | 2026-04-05
 - [x] Deploy DJ service on Railway — set env vars + CD deploy (issue #100, fix/issue-100-dj-deploy) | @claude-code | 2026-04-05
 - [x] L2 knowledge base — Qdrant + FastAPI (issue #34, feat/issue-34-l2-knowledge-base) | @claude-code | 2026-04-05
 - [x] Implement GET /api/v1/dashboard/stats endpoint (issue #101, feat/dashboard-stats) | @claude-code | 2026-04-05
