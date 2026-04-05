@@ -1,6 +1,5 @@
 import ExcelJS from 'exceljs';
 import { getPlaylist } from './playlistService';
-import type { PlaylistEntry } from './playlistService';
 
 function formatHour(hour: number): string {
   return `${String(hour).padStart(2, '0')}:00`;

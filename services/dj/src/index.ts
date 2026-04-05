@@ -1,4 +1,3 @@
-import path from 'path';
 import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';

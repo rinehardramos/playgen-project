@@ -5,10 +5,8 @@ import { bulkCreateSongs } from './songService';
 import {
   parseMaterialString,
   parseXlsmCategorySheet,
-  parseXlsmTemplateSheet,
   parseXlsmLoadSheet,
   SONG_SHEET_NAMES,
-  TEMPLATE_SHEET_MAP,
   CATEGORY_LABELS,
 } from './importParser';
 

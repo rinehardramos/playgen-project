@@ -1,19 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// Mock the openai module before importing the adapter
-vi.mock('openai', () => {
-  return {
-    default: vi.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: vi.fn().mockResolvedValue({
-            choices: [{ message: { content: 'Hello, welcome to the show!' } }],
-          }),
-        },
-      },
-    })),
-  };
+// Shared mock fn so we can assert on it across tests
+const mockCreate = vi.fn().mockResolvedValue({
+  choices: [{ message: { content: 'Hello, welcome to the show!' } }],
 });
+
+// Vitest 4.x: use class syntax for constructor mocks
+vi.mock('openai', () => ({
+  default: vi.fn().mockImplementation(class {
+    chat = { completions: { create: mockCreate } };
+  }),
+}));
 
 // Must import after mocking
 import { llmComplete } from '../../src/adapters/llm/openrouter';

@@ -1,6 +1,4 @@
 import OpenAI from 'openai';
-import fs from 'fs/promises';
-import path from 'path';
 import { config } from '../../config.js';
 import { ElevenLabsTtsAdapter } from './elevenlabs.js';
 import type { TtsAdapter, TtsOptions, TtsResult } from './interface.js';
