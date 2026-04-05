@@ -49,13 +49,20 @@ vi.mock('fs/promises', () => ({
   },
 }));
 
+// Mock manifestService so buildManifest (fire-and-forget) doesn't race with test mocks
+vi.mock('../../src/services/manifestService.js', () => ({
+  buildManifest: vi.fn().mockResolvedValue(undefined),
+  getManifestByScript: vi.fn().mockResolvedValue(null),
+}));
+
 // 2. Import the worker
 import { runGenerationJob } from '../../src/workers/generationWorker';
 
 describe('generationWorker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default mock response for queries that don't need specific rows
+    // Reset mockQuery to clear any unconsumed mockResolvedValueOnce values from previous tests
+    mockQuery.mockReset();
     mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
   });
 
@@ -64,7 +71,7 @@ describe('generationWorker', () => {
 
     // 1. Station info
     mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1' }],
+      rows: [{ id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1', openrouter_api_key: 'test-key' }],
     });
     // 1b. Station settings (loadStationSettings)
     mockQuery.mockResolvedValueOnce({ rows: [] });
@@ -76,10 +83,6 @@ describe('generationWorker', () => {
         llm_temperature: 0.8,
         tts_voice_id: 'alloy',
       }],
-    });
-    // 3. Playlist info (playlist_date)
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ playlist_date: new Date() }],
     });
     // 3b. Playlist entries (1 entry)
     mockQuery.mockResolvedValueOnce({
@@ -110,26 +113,6 @@ describe('generationWorker', () => {
     // 8. Final script update
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
-    // 9. Build manifest mocks (auto-triggered at end of job)
-    // 9a. Get script + company
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ id: scriptId, playlist_id: 'play-1', station_id: 'station-1', company_id: 'company-1' }],
-    });
-    // 9b. Get segments
-    mockQuery.mockResolvedValueOnce({
-      rows: [
-        { id: 'seg-1', playlist_entry_id: 'entry-1', segment_type: 'show_intro', audio_url: '/a.mp3', audio_duration_sec: 10 }
-      ],
-    });
-    // 9c. Get entries
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 'entry-1', title: 'S1', artist: 'A1', duration_sec: 180 }],
-    });
-    // 9d. Insert manifest
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 'man-1' }],
-    });
-
     await runGenerationJob({
       playlist_id: 'playlist-1',
       station_id: 'station-1',
@@ -141,5 +124,25 @@ describe('generationWorker', () => {
       expect.stringContaining('UPDATE dj_scripts'),
       expect.any(Array)
     );
+  });
+
+  it('throws a descriptive error when no LLM API key is configured', async () => {
+    // The pre-flight check runs right after profile load, so we only need:
+    // station (no API keys) → settings (empty) → getDefaultProfile
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1',
+        openrouter_api_key: null, openai_api_key: null, anthropic_api_key: null,
+        gemini_api_key: null, mistral_api_key: null,
+      }],
+    });
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // station settings (empty — no key overrides)
+    mockQuery.mockResolvedValueOnce({              // getDefaultProfile
+      rows: [{ id: 'profile-1', llm_model: 'test-model', llm_temperature: 0.8, tts_voice_id: 'alloy' }],
+    });
+
+    await expect(
+      runGenerationJob({ playlist_id: 'playlist-1', station_id: 'station-1', auto_approve: false }),
+    ).rejects.toThrow(/No LLM API key configured/);
   });
 });

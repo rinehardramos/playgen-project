@@ -195,6 +195,21 @@ export async function regenerateSegment(
       : seg.openrouter_api_key) ??
     undefined;
 
+  // Pre-flight: ensure we have a usable LLM API key before calling the LLM.
+  const globalLlmFallback =
+    effectiveLlmProvider === 'openai'
+      ? config.llm.openaiApiKey
+      : effectiveLlmProvider === 'anthropic'
+      ? config.llm.anthropicApiKey
+      : config.openRouter.apiKey;
+  if (!effectiveLlmApiKey && !globalLlmFallback) {
+    throw new Error(
+      `No LLM API key configured for provider "${effectiveLlmProvider}". ` +
+      `Set OPENROUTER_API_KEY (or the relevant key) in Railway environment variables, ` +
+      `or add a per-station API key in Station Settings → DJ Settings.`,
+    );
+  }
+
   // Load playlist entries for context
   const { rows: entryRows } = await pool.query<{
     id: string; hour: number; position: number;
