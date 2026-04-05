@@ -6,9 +6,8 @@ import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { useDjPlayer } from '@/lib/DjPlayerContext';
-import ScriptReviewPanel from '@/components/ScriptReviewPanel';
+import ScriptReviewPanel, { type ReviewPanelScript, type PlaylistEntry as ReviewPanelEntry } from '@/components/ScriptReviewPanel';
 import ProgramPreviewModal from '@/components/ProgramPreviewModal';
-import MusicWidget from '@/components/MusicWidget';
 import {
   buildTimeline,
   DJ_COLORS,
@@ -53,14 +52,8 @@ interface PlaylistEntryWithSong extends TimelinePlaylistEntry {
   duration_sec: number | null;
 }
 
-interface DjScript {
-  id: string;
-  review_status: DjReviewStatus;
-  llm_model: string;
-  generation_ms: number | null;
-  total_segments: number;
-  segments: TimelineDjSegment[];
-}
+// ReviewPanelScript is a superset of our local DjScript needs — reuse it directly
+type DjScript = ReviewPanelScript;
 
 type EpisodeTab = 'rundown' | 'music' | 'script' | 'preview';
 
@@ -82,7 +75,7 @@ function RundownTab({
   script: DjScript | null;
   entries: PlaylistEntryWithSong[];
 }) {
-  const { playSegment, currentSegmentId } = useDjPlayer();
+  const { playSegment, currentSegment } = useDjPlayer();
 
   if (!script) {
     return (
@@ -118,7 +111,7 @@ function RundownTab({
         if (item.kind === 'dj') {
           const { segment } = item;
           const colors = DJ_COLORS[segment.segment_type] ?? DJ_COLORS['show_intro'];
-          const isPlaying = currentSegmentId === segment.id;
+          const isPlaying = currentSegment?.id === segment.id;
           return (
             <div key={i} className="flex items-start gap-3 px-4 py-3 bg-[#1a1a2e] border border-[#2a2a40] rounded-xl">
               <span className="text-gray-600 text-xs w-10 flex-shrink-0 pt-0.5 text-right">{startLabel}</span>
@@ -151,7 +144,7 @@ function RundownTab({
               </div>
               {segment.audio_url && (
                 <button
-                  onClick={() => playSegment(segment.id, segment.audio_url!)}
+                  onClick={() => playSegment({ id: segment.id, audioUrl: segment.audio_url!, segmentType: segment.segment_type, position: segment.position, djName: '', durationSec: segment.audio_duration_sec ?? null })}
                   className={`flex-shrink-0 p-1.5 rounded-lg transition-colors ${
                     isPlaying ? 'bg-violet-600 text-white' : 'text-gray-500 hover:text-violet-400 hover:bg-violet-900/20'
                   }`}
@@ -224,7 +217,6 @@ function MusicTab({ entries, playlistId }: { entries: PlaylistEntryWithSong[]; p
                   {entry.duration_sec && (
                     <span className="text-gray-600 text-xs">{formatDurSec(entry.duration_sec)}</span>
                   )}
-                  <MusicWidget title={entry.song_title} artist={entry.song_artist} />
                 </div>
               ))}
             </div>
@@ -465,7 +457,10 @@ export default function EpisodeDetailPage() {
           ) : (
             <ScriptReviewPanel
               script={script}
-              onScriptUpdate={load}
+              entries={entries as ReviewPanelEntry[]}
+              playlistId={playlist.id}
+              onScriptChange={(updated) => { if (updated) setScript(updated); else load(); }}
+              onGenerating={setGeneratingScript}
             />
           )}
         </div>
