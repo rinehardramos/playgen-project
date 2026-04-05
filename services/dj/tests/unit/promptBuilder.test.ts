@@ -109,6 +109,7 @@ describe('buildUserPrompt', () => {
       station_timezone: 'Asia/Manila',
       current_date: '2026-04-04',
       current_hour: 8,
+      current_time_formatted: '8:00 AM',
       dj_profile: mockProfile,
       segment_type: 'show_intro',
     });
@@ -122,6 +123,7 @@ describe('buildUserPrompt', () => {
       station_timezone: 'Asia/Manila',
       current_date: '2026-04-04',
       current_hour: 10,
+      current_time_formatted: '10:00 AM',
       dj_profile: mockProfile,
       segment_type: 'song_transition',
       prev_song: { title: 'Yesterday', artist: 'The Beatles', duration_sec: 125 },
@@ -139,6 +141,7 @@ describe('buildUserPrompt', () => {
       station_timezone: 'Asia/Manila',
       current_date: '2026-04-04',
       current_hour: 14,
+      current_time_formatted: '2:00 PM',
       dj_profile: mockProfile,
       segment_type: 'station_id',
       custom_template: 'You are on {{station_name}} at {{current_hour}} o\'clock!',
@@ -152,6 +155,7 @@ describe('buildUserPrompt', () => {
       station_timezone: 'Asia/Manila',
       current_date: '2026-04-04',
       current_hour: 6,
+      current_time_formatted: '6:00 AM',
       dj_profile: mockProfile,
       segment_type: 'song_intro',
     });
@@ -214,5 +218,32 @@ describe('buildUserPrompt', () => {
     });
     expect(prompt).toContain('a listener');
     expect(prompt).toContain('Great tunes!');
+  });
+
+  it('interpolates current_time_formatted in time_check', () => {
+    const prompt = buildUserPrompt({
+      station_name: 'Test FM',
+      station_timezone: 'Asia/Manila',
+      current_date: '2026-04-06',
+      current_hour: 14,
+      current_time_formatted: '2:30 PM',
+      dj_profile: mockProfile,
+      segment_type: 'time_check',
+    });
+    expect(prompt).toContain('2:30 PM');
+    expect(prompt).toContain('Test FM');
+  });
+
+  it('uses joke template with station name', () => {
+    const prompt = buildUserPrompt({
+      station_name: 'Test FM',
+      station_timezone: 'Asia/Manila',
+      current_date: '2026-04-06',
+      current_hour: 10,
+      current_time_formatted: '10:00 AM',
+      dj_profile: mockProfile,
+      segment_type: 'joke',
+    });
+    expect(prompt).toContain('Test FM');
   });
 });

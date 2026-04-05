@@ -6,6 +6,29 @@ import { buildManifest } from '../services/manifestService.js';
 import type { DjGenerationJobData, Job } from '../queues/djQueue.js';
 import type { DjProfile, DjSegmentType, DjScriptTemplate } from '@playgen/types';
 
+// Interval constants for non-song segment injection (between songs, never first or last)
+const TIME_CHECK_INTERVAL = 4; // fire at idx 4, 8, 12, 16…
+const TIME_CHECK_OFFSET   = 0;
+const JOKE_INTERVAL       = 5; // fire at idx 7, 12, 17…
+const JOKE_OFFSET         = 2;
+const STATION_ID_INTERVAL = 6; // fire at idx 9, 15, 21…
+const STATION_ID_OFFSET   = 3;
+
+// Non-song segment types that should have playlist_entry_id = NULL
+const NON_SONG_TYPES: ReadonlySet<DjSegmentType> = new Set([
+  'time_check', 'station_id', 'joke', 'weather_tease', 'ad_break',
+]);
+
+/** Format the current wall-clock time in the station's local timezone, e.g. "2:30 PM". */
+function formatLocalTime(timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date());
+}
+
 /** Fetch all station_settings for a given station into a key→value map (real values, un-masked). */
 async function loadStationSettings(stationId: string): Promise<Record<string, string>> {
   const { rows } = await getPool().query<{ key: string; value: string }>(
@@ -45,12 +68,19 @@ function segmentsForEntry(
 ): DjSegmentType[] {
   const types: DjSegmentType[] = [];
   const isFirst = idx === 0;
-  const isLast = idx === entries.length - 1;
+  const isLast  = idx === entries.length - 1;
 
   if (isFirst) types.push('show_intro');
   types.push(isFirst ? 'song_intro' : 'song_transition');
-  if (isLast) types.push('show_outro');
 
+  // Inject non-song segments at intervals between songs (never on first or last entry)
+  if (!isFirst && !isLast) {
+    if ((idx - TIME_CHECK_OFFSET) % TIME_CHECK_INTERVAL === 0) types.push('time_check');
+    if ((idx - JOKE_OFFSET) > 0 && (idx - JOKE_OFFSET) % JOKE_INTERVAL === 0) types.push('joke');
+    if ((idx - STATION_ID_OFFSET) > 0 && (idx - STATION_ID_OFFSET) % STATION_ID_INTERVAL === 0) types.push('station_id');
+  }
+
+  if (isLast) types.push('show_outro');
   return types;
 }
 
@@ -180,6 +210,7 @@ export async function runGenerationJob(
 
   // 6. Generate segments
   const currentDate = new Date().toISOString().split('T')[0];
+  const currentTimeFormatted = formatLocalTime(station.timezone);
   let position = 0;
 
   // Resolve effective LLM config (TTS is now generated on-demand per segment)
@@ -260,6 +291,7 @@ export async function runGenerationJob(
         station_timezone: station.timezone,
         current_date: currentDate,
         current_hour: entry.hour,
+        current_time_formatted: currentTimeFormatted,
         dj_profile: profile,
         prev_song: prev ? { title: prev.song_title, artist: prev.song_artist, duration_sec: prev.duration_sec } : undefined,
         next_song: next ? { title: next.song_title, artist: next.song_artist, duration_sec: next.duration_sec } : undefined,
@@ -303,12 +335,13 @@ export async function runGenerationJob(
       }
 
       const pos = position++;
+      const entryId = NON_SONG_TYPES.has(segment_type) ? null : entry.id;
       const segResult = await pool.query(
         `INSERT INTO dj_segments
            (script_id, playlist_entry_id, segment_type, position, script_text)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id`,
-        [script_id, entry.id, segment_type, pos, script_text],
+        [script_id, entryId, segment_type, pos, script_text],
       );
 
       generatedSegments.push({ id: segResult.rows[0].id, script_text, position: pos });

@@ -27,17 +27,26 @@ vi.mock('openai', () => ({
 
 vi.mock('../config.js', () => ({
   config: {
+    llm: {
+      provider: 'openrouter',
+      openaiApiKey: undefined,
+      anthropicApiKey: undefined,
+    },
     tts: {
       openaiApiKey: 'test-key',
       elevenlabsApiKey: 'test-key',
       provider: 'openai',
+      googleApiKey: undefined,
+      geminiApiKey: undefined,
+      mistralApiKey: undefined,
     },
     storage: {
       localPath: '/tmp/playgen-dj',
     },
     openRouter: {
+      apiKey: 'test-key',
       defaultModel: 'test-model',
-    }
+    },
   },
 }));
 

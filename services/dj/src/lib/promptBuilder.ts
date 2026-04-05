@@ -16,6 +16,8 @@ export interface ScriptContext {
   station_timezone: string;
   current_date: string;    // YYYY-MM-DD
   current_hour: number;
+  /** Human-readable local time in station timezone, e.g. "2:30 PM" */
+  current_time_formatted?: string;
   dj_profile: DjProfile;
   prev_song?: SongContext;
   next_song?: SongContext;
@@ -133,12 +135,13 @@ const SEGMENT_DEFAULTS: Record<DjSegmentType, string> = {
   song_intro: `You just played "{{prev_song_title}}" by {{prev_song_artist}}. Now set up "{{next_song_title}}" by {{next_song_artist}}. Pick ONE creative angle: a fun fact about the artist, what makes this track special, a feeling it evokes, or a sharp observation — then hand off to the song. Do NOT just say what the song is called again.`,
   song_transition: `Bridge from "{{prev_song_title}}" by {{prev_song_artist}} to "{{next_song_title}}" by {{next_song_artist}}. Comment on what you just heard, then pivot naturally to what's coming. Make it feel like one continuous conversation.`,
   show_outro: `Wrap up the show on {{station_name}}. Thank listeners genuinely, give a feel for what's next or who's on after you, and sign off with personality.`,
-  station_id: `Give the station ID for {{station_name}} in a short, punchy line. Make it memorable — not just the name.`,
-  time_check: `Call out the time ({{current_hour}}:00) on {{station_name}}. Tie it to the mood, the day, or something listeners might be doing right now — don't just read the clock.`,
+  station_id: `Deliver a punchy station ID for {{station_name}}. Make the name stick — use rhythm, a slogan you invent on the spot, or a vivid image. Keep it under 10 words. Never just say the name flatly.`,
+  time_check: `It's {{current_time_formatted}} on {{station_name}}. Tie the time to what listeners are likely doing right now — morning commute, lunch break, late night wind-down — and keep it brief and human.`,
   weather_tease: `Tease an upcoming weather update in one sentence. Make it feel relevant, not just a filler announcement.`,
   ad_break: `Announce a short commercial break in a smooth, natural way that doesn't feel like a hard stop.`,
   current_events: `Briefly mention 1-2 current news headlines in a natural, conversational way on {{station_name}}. Keep it light and relatable — you're a DJ, not a newscaster. Headlines available: {{news_headlines}}`,
   listener_activity: `Give a shoutout to {{listener_name}} who sent in this message: "{{listener_message}}". Make it feel personal, warm, and on-brand for the station. Keep it to 2-3 sentences.`,
+  joke: `Tell a short, clean joke or funny observation that fits the vibe of {{station_name}}. Keep it tasteful and broadly appealing. One setup and one punchline. Make it feel spontaneous, not scripted.`,
 };
 
 // Simple {{variable}} interpolation
@@ -147,6 +150,7 @@ function interpolate(template: string, ctx: ScriptContext): string {
     .replace(/\{\{station_name\}\}/g, ctx.station_name)
     .replace(/\{\{current_date\}\}/g, ctx.current_date)
     .replace(/\{\{current_hour\}\}/g, String(ctx.current_hour))
+    .replace(/\{\{current_time_formatted\}\}/g, ctx.current_time_formatted ?? '')
     .replace(/\{\{prev_song_title\}\}/g, ctx.prev_song?.title ?? '')
     .replace(/\{\{prev_song_artist\}\}/g, ctx.prev_song?.artist ?? '')
     .replace(/\{\{next_song_title\}\}/g, ctx.next_song?.title ?? '')
