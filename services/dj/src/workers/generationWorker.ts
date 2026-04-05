@@ -90,11 +90,7 @@ function segmentsForEntry(
   const isLast = idx === entries.length - 1;
   const total = entries.length;
 
-  if (isFirst) {
-    types.push('show_intro');
-    types.push('station_id'); // Station ID at top of show
-  }
-
+  if (isFirst) types.push('show_intro');
   types.push(isFirst ? 'song_intro' : 'song_transition');
 
   // Time check at the start of each new hour boundary
