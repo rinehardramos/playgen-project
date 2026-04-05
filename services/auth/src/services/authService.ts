@@ -5,7 +5,7 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from './jwtServ
 import { ROLE_PERMISSIONS, TokenPair } from '@playgen/types';
 import type { RoleCode, Permission } from '@playgen/types';
 
-interface UserRow {
+export interface UserRow {
   id: string;
   company_id: string;
   role_id: string;
@@ -88,7 +88,7 @@ export async function logout(rawRefreshToken: string): Promise<void> {
   );
 }
 
-async function issueTokenPair(user: UserRow): Promise<TokenPair> {
+export async function issueTokenPair(user: UserRow): Promise<TokenPair> {
   const pool = getPool();
   const permissions = user.role_permissions?.length
     ? user.role_permissions
@@ -173,7 +173,7 @@ export async function adminResetPassword(adminCompanyId: string, adminRoleCode: 
   await pool.query(`UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`, [targetUserId]);
 }
 
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 

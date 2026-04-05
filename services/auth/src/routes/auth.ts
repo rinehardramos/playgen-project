@@ -8,6 +8,7 @@ import {
   acceptInvite,
   AuthError,
 } from '../services/authService';
+import { loginWithGoogle, type GoogleProfile } from '../services/oauthService';
 import { authenticate } from '@playgen/middleware';
 import { getPool } from '../db';
 
@@ -202,4 +203,44 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(200).send({ message: 'Profile updated' });
     },
   );
+
+  // ── GET /auth/google/callback — Google OAuth2 callback ────────────────────
+  // The redirect to /api/v1/auth/google is created automatically by @fastify/oauth2
+  // (startRedirectPath). This route handles the code exchange and issues JWT tokens.
+  app.get('/auth/google/callback', async (req, reply) => {
+    // Only reachable if GOOGLE_CLIENT_ID is configured (plugin registered in index.ts)
+    if (!(app as unknown as Record<string, unknown>)['googleOAuth2']) {
+      return reply.code(501).send({ error: { code: 'OAUTH_NOT_CONFIGURED', message: 'Google OAuth is not configured.' } });
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+
+    try {
+      // Exchange auth code for Google access token
+      const { token } = await (app as unknown as {
+        googleOAuth2: { getAccessTokenFromAuthorizationCodeFlow: (req: FastifyRequest) => Promise<{ token: { access_token: string } }> };
+      }).googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(req);
+
+      // Fetch user profile from Google
+      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${token.access_token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch Google user info');
+      const profile = (await res.json()) as GoogleProfile;
+
+      const { tokens } = await loginWithGoogle(profile);
+
+      const params = new URLSearchParams({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+      });
+      return reply.redirect(`${frontendUrl}/auth/callback?${params.toString()}`, 302);
+    } catch (err) {
+      if (err instanceof AuthError && err.code === 'OAUTH_NO_ACCOUNT') {
+        return reply.redirect(`${frontendUrl}/login?error=no_account`, 302);
+      }
+      app.log.error(err, 'Google OAuth callback error');
+      return reply.redirect(`${frontendUrl}/login?error=oauth_failed`, 302);
+    }
+  });
 }
