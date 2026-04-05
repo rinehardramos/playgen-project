@@ -224,8 +224,7 @@ export default function SettingsPage() {
       ];
       await Promise.all(
         settingsToSave.map(({ key, is_secret }) =>
-          api.put(`/api/v1/stations/${selectedStation}/settings`, {
-            key,
+          api.put(`/api/v1/stations/${selectedStation}/settings/${key}`, {
             value: dj[key],
             is_secret,
           }),
