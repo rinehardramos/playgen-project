@@ -68,7 +68,14 @@ When adding `"@playgen/X": "workspace:*"` to a service's deps, ALSO update its D
 - To send a Telegram message from an agent, write the message to `/state/{slot_id}-report.txt`
 - The daemon will read this file at the next reset window and send the message via `tg_send()`
 
-### 10. Migration Conflict Prevention
+### 10. Rate Limit Graceful Degradation
+- If a Claude Code rate limit is reached mid-session, DO NOT stop or block — create GitHub issues for all remaining unstarted work
+- Use `gh issue create --title "..." --body "..." --label "P1"` for each pending task
+- Include enough detail in the issue body that the next agent can pick it up cold: context, acceptance criteria, files to touch, dependencies
+- After creating issues, update `tasks/agent-collab.md` to reflect the hand-off
+- The user should never have to manually transcribe your mental state into tickets
+
+### 11. Migration Conflict Prevention
 - Before merging any PR that touches `shared/db/migrations/`, check the Migration Reservation section in `tasks/agent-collab.md`
 - If two open PRs claim the same migration number, close the older one with a comment explaining the conflict
 
