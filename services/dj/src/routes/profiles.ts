@@ -1,6 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@playgen/middleware';
 import * as profileService from '../services/profileService.js';
+import { listElevenLabsVoices } from '../adapters/tts/elevenlabs.js';
+import { config } from '../config.js';
+import { getPool } from '../db.js';
+
+const OPENAI_VOICES = [
+  { id: 'alloy', name: 'Alloy', provider: 'openai' },
+  { id: 'echo', name: 'Echo', provider: 'openai' },
+  { id: 'fable', name: 'Fable', provider: 'openai' },
+  { id: 'onyx', name: 'Onyx', provider: 'openai' },
+  { id: 'nova', name: 'Nova', provider: 'openai' },
+  { id: 'shimmer', name: 'Shimmer', provider: 'openai' },
+];
 
 export async function profileRoutes(app: FastifyInstance): Promise<void> {
   // All routes require auth
@@ -38,19 +50,20 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(204).send();
   });
 
-  app.get('/dj/tts/voices', async (req, reply) => {
-    // Return standard voices for supported providers
-    return [
-      { id: 'alloy', name: 'Alloy (OpenAI)', provider: 'openai' },
-      { id: 'echo', name: 'Echo (OpenAI)', provider: 'openai' },
-      { id: 'fable', name: 'Fable (OpenAI)', provider: 'openai' },
-      { id: 'onyx', name: 'Onyx (OpenAI)', provider: 'openai' },
-      { id: 'nova', name: 'Nova (OpenAI)', provider: 'openai' },
-      { id: 'shimmer', name: 'Shimmer (OpenAI)', provider: 'openai' },
-      { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (ElevenLabs)', provider: 'elevenlabs' },
-      { id: 'AZnzlk1XjtKozAtGqeoR', name: 'Nicole (ElevenLabs)', provider: 'elevenlabs' },
-      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (ElevenLabs)', provider: 'elevenlabs' },
-      { id: 'MF3mGyEYCl7XYW7Lecd_', name: 'Elli (ElevenLabs)', provider: 'elevenlabs' },
-    ];
+  // List voices: OpenAI (static) + ElevenLabs (live API if key configured, else fallback)
+  app.get<{ Querystring: { station_id?: string } }>('/dj/tts/voices', async (req, reply) => {
+    // Allow station-level API key override for ElevenLabs
+    let elevenLabsKey = config.tts.elevenlabsApiKey;
+    if (req.query.station_id) {
+      const { rows } = await getPool().query(
+        `SELECT value FROM station_settings WHERE station_id = $1 AND key = 'tts_api_key'`,
+        [req.query.station_id]
+      );
+      if (rows[0]?.value) elevenLabsKey = rows[0].value;
+    }
+
+    const elevenlabsVoices = await listElevenLabsVoices(elevenLabsKey || undefined);
+
+    return [...OPENAI_VOICES, ...elevenlabsVoices];
   });
 }
