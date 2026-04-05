@@ -71,6 +71,9 @@ export default function SettingsPage() {
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [rulesSuccess, setRulesSuccess] = useState(false);
 
+  // DJ provider setting (stored in station_settings)
+  const [djLlmProvider, setDjLlmProvider] = useState<string>('openrouter');
+
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -86,6 +89,7 @@ export default function SettingsPage() {
     if (selectedStation) {
       fetchConfig(selectedStation);
       fetchRules(selectedStation);
+      fetchDjSettings(selectedStation);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStation]);
@@ -97,6 +101,18 @@ export default function SettingsPage() {
       if (data.length > 0) setSelectedStation(data[0].id);
     } catch (err: unknown) {
       setFetchError((err as ApiError).message ?? 'Failed to load stations');
+    }
+  }
+
+  async function fetchDjSettings(stationId: string) {
+    try {
+      const data = await api.get<Array<{ key: string; value: string }>>(
+        `/api/v1/stations/${stationId}/settings`,
+      );
+      const map = Object.fromEntries(data.map((s) => [s.key, s.value]));
+      if (map['llm_provider']) setDjLlmProvider(map['llm_provider']);
+    } catch {
+      // ignore — defaults to openrouter
     }
   }
 
@@ -134,10 +150,14 @@ export default function SettingsPage() {
     setConfigSuccess(false);
     setConfigSaving(true);
     try {
-      const updated = await api.put<StationConfig>(
-        `/api/v1/stations/${selectedStation}/config`,
-        config
-      );
+      const [updated] = await Promise.all([
+        api.put<StationConfig>(`/api/v1/stations/${selectedStation}/config`, config),
+        api.put(`/api/v1/stations/${selectedStation}/settings`, {
+          key: 'llm_provider',
+          value: djLlmProvider,
+          is_secret: false,
+        }),
+      ]);
       setConfig(updated);
       setConfigSuccess(true);
       setTimeout(() => setConfigSuccess(false), 3000);
@@ -317,12 +337,26 @@ export default function SettingsPage() {
 
                 <div className="pt-4 border-t border-gray-800 space-y-5">
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    AI DJ API Keys
+                    AI DJ Script Generation
                   </h3>
-                  
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-0.5">LLM Provider</label>
+                    <p className="text-xs text-gray-500 mb-2">AI provider used for DJ script generation.</p>
+                    <select
+                      value={djLlmProvider}
+                      onChange={(e) => setDjLlmProvider(e.target.value)}
+                      className="input w-full"
+                    >
+                      <option value="openrouter">OpenRouter (default — routes to any model)</option>
+                      <option value="anthropic">Anthropic (direct — use Anthropic API Key)</option>
+                      <option value="openai">OpenAI (direct — use OpenAI API Key)</option>
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-0.5">OpenRouter API Key</label>
-                    <p className="text-xs text-gray-500 mb-2">Used for script generation (Claude, GPT-4, etc.)</p>
+                    <p className="text-xs text-gray-500 mb-2">Used when provider is OpenRouter (e.g. anthropic/claude-sonnet-4-5, openai/gpt-4o)</p>
                     <input
                       type="password"
                       value={config.openrouter_api_key || ''}
