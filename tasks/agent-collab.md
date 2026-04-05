@@ -17,6 +17,7 @@ Before starting any task, an agent MUST:
 - [ ] Category distribution report by date + chart (issue #134, feat/issue-134-category-distribution-by-date) | @claude-code | 2026-04-05
 
 ## Recently Completed
+- [x] Deploy DJ service on Railway — set env vars + CD deploy (issue #100, fix/issue-100-dj-deploy) | @claude-code | 2026-04-05
 - [x] L2 knowledge base — Qdrant + FastAPI (issue #34, feat/issue-34-l2-knowledge-base) | @claude-code | 2026-04-05
 - [x] Implement GET /api/v1/dashboard/stats endpoint (issue #101, feat/dashboard-stats) | @claude-code | 2026-04-05
 - [x] Add DJ link to sidebar navigation (issue #103, feat/dj-sidebar-nav) | @claude-code | 2026-04-04
