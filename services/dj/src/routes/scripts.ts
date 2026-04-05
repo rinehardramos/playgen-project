@@ -220,7 +220,12 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'LLM regeneration failed';
         req.log.error({ err }, '[reject] regenerateSegment failed');
-        return reply.internalServerError(message);
+        // Detect auth errors (401) and surface as 422; other LLM failures as 503
+        const httpStatus = (err as any)?.status ?? (err as any)?.statusCode;
+        if (httpStatus === 401 || /auth|api\.?key|unauthorized/i.test(message)) {
+          return reply.code(422).send({ error: { code: 'LLM_AUTH_ERROR', message: 'LLM API key is invalid or not configured. Check station settings.' } });
+        }
+        return reply.code(503).send({ error: { code: 'LLM_UNAVAILABLE', message } });
       }
     },
   );
