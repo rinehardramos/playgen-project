@@ -48,7 +48,7 @@ jobs:
             dockerfile: shared/db/Dockerfile
             context: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: docker/setup-buildx-action@v3
 
@@ -83,7 +83,7 @@ jobs:
     needs: [build-and-push]
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
 
@@ -106,7 +106,7 @@ jobs:
     needs: [build-and-push]
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
 
@@ -131,7 +131,7 @@ jobs:
       matrix:
         service: [auth, station, library, scheduler, playlist, analytics, dj, gateway]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli
@@ -148,7 +148,7 @@ jobs:
     needs: [deploy-services, deploy-frontend]
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Wait for deployments to stabilize
         run: sleep 30
