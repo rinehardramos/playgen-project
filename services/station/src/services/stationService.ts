@@ -63,11 +63,46 @@ export async function updateStation(id: string, data: Partial<{
   openai_api_key: string;
   elevenlabs_api_key: string;
   openrouter_api_key: string;
+  // Identity (migration 039)
+  callsign: string;
+  tagline: string;
+  frequency: string;
+  broadcast_type: string;
+  // Locale
+  city: string;
+  province: string;
+  country: string;
+  locale_code: string;
+  latitude: number;
+  longitude: number;
+  // Social media
+  facebook_page_id: string;
+  facebook_page_url: string;
+  twitter_handle: string;
+  instagram_handle: string;
+  youtube_channel_url: string;
+  // Branding
+  logo_url: string;
+  primary_color: string;
+  secondary_color: string;
+  website_url: string;
 }>): Promise<Station | null> {
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;
-  const allowed = ['name','timezone','broadcast_start_hour','broadcast_end_hour','active_days','is_active','dj_enabled','dj_auto_approve', 'openai_api_key', 'elevenlabs_api_key', 'openrouter_api_key'] as const;
+  const allowed = [
+    'name', 'timezone', 'broadcast_start_hour', 'broadcast_end_hour', 'active_days',
+    'is_active', 'dj_enabled', 'dj_auto_approve',
+    'openai_api_key', 'elevenlabs_api_key', 'openrouter_api_key',
+    // Identity
+    'callsign', 'tagline', 'frequency', 'broadcast_type',
+    // Locale
+    'city', 'province', 'country', 'locale_code', 'latitude', 'longitude',
+    // Social media
+    'facebook_page_id', 'facebook_page_url', 'twitter_handle', 'instagram_handle', 'youtube_channel_url',
+    // Branding
+    'logo_url', 'primary_color', 'secondary_color', 'website_url',
+  ] as const;
   for (const key of allowed) {
     if (data[key] !== undefined) { fields.push(`${key} = $${i++}`); values.push(data[key]); }
   }

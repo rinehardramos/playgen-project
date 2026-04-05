@@ -222,6 +222,12 @@ export default function StationsPage() {
                         Edit
                       </button>
                       <button
+                        onClick={() => router.push(`/stations/${station.id}/details`)}
+                        className="text-xs text-teal-400 hover:text-teal-300 font-medium"
+                      >
+                        Details
+                      </button>
+                      <button
                         onClick={() => router.push(`/stations/${station.id}/settings`)}
                         className="text-xs text-blue-400 hover:text-blue-300 font-medium"
                       >
