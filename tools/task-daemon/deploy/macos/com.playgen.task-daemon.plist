@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.playgen.task-daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>INSTALL_PATH/tools/task-daemon/deploy/macos/run-daemon.sh</string>
+    </array>
+
+    <!-- Start on login and keep alive (restart on exit) -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Throttle restarts: wait 30s before restarting after a crash -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>HOMEDIR/.playgen/logs/daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>HOMEDIR/.playgen/logs/daemon.err</string>
+
+    <!-- Give the script a sane environment -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>HOMEDIR</string>
+        <key>USER</key>
+        <string>USERNAME</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

@@ -1,0 +1,11 @@
+services:
+  tg-agent:
+    image: playgen-tg-agent
+    container_name: playgen-tg-agent
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      GH_TOKEN: ${GH_TOKEN}
+    volumes:
+      - ../../:/workspace:ro
