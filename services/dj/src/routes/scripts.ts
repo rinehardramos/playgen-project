@@ -356,8 +356,47 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
         return { ...updatedRows[0], audio_url, audio_duration_sec };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'TTS generation failed';
+        // Provider auth/quota/config errors (4xx from the TTS API) are user-fixable —
+        // surface them as 400 Bad Request so the frontend shows the real reason.
+        const isProviderConfigError = /\b(401|403|429|quota|invalid.*key|key.*invalid|incorrect.*key|billing)\b/i.test(message);
+        if (isProviderConfigError) {
+          return reply.badRequest(message);
+        }
         return reply.internalServerError(message);
       }
+    },
+  );
+
+  // DELETE /dj/segments/:id/audio — remove the generated TTS audio for a segment
+  app.delete<{ Params: { id: string } }>(
+    '/dj/segments/:id/audio',
+    async (req, reply) => {
+      const { id } = req.params;
+      const pool = getPool();
+
+      const { rows } = await pool.query<{ audio_url: string | null }>(
+        `SELECT audio_url FROM dj_segments WHERE id = $1`,
+        [id],
+      );
+      if (!rows[0]) return reply.notFound('Segment not found');
+
+      if (rows[0].audio_url) {
+        const prefix = '/api/v1/dj/audio/';
+        const relativePath = rows[0].audio_url.startsWith(prefix)
+          ? rows[0].audio_url.substring(prefix.length)
+          : rows[0].audio_url;
+        const storage = getStorageAdapter();
+        await storage.delete(relativePath).catch(() => null);
+      }
+
+      const { rows: updated } = await pool.query(
+        `UPDATE dj_segments
+         SET audio_url = NULL, audio_duration_sec = NULL, updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [id],
+      );
+      return updated[0];
     },
   );
 }
