@@ -388,7 +388,8 @@ export type DjSegmentType =
   | 'adlib'
   | 'joke'
   | 'current_events'
-  | 'listener_activity';
+  | 'listener_activity'
+  | 'joke';
 
 export interface NewsHeadline {
   title: string;
@@ -428,6 +429,8 @@ export interface PersonaConfig {
   station_id_interval_minutes?: number;
   /** How often (in minutes of cumulative show content) to inject a time_check segment. Default: 60. */
   time_check_interval_minutes?: number;
+  /** Joke style used for joke segments. Default: 'witty'. */
+  joke_style?: 'clean' | 'witty' | 'pun' | 'observational';
 }
 
 export interface DjProfile {

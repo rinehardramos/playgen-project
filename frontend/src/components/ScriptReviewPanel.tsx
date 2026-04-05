@@ -16,7 +16,10 @@ type DjSegmentType =
   | 'station_id'
   | 'time_check'
   | 'weather_tease'
-  | 'ad_break';
+  | 'ad_break'
+  | 'current_events'
+  | 'listener_activity'
+  | 'joke';
 
 export interface ReviewPanelSegment {
   id: string;

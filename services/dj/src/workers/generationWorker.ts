@@ -414,6 +414,8 @@ export async function runGenerationJob(
   const stationIdIntervalSec = (personaConfig.station_id_interval_minutes ?? 30) * 60;
   /** Cumulative show content seconds between time_check injections (default 60 min). */
   const timeCheckIntervalSec = (personaConfig.time_check_interval_minutes ?? 60) * 60;
+  /** Joke style sourced from persona_config. Defaults to 'witty'. */
+  const jokeStyle: string = personaConfig.joke_style ?? 'witty';
 
   // Collect all generated segments for variety context
   const generatedSegments: Array<{
@@ -455,6 +457,7 @@ export async function runGenerationJob(
       dj_profile: profile!,
       segment_type,
       custom_template: customTemplate,
+      joke_style: jokeStyle,
       previousSegmentTexts: generatedTexts.slice(-4),
       segmentIndex: position,
     };
@@ -571,6 +574,7 @@ export async function runGenerationJob(
         custom_template: customTemplate,
         weather: weatherData,
         news_items: newsItems,
+        joke_style: jokeStyle,
         previousSegmentTexts: generatedTexts.slice(-4),
         segmentIndex: position,
       };

@@ -60,6 +60,11 @@ vi.mock('../../src/adapters/news/index.js', () => ({
   getNewsProvider: vi.fn(() => ({ fetchHeadlines: vi.fn().mockResolvedValue([]) })),
 }));
 
+// Mock social adapter — returns no providers so the DB is not hit
+vi.mock('../../src/adapters/social/index.js', () => ({
+  getSocialProviders: vi.fn().mockResolvedValue([]),
+}));
+
 // 2. Import the worker
 import { runGenerationJob } from '../../src/workers/generationWorker';
 
