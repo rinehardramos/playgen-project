@@ -267,16 +267,20 @@ def _handle_cmd(text: str) -> Optional[str]:
     if cmd == "/help":
         return (
             "PlayGen Daemon commands:\n"
-            "/status   — CI + open PRs\n"
-            "/pool     — agent slot status\n"
-            "/next     — time until next reset\n"
-            "/prs      — list open PRs\n"
-            "/ci       — last 5 CI runs\n"
-            "/health   — project health check\n"
-            "/merge N  — squash-merge PR #N\n"
-            "/spawn S  — force-spawn slot S\n"
-            "/sysinfo  — tool discovery report\n"
-            "/help     — this message"
+            "/status        — CI + open PRs\n"
+            "/pool          — agent slot status\n"
+            "/next          — time until next reset\n"
+            "/prs           — list open PRs\n"
+            "/ci            — last 5 CI runs\n"
+            "/health        — project health check\n"
+            "/merge N       — squash-merge PR #N\n"
+            "/spawn S       — force-spawn slot S\n"
+            "/pm dsu        — run daily stand-up now\n"
+            "/pm plan       — run sprint planning now\n"
+            "/pm review     — run sprint review now\n"
+            "/pm board      — run board sync now\n"
+            "/sysinfo       — tool discovery report\n"
+            "/help          — this message"
         )
 
     if cmd == "/sysinfo":
@@ -367,7 +371,7 @@ def _handle_cmd(text: str) -> Optional[str]:
         slot_type  = POOL[slot_id]["type"]
         slot_index = int(slot_id.rsplit("-", 1)[-1])
         if slot_type == "pm":
-            p = prompt_pm(bugs, feats, fp, dp)
+            p = prompt_pm(bugs, feats, fp, dp, mode=pm_mode())
         elif slot_type == "ticket-bug":
             p = prompt_ticket_bug(bugs, feats, slot_index)
         elif slot_type == "ticket-feat":
@@ -382,6 +386,20 @@ def _handle_cmd(text: str) -> Optional[str]:
             return f"⏭ {slot_id}: no work available right now"
         ok = spawn(slot_id, p)
         return f"{'✅ Spawned' if ok else '❌ Failed to spawn'} {slot_id}"
+
+    if cmd == "/pm":
+        parts    = text.split()
+        sub      = parts[1].lower() if len(parts) > 1 else ""
+        mode_map = {"dsu": "dsu", "plan": "sprint_planning",
+                    "review": "sprint_review", "board": "board_sync"}
+        if sub not in mode_map:
+            return "Usage: /pm <dsu|plan|review|board>"
+        bugs, feats, fp, dp = fetch_work()
+        p  = prompt_pm(bugs, feats, fp, dp, mode=mode_map[sub])
+        ok = spawn("pm-0", p)
+        labels = {"dsu": "🌅 DSU", "plan": "📋 Sprint Planning",
+                  "review": "📊 Sprint Review", "board": "🗂 Board Sync"}
+        return f"{'✅ Spawned' if ok else '❌ Failed'} pm-0 ({labels[sub]})"
 
     return None  # unknown command — ignore
 
@@ -650,52 +668,226 @@ def prompt_merge(feature_prs, dep_prs):
     )
 
 
-def prompt_pm(bugs, feats, feature_prs, dep_prs):
-    """Project manager — board sync, agent coordination, ticket prioritization."""
-    bug_list   = " ".join(f"#{i['number']}" for i in bugs[:10])
-    feat_list  = " ".join(f"#{i['number']}" for i in feats[:10])
-    pr_list    = " ".join(f"#{p['number']}" for p in feature_prs[:8])
+def pm_mode() -> str:
+    """Return the ceremony mode for the PM agent based on current Manila time/day."""
+    now = datetime.now(MANILA)
+    wd, h = now.weekday(), now.hour  # 0=Mon … 6=Sun
+    if wd == 0 and h == 0:  return "sprint_planning"   # Monday midnight
+    if wd == 6 and h == 19: return "sprint_review"     # Sunday 19:00
+    if wd < 5  and h == 9:  return "dsu"               # Weekday morning
+    return "board_sync"
+
+
+# ── Board/project constants used across PM prompts ────────────────────────────
+_PROJ_ID    = "PVT_kwHOAXQAu84BTrFP"
+_FIELD_ID   = "PVTSSF_lAHOAXQAu84BTrFPzhA4e9s"
+_OPT_DONE   = "c2007256"
+_OPT_REVIEW = "22fda963"
+_OPT_INPROG = "9a158f4d"
+_OPT_TODO   = "00c6ca1e"
+_OPT_BACKLOG = "8a624c5e"
+_GH_OWNER   = "rinehardramos"
+_GH_PROJ    = "2"
+
+
+def prompt_pm(bugs, feats, feature_prs, dep_prs, mode: str = "board_sync"):
+    """Project manager — dispatches to the correct ceremony prompt."""
+    if mode == "dsu":
+        return _prompt_pm_dsu(bugs, feats, feature_prs)
+    if mode == "sprint_planning":
+        return _prompt_pm_sprint_planning(bugs, feats)
+    if mode == "sprint_review":
+        return _prompt_pm_sprint_review()
+    return _prompt_pm_board_sync(bugs, feats, feature_prs, dep_prs)
+
+
+def _prompt_pm_board_sync(bugs, feats, feature_prs, dep_prs):
+    """Regular cycle: board sync, prioritization, coordination, duplicate cleanup."""
+    bug_list  = " ".join(f"#{i['number']}" for i in bugs[:10])
+    feat_list = " ".join(f"#{i['number']}" for i in feats[:10])
+    pr_list   = " ".join(f"#{p['number']}" for p in feature_prs[:8])
 
     return (
         f"You are the Project Manager agent for PlayGen at /workspace. "
         f"export PATH=/opt/homebrew/bin:$PATH. "
         f"Your responsibilities this cycle:\n\n"
 
-        f"1. BOARD SYNC — Update GitHub project board (project #2, owner rinehardramos):\n"
-        f"   - gh project item-list 2 --owner rinehardramos --format json\n"
-        f"   - Any issue with a merged PR → move to Done column (option-id: c2007256)\n"
-        f"   - Any issue with an open PR → move to Review (option-id: 22fda963)\n"
-        f"   - Any 'In Progress' issue with NO recent commit in last 24h → move back to Todo (option-id: 00c6ca1e)\n"
-        f"   - Project-id: PVT_kwHOAXQAu84BTrFP, field-id: PVTSSF_lAHOAXQAu84BTrFPzhA4e9s\n\n"
+        f"1. BOARD SYNC — Update GitHub project board (project #{_GH_PROJ}, owner {_GH_OWNER}):\n"
+        f"   - gh project item-list {_GH_PROJ} --owner {_GH_OWNER} --format json\n"
+        f"   - Any issue with a merged PR → move to Done ({_OPT_DONE})\n"
+        f"   - Any issue with an open PR → move to Review ({_OPT_REVIEW})\n"
+        f"   - Any In Progress issue with NO commit in last 24h → move to Todo ({_OPT_TODO})\n"
+        f"   - Project-id: {_PROJ_ID}, field-id: {_FIELD_ID}\n\n"
 
-        f"2. TICKET PRIORITIZATION — Update labels and priority order:\n"
-        f"   Current bugs: {bug_list or 'none'}\n"
-        f"   Current features: {feat_list or 'none'}\n"
-        f"   - Add 'bug' label to any issue with 'fix', 'error', 'crash', 'broken' in title\n"
-        f"   - Add 'P1' label to any enhancement issue that closes a user-facing gap\n"
-        f"   - Add 'P0' label to any production-breaking bug\n"
+        f"2. TICKET PRIORITIZATION:\n"
+        f"   Bugs: {bug_list or 'none'}  Features: {feat_list or 'none'}\n"
+        f"   - Add 'bug' label if title has fix/error/crash/broken\n"
+        f"   - Add 'P0' to production-breaking bugs; 'P1' to user-facing gaps\n"
         f"   - Close duplicate issues (same topic, keep newest)\n\n"
 
-        f"3. AGENT COORDINATION — Read and update tasks/agent-collab.md:\n"
-        f"   - Check 'Active Work' section for stale claims (>24h with no PR)\n"
-        f"   - For stale claims: remove from Active Work, move to Recently Completed or re-open\n"
-        f"   - Write a 'Next Recommended Tickets' section at the top of agent-collab.md:\n"
-        f"     * List top 2 bugs for ticket-bug workers (by P0/P1 label, then creation date)\n"
-        f"     * List top 1 feature for ticket-feat worker\n"
-        f"   - Ensure no two active claims are for the same issue\n\n"
+        f"3. AGENT COORDINATION — tasks/agent-collab.md:\n"
+        f"   - Clear stale claims (>24h, no PR opened) from Active Work\n"
+        f"   - Write '## Next Recommended Tickets' at top: top 2 bugs, top 1 feature\n"
+        f"   - No two active claims for the same issue\n\n"
 
-        f"4. PR COORDINATION — Check for duplicate PRs:\n"
-        f"   Open feature PRs: {pr_list or 'none'}\n"
-        f"   - If two PRs target the same issue → comment on the older one, close it as duplicate\n"
-        f"   - If a PR has been open >48h with no review → add 'needs-review' label\n\n"
+        f"4. PR COORDINATION — Open PRs: {pr_list or 'none'}\n"
+        f"   - Two PRs for same issue → close older as duplicate\n"
+        f"   - PR open >48h with no review → add 'needs-review' label\n\n"
 
-        f"5. REPORT — Send a summary to Telegram:\n"
-        f"   curl -s -X POST 'https://api.telegram.org/bot{TG_TOKEN}/sendMessage' \\\n"
-        f"   -H 'Content-Type: application/json' \\\n"
-        f"   -d '{{\"chat_id\":\"{TG_CHAT}\",\"text\":\"PM REPORT: board_changes | priority_updates | coordination_notes\"}}'\n"
-        f"   Keep under 500 chars. Include counts: X board moves, Y label updates, Z stale claims cleared.\n\n"
+        f"5. REPORT — curl -s -X POST 'https://api.telegram.org/bot{TG_TOKEN}/sendMessage' "
+        f"-H 'Content-Type: application/json' "
+        f"-d '{{\"chat_id\":\"{TG_CHAT}\",\"text\":\"🗂 PM: X board moves | Y label updates | Z stale cleared\"}}'\n\n"
 
-        f"Be thorough but efficient. Do NOT implement any code — only manage coordination and labels."
+        f"Do NOT implement any code — only manage coordination and labels."
+    )
+
+
+def _prompt_pm_dsu(bugs, feats, feature_prs):
+    """Daily Stand-Up: yesterday/today/blockers report."""
+    bug_list  = " ".join(f"#{i['number']}" for i in bugs[:8])
+    feat_list = " ".join(f"#{i['number']}" for i in feats[:8])
+    pr_list   = " ".join(f"#{p['number']}" for p in feature_prs[:6])
+    today     = datetime.now(MANILA).strftime("%Y-%m-%d")
+
+    return (
+        f"You are the Project Manager agent for PlayGen at /workspace. "
+        f"export PATH=/opt/homebrew/bin:$PATH. "
+        f"Today ({today}) is a DAILY STAND-UP cycle. Do NOT write any code.\n\n"
+
+        f"1. YESTERDAY — What was shipped (last 24h):\n"
+        f"   gh pr list --state merged --repo {_GH_OWNER}/playgen-project "
+        f"--json number,title,mergedAt "
+        f"--jq '.[] | select(.mergedAt > (now - 86400 | todate)) | \"#\\(.number) \\(.title)\"'\n"
+        f"   gh issue list --state closed --repo {_GH_OWNER}/playgen-project "
+        f"--json number,title,closedAt "
+        f"--jq '.[] | select(.closedAt > (now - 86400 | todate)) | \"#\\(.number) \\(.title)\"'\n\n"
+
+        f"2. TODAY — Current active work:\n"
+        f"   Read tasks/agent-collab.md → list each Active Work entry with owner and age\n"
+        f"   Active issues: bugs {bug_list or 'none'}, features {feat_list or 'none'}, PRs {pr_list or 'none'}\n\n"
+
+        f"3. BLOCKERS — Surface any of:\n"
+        f"   a) Active claims >12h with no PR opened → stale blocker\n"
+        f"   b) P0/P1 issues with no active claim → unassigned priority\n"
+        f"   c) Open PRs with CI failure:\n"
+        f"      gh pr list --state open --repo {_GH_OWNER}/playgen-project "
+        f"--json number,title,statusCheckRollup "
+        f"--jq '.[] | select(.statusCheckRollup[]?.conclusion? == \"FAILURE\") | \"#\\(.number) \\(.title)\"'\n\n"
+
+        f"4. DSU FILE — Write to /state/dsu-{today}.md:\n"
+        f"   # DSU — {today}\n"
+        f"   ## Yesterday\n   ## Today\n   ## Blockers\n\n"
+
+        f"5. TELEGRAM REPORT — Send condensed DSU (under 800 chars):\n"
+        f"   curl -s -X POST 'https://api.telegram.org/bot{TG_TOKEN}/sendMessage' "
+        f"-H 'Content-Type: application/json' "
+        f"-d '{{\"chat_id\":\"{TG_CHAT}\","
+        f"\"text\":\"🌅 DSU {today}\\n✅ Yesterday: <merged/closed>\\n"
+        f"🔧 Today: <active claims>\\n🚧 Blockers: <blockers or none>\"}}'  \n\n"
+
+        f"Do NOT implement any code — only read state, write DSU file, send Telegram."
+    )
+
+
+def _prompt_pm_sprint_planning(bugs, feats):
+    """Weekly sprint planning: pick tickets, write sprint-plan.md, update board."""
+    week_num  = datetime.now(MANILA).isocalendar()[1]
+    today     = datetime.now(MANILA).strftime("%Y-%m-%d")
+    bug_list  = " ".join(f"#{i['number']}" for i in bugs[:15])
+    feat_list = " ".join(f"#{i['number']}" for i in feats[:15])
+
+    return (
+        f"You are the Project Manager agent for PlayGen at /workspace. "
+        f"export PATH=/opt/homebrew/bin:$PATH. "
+        f"Today ({today}) is SPRINT PLANNING day (Week {week_num}). Do NOT write any code.\n\n"
+
+        f"1. SPRINT CAPACITY — This week's agent capacity:\n"
+        f"   - 2 bug slots × 5 resets/day × 7 days = ~10 bug tickets max\n"
+        f"   - 1 feat slot × 5 resets/day × 7 days = ~5 feature tickets max\n"
+        f"   - Total: pick up to 8 bugs + 4 features (leave buffer for unknowns)\n\n"
+
+        f"2. SELECT TICKETS — From open issues, pick by priority (P0 > P1 > P2, then age):\n"
+        f"   gh issue list --state open --repo {_GH_OWNER}/playgen-project "
+        f"--label bug --json number,title,labels,createdAt --limit 20\n"
+        f"   gh issue list --state open --repo {_GH_OWNER}/playgen-project "
+        f"--label enhancement --json number,title,labels,createdAt --limit 20\n"
+        f"   Current bugs: {bug_list or 'none'}\n"
+        f"   Current features: {feat_list or 'none'}\n\n"
+
+        f"3. WRITE SPRINT PLAN — Append to tasks/sprint-plan.md:\n"
+        f"   ## Sprint {week_num} — {today}\n"
+        f"   ### Committed\n"
+        f"   - Bug: #N — title  [P0/P1/P2]\n"
+        f"   - Feat: #N — title  [P1/P2]\n"
+        f"   ### Capacity: X bugs + Y features\n"
+        f"   ### Notes\n\n"
+
+        f"4. UPDATE BOARD — Move selected Backlog items to Todo ({_OPT_TODO}):\n"
+        f"   For each selected issue:\n"
+        f"     ITEM=$(gh project item-add {_GH_PROJ} --owner {_GH_OWNER} "
+        f"--url https://github.com/{_GH_OWNER}/playgen-project/issues/N --format json | "
+        f"python3 -c \"import json,sys; print(json.load(sys.stdin)['id'])\")\n"
+        f"     gh project item-edit --project-id {_PROJ_ID} --id $ITEM "
+        f"--field-id {_FIELD_ID} --single-select-option-id {_OPT_TODO}\n\n"
+
+        f"5. UPDATE AGENT-COLLAB — Prepend sprint summary to tasks/agent-collab.md:\n"
+        f"   ## Sprint {week_num} Recommended Tickets\n"
+        f"   Bugs: top 2 by P0/P1  |  Feature: top 1\n\n"
+
+        f"6. TELEGRAM REPORT:\n"
+        f"   curl -s -X POST 'https://api.telegram.org/bot{TG_TOKEN}/sendMessage' "
+        f"-H 'Content-Type: application/json' "
+        f"-d '{{\"chat_id\":\"{TG_CHAT}\","
+        f"\"text\":\"📋 Sprint {week_num} Plan\\nBugs: X | Features: Y\\nTop: #N #N #N\"}}'\n\n"
+
+        f"Do NOT implement any code — only select tickets, write plan, update board."
+    )
+
+
+def _prompt_pm_sprint_review():
+    """Weekly sprint review: measure velocity, record outcomes, send summary."""
+    now       = datetime.now(MANILA)
+    week_num  = now.isocalendar()[1]
+    today     = now.strftime("%Y-%m-%d")
+    week_ago  = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    return (
+        f"You are the Project Manager agent for PlayGen at /workspace. "
+        f"export PATH=/opt/homebrew/bin:$PATH. "
+        f"Today ({today}) is SPRINT REVIEW day (Week {week_num}). Do NOT write any code.\n\n"
+
+        f"1. WHAT WAS COMPLETED — Merged PRs and closed issues this sprint (last 7 days):\n"
+        f"   gh pr list --state merged --repo {_GH_OWNER}/playgen-project "
+        f"--json number,title,mergedAt "
+        f"--jq '.[] | select(.mergedAt >= \"{week_ago}\") | \"#\\(.number) \\(.title)\"'\n"
+        f"   gh issue list --state closed --repo {_GH_OWNER}/playgen-project "
+        f"--json number,title,closedAt "
+        f"--jq '.[] | select(.closedAt >= \"{week_ago}\") | \"#\\(.number) \\(.title)\"'\n\n"
+
+        f"2. PLANNED vs ACTUAL — Read tasks/sprint-plan.md:\n"
+        f"   Find '## Sprint {week_num}' section → list Committed tickets\n"
+        f"   Mark each: ✅ Done / 🔄 Carry-over / ❌ Dropped\n"
+        f"   Velocity = done / committed (as percentage)\n\n"
+
+        f"3. CARRY-OVERS — For unfinished planned tickets:\n"
+        f"   Keep in Todo on board (do NOT move back to Backlog)\n"
+        f"   Add '(carry-over)' note in next sprint plan\n\n"
+
+        f"4. WRITE REVIEW — Append to tasks/sprint-plan.md:\n"
+        f"   ### Review — {today}\n"
+        f"   Velocity: X/Y (Z%)\n"
+        f"   ✅ Done: list\n"
+        f"   🔄 Carry-over: list\n"
+        f"   ❌ Dropped: list with reason\n"
+        f"   ### Retrospective Notes\n\n"
+
+        f"5. TELEGRAM REPORT:\n"
+        f"   curl -s -X POST 'https://api.telegram.org/bot{TG_TOKEN}/sendMessage' "
+        f"-H 'Content-Type: application/json' "
+        f"-d '{{\"chat_id\":\"{TG_CHAT}\","
+        f"\"text\":\"📊 Sprint {week_num} Review\\nVelocity: X/Y (Z%)\\n✅ N | 🔄 N\"}}'\n\n"
+
+        f"Do NOT implement any code — only read state, write review, send Telegram."
     )
 
 
@@ -782,7 +974,7 @@ def manage_pool():
         # Build prompt for this slot
         slot_index = int(slot_id.rsplit("-", 1)[-1])
         if slot_type == "pm":
-            p = prompt_pm(bugs, feats, feature_prs, dep_prs)
+            p = prompt_pm(bugs, feats, feature_prs, dep_prs, mode=pm_mode())
         elif slot_type == "ticket-bug":
             p = prompt_ticket_bug(bugs, feats, slot_index)
         elif slot_type == "ticket-feat":
