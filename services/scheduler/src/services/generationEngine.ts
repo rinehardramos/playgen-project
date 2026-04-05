@@ -1,5 +1,6 @@
-import { Pool, PoolClient } from 'pg';
+import { PoolClient } from 'pg';
 import { DEFAULT_ROTATION_RULES } from '@playgen/types';
+import { getPool } from '../db';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -61,25 +62,6 @@ export interface GeneratePlaylistParams {
 export interface GeneratePlaylistResult {
   playlistId: string;
   entriesCount: number;
-}
-
-// ─── Pool singleton (self-contained, no shared/db import) ────────────────────
-
-let _pool: Pool | null = null;
-
-function getPool(): Pool {
-  if (!_pool) {
-    _pool = new Pool({
-      host: process.env.POSTGRES_HOST ?? 'localhost',
-      port: Number(process.env.POSTGRES_PORT ?? 5432),
-      database: process.env.POSTGRES_DB ?? 'playgen',
-      user: process.env.POSTGRES_USER ?? 'playgen',
-      password: process.env.POSTGRES_PASSWORD ?? 'changeme',
-      max: 10,
-    });
-    _pool.on('error', (err) => console.error('pg pool error (generationEngine)', err));
-  }
-  return _pool;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
