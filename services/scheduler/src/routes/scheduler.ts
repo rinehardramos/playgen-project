@@ -233,44 +233,6 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // ── GET /stations/:id/generation-failures ────────────────────────────────
-  app.get<{ Params: StationParams }>(
-    '/stations/:id/generation-failures',
-    {
-      schema: {
-        params: {
-          type: 'object',
-          required: ['id'],
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-          },
-        },
-      },
-      preHandler: [
-        authenticate,
-        requirePermission('playlist:read'),
-        requireStationAccess(),
-      ],
-    },
-    async (req: FastifyRequest<{ Params: StationParams }>, reply: FastifyReply) => {
-      const stationId = req.params.id;
-      const pool = getPool();
-
-      const res = await pool.query(
-        `SELECT id, station_id, playlist_id, status, error_message,
-                queued_at, started_at, completed_at, triggered_by
-         FROM generation_jobs
-         WHERE station_id = $1
-           AND status = 'failed'
-           AND queued_at > NOW() - INTERVAL '30 days'
-         ORDER BY queued_at DESC`,
-        [stationId],
-      );
-
-      return reply.code(200).send({ data: res.rows, count: res.rowCount });
-    },
-  );
-
   // ── GET /jobs/:id ─────────────────────────────────────────────────────────
   app.get<{ Params: JobParams }>(
     '/jobs/:id',
