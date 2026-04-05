@@ -13,6 +13,7 @@ Before starting any task, an agent MUST:
 ## Active Work
 - [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
 - [ ] Generation failure alerting — endpoint + UI red badge (issue #133, feat/issue-133-generation-failure-alerting) | @claude-code | 2026-04-05
+- [ ] Agent workflow analysis + improvement proposals (issue #158, feat/issue-158) | @claude-code | 2026-04-05
 
 ## Recently Completed
 - [x] Auth flows — password reset, user invite, admin force-reset (issues #127, #128, #129, #131, PR #145) | @claude-code | 2026-04-05
