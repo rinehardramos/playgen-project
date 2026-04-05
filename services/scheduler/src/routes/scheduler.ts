@@ -7,6 +7,21 @@ import {
 import { getPool } from '../db';
 import { enqueueGeneration } from '../services/queueService';
 
+async function getGenerationFailures(stationId: string) {
+  const pool = getPool();
+  const res = await pool.query(
+    `SELECT id, station_id, playlist_id, status, error_message,
+            queued_at, started_at, completed_at, triggered_by
+     FROM generation_jobs
+     WHERE station_id = $1
+       AND status = 'failed'
+       AND queued_at >= NOW() - INTERVAL '30 days'
+     ORDER BY queued_at DESC`,
+    [stationId],
+  );
+  return { data: res.rows, count: res.rowCount };
+}
+
 // ─── Request body / param types ───────────────────────────────────────────────
 
 interface GenerateBody {
@@ -167,21 +182,8 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       ],
     },
     async (req: FastifyRequest<{ Params: StationParams }>, reply: FastifyReply) => {
-      const stationId = req.params.id;
-      const pool = getPool();
-
-      const res = await pool.query(
-        `SELECT id, station_id, playlist_id, status, error_message,
-                queued_at, started_at, completed_at, triggered_by
-         FROM generation_jobs
-         WHERE station_id = $1
-           AND status = 'failed'
-           AND queued_at >= NOW() - INTERVAL '30 days'
-         ORDER BY queued_at DESC`,
-        [stationId],
-      );
-
-      return reply.code(200).send({ data: res.rows, count: res.rowCount });
+      const result = await getGenerationFailures(req.params.id);
+      return reply.code(200).send(result);
     },
   );
 
