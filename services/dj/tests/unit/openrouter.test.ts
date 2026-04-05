@@ -13,11 +13,11 @@ vi.mock('openai', () => ({
 }));
 
 // Must import after mocking
-import { openRouterLlmComplete } from '../../src/adapters/llm/openrouter';
+import { llmComplete } from '../../src/adapters/llm/openrouter';
 
-describe('openRouterLlmComplete', () => {
+describe('llmComplete', () => {
   it('returns trimmed text from LLM response', async () => {
-    const result = await openRouterLlmComplete([
+    const result = await llmComplete([
       { role: 'system', content: 'You are Alex, a radio DJ.' },
       { role: 'user', content: 'Introduce the next song.' },
     ]);
@@ -25,7 +25,7 @@ describe('openRouterLlmComplete', () => {
   });
 
   it('accepts optional model and temperature', async () => {
-    const result = await openRouterLlmComplete(
+    const result = await llmComplete(
       [{ role: 'user', content: 'test' }],
       { model: 'openai/gpt-4o', temperature: 0.5 },
     );
