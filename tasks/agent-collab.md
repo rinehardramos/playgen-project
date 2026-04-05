@@ -17,10 +17,9 @@ Before starting any task, an agent MUST:
 - [ ] Fix DJ Script generation INTERNAL_ERROR — missing API key validation + unmasked LLM errors (issue #183, fix/issue-183) | @claude-code | 2026-04-05
 - [ ] arch: Program as higher-tier entity — programs + program_episodes (issue #210, feat/issue-210-program-entity) | @claude-code | 2026-04-06 | Migration: 034-035
 - [ ] feat(auth): real email reset + verification (issue #224, feat/issue-224-email-reset-verification) | @claude-code | 2026-04-06 | Migration: 047-048
-- [ ] feat(dj): Listener Activity — Facebook Graph API integration (issue #211, feat/issue-211-212-social-adapters) | @claude-code | 2026-04-06 | Migration: 040-041
-- [ ] feat(dj): Listener Activity — X/Twitter API v2 integration (issue #212, feat/issue-211-212-social-adapters) | @claude-code | 2026-04-06 | Migration: 040-041
 
 ## Recently Completed
+- [x] feat(dj): Facebook + Twitter/X social adapters for listener shoutouts (issues #211, #212, PR #225) | @claude-code | 2026-04-06 | Migrations: 040, 041
 - [x] feat(dj): Weather segment — IDataProvider types, MockWeatherAdapter, weather_tease seed (issue #207, PR #229) | @claude-code | 2026-04-06
 - [x] feat(dj): Time Check segment — localized time_check injection (issue #203, feat/issue-203-204-dj-segments) | @claude-code | 2026-04-06
 - [x] feat(dj): Station ID segment — callsign/tagline/frequency injection (issue #204, feat/issue-203-204-dj-segments) | @claude-code | 2026-04-06
