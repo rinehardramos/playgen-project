@@ -30,12 +30,22 @@ fi
 command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 not found"; exit 1; }
 
 # ── Ensure only this daemon variant is running ────────────────────────────────
-# Stop container version if running
-if command -v docker >/dev/null 2>&1; then
-    if docker inspect playgen-task-daemon --format='{{.State.Running}}' 2>/dev/null | grep -q true; then
-        echo "Stopping Docker container version..."
-        docker stop playgen-task-daemon 2>/dev/null || true
-    fi
+# 1. Unload FIRST so LaunchAgent stops auto-restarting on process death
+launchctl unload "$PLIST_DEST" 2>/dev/null || true
+sleep 1
+# 2. Now kill any lingering process (safe — LaunchAgent won't restart it)
+pkill -f 'tools/task-daemon/daemon.py' 2>/dev/null || true
+sleep 1
+
+# Stop any container versions (Docker Desktop may use a non-standard CLI path)
+DOCKER_BIN=$(command -v docker 2>/dev/null || echo "/Applications/Docker.app/Contents/Resources/bin/docker")
+if [ -f "$DOCKER_BIN" ]; then
+    for svc in playgen-task-daemon playgen-tg-agent; do
+        if "$DOCKER_BIN" inspect "$svc" --format='{{.State.Running}}' 2>/dev/null | grep -q true; then
+            echo "Stopping Docker container: $svc"
+            "$DOCKER_BIN" stop "$svc" 2>/dev/null || true
+        fi
+    done
 fi
 
 # ── Create directories ────────────────────────────────────────────────────────
@@ -53,8 +63,7 @@ sed \
 
 echo "Installed plist to $PLIST_DEST"
 
-# Unload existing if already loaded
-launchctl unload "$PLIST_DEST" 2>/dev/null || true
+# Load fresh (already unloaded at top of script)
 launchctl load -w "$PLIST_DEST"
 
 echo ""

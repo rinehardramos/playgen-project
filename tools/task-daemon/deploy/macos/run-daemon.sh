@@ -17,20 +17,31 @@ else
     exit 1
 fi
 
-# ── Dynamic claude binary (auto-discovers latest installed version) ────────────
-CLAUDE_VM_DIR="$HOME/Library/Application Support/Claude/claude-code-vm"
-if [ -d "$CLAUDE_VM_DIR" ]; then
-    LATEST=$(ls "$CLAUDE_VM_DIR" 2>/dev/null | sort -V | tail -1)
-    if [ -n "$LATEST" ]; then
-        export CLAUDE_BIN="$CLAUDE_VM_DIR/$LATEST/claude"
+# ── Dynamic claude binary (macOS native — Homebrew Cask install) ─────────────
+# NOTE: claude-code-vm/ contains Linux ELF binaries for Docker — do NOT use here.
+# The native macOS binary is installed via: brew install --cask claude-code
+if [ -z "$CLAUDE_BIN" ] || [ ! -f "$CLAUDE_BIN" ]; then
+    # Prefer the symlink managed by Homebrew Cask (auto-updated on upgrade)
+    if [ -f "/opt/homebrew/bin/claude" ]; then
+        export CLAUDE_BIN="/opt/homebrew/bin/claude"
     fi
 fi
-# Fallback to PATH if vm dir not found
+if [ -z "$CLAUDE_BIN" ] || [ ! -f "$CLAUDE_BIN" ]; then
+    # Fallback: scan Caskroom for latest version
+    CASK_DIR="/opt/homebrew/Caskroom/claude-code"
+    if [ -d "$CASK_DIR" ]; then
+        LATEST=$(ls "$CASK_DIR" 2>/dev/null | sort -V | tail -1)
+        if [ -n "$LATEST" ] && [ -f "$CASK_DIR/$LATEST/claude" ]; then
+            export CLAUDE_BIN="$CASK_DIR/$LATEST/claude"
+        fi
+    fi
+fi
 if [ -z "$CLAUDE_BIN" ] || [ ! -f "$CLAUDE_BIN" ]; then
     export CLAUDE_BIN=$(command -v claude 2>/dev/null || true)
 fi
-if [ -z "$CLAUDE_BIN" ]; then
-    echo "[playgen-daemon] WARNING: claude not found — agents queued until claude is installed." >&2
+if [ -z "$CLAUDE_BIN" ] || [ ! -f "$CLAUDE_BIN" ]; then
+    echo "[playgen-daemon] WARNING: claude not found — install with: brew install --cask claude-code" >&2
+    unset CLAUDE_BIN
 fi
 
 # ── Paths ─────────────────────────────────────────────────────────────────────

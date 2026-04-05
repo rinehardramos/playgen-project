@@ -15,8 +15,9 @@ Priority rules:
   - Slots are only re-spawned when they are stopped (limit_hit / completed / stale)
   - Running slots are NEVER duplicated
 """
-import os, time, json, subprocess, urllib.request
+import os, time, json, subprocess, urllib.request, urllib.parse, threading
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 MANILA        = timezone(timedelta(hours=8))
 TG_TOKEN      = os.environ["TELEGRAM_BOT_TOKEN"]
@@ -24,8 +25,166 @@ TG_CHAT       = int(os.environ["TELEGRAM_CHAT_ID"])
 GH_TOKEN      = os.environ.get("GH_TOKEN", "")
 GH_REPO       = os.environ.get("GH_REPO", "rinehardramos/playgen-project")
 WORKDIR       = os.environ.get("WORKDIR", "/workspace")
-CLAUDE_BIN    = os.environ.get("CLAUDE_BIN", "")
 CLAUDE_FLAGS  = os.environ.get("CLAUDE_FLAGS", "--dangerously-skip-permissions")
+
+
+# ── System Discovery ──────────────────────────────────────────────────────────
+
+def _which(name: str) -> str:
+    """Return the full path of a binary if it exists, else empty string."""
+    import shutil
+    return shutil.which(name) or ""
+
+
+def _detect_platform() -> str:
+    import platform
+    s = platform.system()
+    if s == "Darwin":
+        return "macos"
+    if s == "Windows":
+        return "windows"
+    # Detect WSL
+    try:
+        with open("/proc/version") as f:
+            if "microsoft" in f.read().lower():
+                return "wsl"
+    except Exception:
+        pass
+    return "linux"
+
+
+def _discover_claude() -> str:
+    """
+    Find the platform-native claude binary.
+    Prefers OS-managed installs over raw vm directories.
+    Never returns a path to a Linux ELF on macOS.
+    """
+    platform = _detect_platform()
+
+    # Explicit override always wins
+    explicit = os.environ.get("CLAUDE_BIN", "")
+    if explicit and os.path.isfile(explicit):
+        return explicit
+
+    if platform == "macos":
+        # 1. Homebrew Cask symlink (updated automatically on brew upgrade)
+        if os.path.isfile("/opt/homebrew/bin/claude"):
+            return "/opt/homebrew/bin/claude"
+        # 2. Latest version in Caskroom (fallback if symlink broken)
+        cask_dir = "/opt/homebrew/Caskroom/claude-code"
+        if os.path.isdir(cask_dir):
+            versions = sorted(os.listdir(cask_dir))
+            if versions:
+                candidate = os.path.join(cask_dir, versions[-1], "claude")
+                if os.path.isfile(candidate):
+                    return candidate
+        # 3. Intel Mac Homebrew
+        if os.path.isfile("/usr/local/bin/claude"):
+            return "/usr/local/bin/claude"
+
+    elif platform in ("linux", "wsl"):
+        # 1. System PATH
+        found = _which("claude")
+        if found:
+            return found
+        # 2. Linux claude-code-vm (same layout as container)
+        vm_dir = os.path.expanduser("~/.config/Claude/claude-code-vm")
+        if os.path.isdir(vm_dir):
+            versions = sorted(os.listdir(vm_dir))
+            if versions:
+                candidate = os.path.join(vm_dir, versions[-1], "claude")
+                if os.path.isfile(candidate):
+                    return candidate
+
+    # Final fallback: check PATH
+    return _which("claude")
+
+
+def _discover_tools() -> dict:
+    """Check for all tools required by the daemon and agents."""
+    platform = _detect_platform()
+    claude   = _discover_claude()
+
+    # Docker Desktop on macOS puts its CLI at a non-standard path
+    _docker = (
+        _which("docker") or
+        "/Applications/Docker.app/Contents/Resources/bin/docker"
+        if os.path.isfile("/Applications/Docker.app/Contents/Resources/bin/docker")
+        else ""
+    )
+
+    tools = {
+        "platform": platform,
+        "python3":  _which("python3") or _which("python"),
+        "claude":   claude,
+        "gh":       _which("gh"),
+        "git":      _which("git"),
+        "docker":   _docker,
+    }
+
+    # Validate claude binary is executable and native (not ELF on macOS)
+    if tools["claude"] and platform == "macos":
+        try:
+            with open(tools["claude"], "rb") as f:
+                magic = f.read(4)
+            if magic == b"\x7fELF":            # Linux ELF — wrong binary
+                tools["claude"] = ""
+                tools["claude_warn"] = "Found Linux ELF binary — install native: brew install --cask claude-code"
+        except Exception:
+            pass
+
+    return tools
+
+
+def _load_tool_cache() -> Optional[dict]:
+    """Load cached tool discovery result if it exists and is recent (< 24h)."""
+    cache_file = os.path.join(os.environ.get("PLAYGEN_STATE_DIR", "/state"), "tools.json")
+    try:
+        with open(cache_file) as f:
+            data = json.load(f)
+        age = time.time() - data.get("_cached_at", 0)
+        if age < 86400:                          # 24-hour TTL
+            # Still validate that cached binaries actually exist
+            valid = all(
+                (not v) or (k.startswith("_")) or os.path.isfile(v)
+                for k, v in data.items()
+                if k not in ("platform", "_cached_at", "claude_warn")
+            )
+            if valid:
+                return data
+    except Exception:
+        pass
+    return None
+
+
+def _save_tool_cache(tools: dict):
+    """Persist tool discovery results to state dir."""
+    cache_file = os.path.join(os.environ.get("PLAYGEN_STATE_DIR", "/state"), "tools.json")
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(cache_file)), exist_ok=True)
+        payload = dict(tools)
+        payload["_cached_at"] = time.time()
+        with open(cache_file, "w") as f:
+            json.dump(payload, f, indent=2)
+    except Exception as e:
+        print(f"[tools_cache] write failed: {e}", flush=True)
+
+
+def _get_tools() -> dict:
+    """Return tool discovery, using cache when available."""
+    cached = _load_tool_cache()
+    if cached:
+        print("[tools] using cached discovery", flush=True)
+        return cached
+    print("[tools] running discovery...", flush=True)
+    tools = _discover_tools()
+    _save_tool_cache(tools)
+    return tools
+
+
+# Discover at startup (cached after first run) and expose as module-level constant
+SYSTEM       = _get_tools()
+CLAUDE_BIN   = SYSTEM["claude"]  # native binary or empty string
 
 _STATE_DIR    = os.environ.get("PLAYGEN_STATE_DIR", "/state")
 STATE_FILE    = os.path.join(_STATE_DIR, "agent-state.json")
@@ -63,6 +222,218 @@ def tg_send(text: str):
             return json.loads(r.read())
     except Exception as e:
         print(f"[tg] {e}", flush=True)
+
+
+def tg_get(endpoint: str, params: dict = None):
+    import urllib.error
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/{endpoint}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        print(f"[tg_get] {e}", flush=True)
+        return {"ok": False, "result": [], "error_code": e.code}
+    except Exception as e:
+        # Network hiccup / timeout — return special code so poll loop retries fast
+        is_timeout = "timed out" in str(e).lower() or "timeout" in str(e).lower()
+        if not is_timeout:
+            print(f"[tg_get] {e}", flush=True)
+        return {"ok": False, "result": [], "error_code": -1 if is_timeout else 0}
+
+
+def _run(cmd: str) -> str:
+    """Run a shell command in WORKDIR, return combined stdout+stderr (truncated)."""
+    env = os.environ.copy()
+    env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+    try:
+        r = subprocess.run(
+            cmd, shell=True, capture_output=True, text=True,
+            cwd=WORKDIR, env=env, timeout=30,
+        )
+        return (r.stdout + r.stderr).strip()
+    except subprocess.TimeoutExpired:
+        return "Command timed out (30s)"
+    except Exception as e:
+        return str(e)
+
+
+def _handle_cmd(text: str) -> Optional[str]:
+    """Dispatch a /command string and return the reply, or None to ignore."""
+    text = text.strip()
+    cmd  = text.split()[0].lower()
+
+    if cmd == "/help":
+        return (
+            "PlayGen Daemon commands:\n"
+            "/status   — CI + open PRs\n"
+            "/pool     — agent slot status\n"
+            "/next     — time until next reset\n"
+            "/prs      — list open PRs\n"
+            "/ci       — last 5 CI runs\n"
+            "/health   — project health check\n"
+            "/merge N  — squash-merge PR #N\n"
+            "/spawn S  — force-spawn slot S\n"
+            "/sysinfo  — tool discovery report\n"
+            "/help     — this message"
+        )
+
+    if cmd == "/sysinfo":
+        s = SYSTEM
+        ok  = lambda v: "✅" if v else "❌"
+        lines = [
+            f"🔍 System Discovery",
+            f"Platform : {s.get('platform', '?')}",
+            f"python3  : {ok(s.get('python3'))} {s.get('python3','not found')}",
+            f"claude   : {ok(s.get('claude'))} {s.get('claude','not found')}",
+            f"gh       : {ok(s.get('gh'))} {s.get('gh','not found')}",
+            f"git      : {ok(s.get('git'))} {s.get('git','not found')}",
+            f"docker   : {ok(s.get('docker'))} {s.get('docker','not found')}",
+        ]
+        if s.get("claude_warn"):
+            lines.append(f"⚠️  {s['claude_warn']}")
+        lines.append(f"\nWorkdir  : {WORKDIR}")
+        lines.append(f"State dir: {_STATE_DIR}")
+        return "\n".join(lines)
+
+    if cmd == "/status":
+        prs = _run(
+            "gh pr list --state open --json number,title "
+            "--jq '.[] | select(.title | test(\"feat|fix\"; \"i\")) "
+            "| \"#\\(.number) \\(.title[:45])\"' | head -8"
+        )
+        ci = _run(
+            "gh run list --limit 4 --json status,conclusion,headBranch "
+            "--jq '.[] | \"\\(.headBranch[:28]): \\(.status)/\\(.conclusion)\"'"
+        )
+        return f"📊 Status\n\nOpen PRs:\n{prs or '(none)'}\n\nCI (last 4):\n{ci}"
+
+    if cmd == "/pool":
+        reg = load_registry()
+        lines = []
+        for slot_id in POOL:
+            st = slot_status(slot_id)
+            icon = {"running": "🟢", "limit_hit": "🔴", "completed": "✅",
+                    "stale": "🟡", "unknown": "⚪"}.get(st, "❓")
+            entry = reg.get(slot_id, {})
+            age = ""
+            if entry.get("spawned_at"):
+                try:
+                    d = datetime.now(MANILA) - datetime.fromisoformat(entry["spawned_at"])
+                    age = f" ({int(d.total_seconds()//60)}m ago)"
+                except Exception:
+                    pass
+            lines.append(f"{icon} {slot_id}: {st}{age}")
+        return "🤖 Agent Pool:\n" + "\n".join(lines)
+
+    if cmd == "/next":
+        wait, nxt = seconds_until_next_reset()
+        mins = int(wait // 60)
+        return f"⏰ Next reset: {nxt.strftime('%H:%M')} Manila — in {mins}m"
+
+    if cmd == "/prs":
+        out = _run(
+            "gh pr list --state open --json number,title "
+            "--jq '.[] | \"#\\(.number) \\(.title[:50])\"'"
+        )
+        return f"📬 Open PRs:\n{out[:1500] or '(none)'}"
+
+    if cmd == "/ci":
+        out = _run(
+            "gh run list --limit 5 --json status,conclusion,headBranch "
+            "--jq '.[] | \"\\(.headBranch[:30]): \\(.status)/\\(.conclusion)\"'"
+        )
+        return f"🚦 CI Runs:\n{out}"
+
+    if cmd == "/health":
+        out = _run("bash scripts/project-health.sh 2>&1 | tail -25")
+        return f"🏥 Health:\n{out[:1500]}"
+
+    if cmd == "/merge":
+        parts = text.split()
+        if len(parts) != 2 or not parts[1].isdigit():
+            return "Usage: /merge <pr_number>"
+        out = _run(f"gh pr merge {parts[1]} --squash --delete-branch 2>&1")
+        return f"🔀 Merge #{parts[1]}:\n{out[:400]}"
+
+    if cmd == "/spawn":
+        parts = text.split()
+        if len(parts) != 2 or parts[1] not in POOL:
+            valid = ", ".join(POOL.keys())
+            return f"Usage: /spawn <slot>\nValid slots: {valid}"
+        slot_id = parts[1]
+        bugs, feats, fp, dp = fetch_work()
+        slot_type  = POOL[slot_id]["type"]
+        slot_index = int(slot_id.rsplit("-", 1)[-1])
+        if slot_type == "pm":
+            p = prompt_pm(bugs, feats, fp, dp)
+        elif slot_type == "ticket-bug":
+            p = prompt_ticket_bug(bugs, feats, slot_index)
+        elif slot_type == "ticket-feat":
+            p = prompt_ticket_feat(feats, bugs)
+        elif slot_type == "merge":
+            p = prompt_merge(fp, dp)
+        elif slot_type == "health":
+            p = prompt_health()
+        else:
+            return f"Unknown slot type: {slot_type}"
+        if not p:
+            return f"⏭ {slot_id}: no work available right now"
+        ok = spawn(slot_id, p)
+        return f"{'✅ Spawned' if ok else '❌ Failed to spawn'} {slot_id}"
+
+    return None  # unknown command — ignore
+
+
+def tg_poll_loop():
+    """Background thread: long-poll Telegram and handle /commands from TG_CHAT."""
+    offset     = 0
+    poll_secs  = 20          # long-poll window; keep < 25 to leave margin
+    backoff    = 5           # initial retry delay
+    MAX_BACKOFF = 120        # cap
+
+    print("[tg_poll] started — waiting 5s for any stale session to expire", flush=True)
+    time.sleep(5)            # brief startup grace so prior process's connection clears
+
+    while True:
+        resp = tg_get("getUpdates", {
+            "timeout": poll_secs,
+            "offset":  offset,
+            "allowed_updates": ["message"],
+        })
+        if not resp.get("ok"):
+            code = resp.get("error_code", 0)
+            if code == 409:
+                # Competing getUpdates session — wait for it to expire
+                wait = max(poll_secs + 6, backoff)
+                print(f"[tg_poll] 409 conflict — waiting {wait}s", flush=True)
+                time.sleep(wait)
+                backoff = min(backoff * 2, MAX_BACKOFF)
+            elif code == -1:
+                # Network timeout — retry immediately (expected for long-poll)
+                pass
+            else:
+                time.sleep(backoff)
+                backoff = min(backoff * 2, MAX_BACKOFF)
+            continue
+        backoff = 5          # reset on success
+        for update in resp.get("result", []):
+            offset = update["update_id"] + 1
+            msg  = update.get("message", {})
+            chat = msg.get("chat", {}).get("id")
+            if chat != TG_CHAT:
+                continue
+            text = msg.get("text", "")
+            if not text.startswith("/"):
+                continue
+            print(f"[tg_poll] cmd: {text}", flush=True)
+            try:
+                reply = _handle_cmd(text)
+                if reply:
+                    tg_send(reply)
+            except Exception as e:
+                tg_send(f"⚠️ Error: {e}")
 
 
 # ── GitHub API ────────────────────────────────────────────────────────────────
@@ -471,13 +842,21 @@ def main():
 
     pool_lines = "\n".join(f"  {sid}: {cfg['desc']}" for sid, cfg in POOL.items())
     print(f"[daemon] started — resets: {reset_str}", flush=True)
+
+    # Start Telegram command listener in background thread
+    t = threading.Thread(target=tg_poll_loop, daemon=True, name="tg-poll")
+    t.start()
+
     tg_send(
         f"🤖 PlayGen Task Daemon v4\n"
+        f"Platform : {SYSTEM.get('platform','?')} | "
+        f"Claude: {'✅' if claude_ok else '❌ not found'} | "
+        f"gh: {'✅' if SYSTEM.get('gh') else '❌'}\n"
         f"Resets (Manila): {reset_str}\n\n"
         f"Agent pool:\n{pool_lines}\n\n"
         f"Rules: bugs > features | 2 bug workers | 1 feat | 1 merge | 1 health\n"
-        f"Dedup: running slots are never re-spawned\n"
-        f"Claude CLI: {'✅ mounted' if claude_ok else '⚠️  not mounted (notify-only)'}"
+        f"Commands: /help /pool /status /sysinfo"
+        + (f"\n⚠️  {SYSTEM['claude_warn']}" if SYSTEM.get("claude_warn") else "")
     )
 
     # Startup snapshot
