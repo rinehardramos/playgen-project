@@ -3,34 +3,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // 1. Setup mocks BEFORE any imports
 const mockQuery = vi.fn();
 
+// Vitest 4.x: use class syntax for constructor mocks
 vi.mock('pg', () => ({
-  Pool: vi.fn(() => ({
-    query: mockQuery,
-    on: vi.fn(),
-  })),
+  Pool: vi.fn().mockImplementation(class {
+    query = mockQuery;
+    on = vi.fn();
+  }),
 }));
 
-// Mock OpenAI directly to intercept calls from the adapter
-vi.mock('openai', () => {
-  return {
-    default: vi.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: vi.fn().mockResolvedValue({
-            choices: [{ message: { content: 'Generated script text' } }],
-          }),
-        },
-      },
-      audio: {
-        speech: {
-          create: vi.fn().mockResolvedValue({
-            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
-          }),
-        },
-      },
-    })),
-  };
+const mockLlmCreate = vi.fn().mockResolvedValue({
+  choices: [{ message: { content: 'Generated script text' } }],
 });
+const mockSpeechCreate = vi.fn().mockResolvedValue({
+  arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
+});
+
+vi.mock('openai', () => ({
+  default: vi.fn().mockImplementation(class {
+    chat = { completions: { create: mockLlmCreate } };
+    audio = { speech: { create: mockSpeechCreate } };
+  }),
+}));
 
 vi.mock('../config.js', () => ({
   config: {

@@ -1,19 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock OpenAI
-vi.mock('openai', () => {
-  return {
-    default: vi.fn().mockImplementation(() => ({
-      audio: {
-        speech: {
-          create: vi.fn().mockResolvedValue({
-            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
-          }),
-        },
-      },
-    })),
-  };
+// Shared mock fn — Vitest 4.x: use class syntax for constructor mocks
+const mockSpeechCreate = vi.fn().mockResolvedValue({
+  arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
 });
+
+vi.mock('openai', () => ({
+  default: vi.fn().mockImplementation(class {
+    audio = { speech: { create: mockSpeechCreate } };
+  }),
+}));
 
 // Mock config
 vi.mock('../../src/config', () => ({
