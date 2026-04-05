@@ -145,8 +145,9 @@ export default function PlaylistDetailPage() {
       const poll = setInterval(async () => {
         try {
           const script = await api.get<DjScript>(`/api/v1/dj/playlists/${playlistId}/script`);
-          // Wait until generation_ms is set — indicates worker finished (including TTS)
-          if (script && script.total_segments > 0 && script.generation_ms != null) {
+          // Accept pending_review (TTS deferred until approval) or fully completed scripts
+          if (script && script.total_segments > 0 &&
+              (script.generation_ms != null || script.review_status === 'pending_review')) {
             setDjScript(script);
             setGenerating(false);
             clearInterval(poll);

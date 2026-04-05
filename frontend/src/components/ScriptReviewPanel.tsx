@@ -308,6 +308,7 @@ export default function ScriptReviewPanel({
             {script.total_segments} segments
             {script.generation_ms ? ` • ${(script.generation_ms / 1000).toFixed(1)}s` : ''}
             {` • ${script.llm_model}`}
+            {isPending && !script.generation_ms ? ' • Audio generated after approval' : ''}
           </span>
         </div>
 
