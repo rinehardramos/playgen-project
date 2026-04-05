@@ -6,6 +6,7 @@ import { companyRoutes } from './routes/companies';
 import { stationRoutes } from './routes/stations';
 import { stationSettingsRoutes } from './routes/stationSettings';
 import { userRoutes } from './routes/users';
+import { programRoutes } from './routes/programs';
 
 const app = Fastify({
   logger: {
@@ -25,6 +26,7 @@ app.register(companyRoutes,        { prefix: '/api/v1' });
 app.register(stationRoutes,        { prefix: '/api/v1' });
 app.register(stationSettingsRoutes, { prefix: '/api/v1' });
 app.register(userRoutes,           { prefix: '/api/v1' });
+app.register(programRoutes,        { prefix: '/api/v1' });
 
 app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);

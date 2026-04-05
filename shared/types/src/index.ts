@@ -256,6 +256,13 @@ export type DjSegmentType =
   | 'time_check'
   | 'weather_tease'
   | 'ad_break';
+/** Headline shape returned by news data providers (used by current_events segments). */
+export interface NewsHeadline {
+  title: string;
+  description?: string;
+  source?: string;
+}
+
 export type DjReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'auto_approved';
 export type DjSegmentReviewStatus = 'pending' | 'approved' | 'edited' | 'rejected';
 export type ManifestStatus = 'building' | 'ready' | 'failed';
@@ -396,6 +403,57 @@ export interface StationSetting {
   is_secret: boolean;
   created_at: string;
   updated_at: string;
+}
+
+// ─── Programs & Episodes (issue #210) ─────────────────────────────────────────
+
+export type ProgramAirDay = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+export type EpisodeStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'aired';
+
+export interface Program {
+  id: string;
+  station_id: string;
+  name: string;
+  description: string | null;
+  air_days: ProgramAirDay[];
+  start_time: string | null;
+  end_time: string | null;
+  dj_profile_id: string | null;
+  format_config: Record<string, unknown> | null;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ProgramEpisode {
+  id: string;
+  program_id: string;
+  air_date: string;
+  playlist_id: string | null;
+  dj_script_id: string | null;
+  manifest_id: string | null;
+  status: EpisodeStatus;
+  notes: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface CreateProgramRequest {
+  name: string;
+  description?: string;
+  air_days?: ProgramAirDay[];
+  start_time?: string;
+  end_time?: string;
+  dj_profile_id?: string;
+  format_config?: Record<string, unknown>;
+  is_active?: boolean;
+}
+
+export interface CreateEpisodeRequest {
+  air_date: string;
+  playlist_id?: string;
+  dj_script_id?: string;
+  notes?: string;
 }
 
 // ─── API Responses ────────────────────────────────────────────────────────────
