@@ -10,34 +10,15 @@ import { useDjPlayer } from '@/lib/DjPlayerContext';
 
 import MusicWidget from '@/components/MusicWidget';
 import ShowTimeline from '@/components/ShowTimeline';
-import ScriptReviewPanel from '@/components/ScriptReviewPanel';
+import ScriptReviewPanel, { type ReviewPanelScript, type ReviewPanelSegment } from '@/components/ScriptReviewPanel';
 import ProgramPreviewModal from '@/components/ProgramPreviewModal';
 
 type PlaylistStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'exported' | 'failed';
 type DjReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'auto_approved';
-type DjSegmentType = 'show_intro' | 'song_intro' | 'song_transition' | 'show_outro' | 'station_id' | 'time_check' | 'weather_tease' | 'ad_break';
 type DjSegmentReviewStatus = 'pending' | 'approved' | 'edited' | 'rejected';
-
-interface DjSegment {
-  id: string;
-  playlist_entry_id: string | null;
-  segment_type: DjSegmentType;
-  position: number;
-  script_text: string;
-  edited_text: string | null;
-  segment_review_status: DjSegmentReviewStatus;
-  audio_url: string | null;
-  audio_duration_sec: number | null;
-}
-
-interface DjScript {
-  id: string;
-  review_status: DjReviewStatus;
-  llm_model: string;
-  generation_ms: number | null;
-  total_segments: number;
-  segments: DjSegment[];
-}
+// DjSegment and DjScript use imported ReviewPanelSegment and ReviewPanelScript from ScriptReviewPanel
+type DjSegment = ReviewPanelSegment;
+type DjScript = ReviewPanelScript;
 
 type TabView = 'playlist' | 'dj-script';
 
