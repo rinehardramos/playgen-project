@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
+import fastifyCookie from '@fastify/cookie';
+import oauthPlugin from '@fastify/oauth2';
 import { authRoutes } from './routes/auth';
 
 const app = Fastify({
@@ -13,6 +15,26 @@ const app = Fastify({
 });
 
 app.register(sensible);
+app.register(fastifyCookie);
+
+// Register Google OAuth2 plugin only when credentials are configured.
+// In production set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_CALLBACK_URL.
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  app.register(oauthPlugin, {
+    name: 'googleOAuth2',
+    credentials: {
+      client: {
+        id: process.env.GOOGLE_CLIENT_ID,
+        secret: process.env.GOOGLE_CLIENT_SECRET,
+      },
+      auth: oauthPlugin.GOOGLE_CONFIGURATION,
+    },
+    scope: ['profile', 'email'],
+    callbackUri: process.env.GOOGLE_CALLBACK_URL ?? 'http://localhost/api/v1/auth/google/callback',
+    startRedirectPath: '/api/v1/auth/google',
+    cookie: { secure: process.env.NODE_ENV === 'production', sameSite: 'lax' },
+  });
+}
 
 app.get('/health', async () => ({ status: 'ok', service: 'auth-service' }));
 
