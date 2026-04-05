@@ -247,13 +247,14 @@ export async function regenerateSegment(
     },
   );
 
-  // Update segment with new text, reset to pending for review
+  // Update segment with new text, reset to pending for review; store rejection_notes for audit
   const { rows: updated } = await pool.query<DjSegment>(
     `UPDATE dj_segments
-     SET script_text = $2, edited_text = NULL, segment_review_status = 'pending', updated_at = NOW()
+     SET script_text = $2, edited_text = NULL, segment_review_status = 'pending',
+         rejection_notes = $3, updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
-    [segmentId, newText.trim()],
+    [segmentId, newText.trim(), rejectionNotes ?? null],
   );
   return updated[0] ?? null;
 }
