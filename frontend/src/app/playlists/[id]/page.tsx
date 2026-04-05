@@ -7,7 +7,9 @@ import { getCurrentUser } from '@/lib/auth';
 import { api } from '@/lib/api';
 import type { ApiError } from '@/lib/api';
 import { useDjPlayer } from '@/lib/DjPlayerContext';
+
 import MusicWidget from '@/components/MusicWidget';
+import ShowTimeline from '@/components/ShowTimeline';
 
 type PlaylistStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'exported' | 'failed';
 type DjReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'auto_approved';
@@ -741,6 +743,19 @@ export default function PlaylistDetailPage() {
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Show Timeline */}
+              <div className="mt-8">
+                <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+                  </svg>
+                  Show Timeline
+                </h3>
+                <div className="card p-4 border border-[#2a2a40]">
+                  <ShowTimeline segments={djScript.segments} showExport />
+                </div>
               </div>
             </>
           )}

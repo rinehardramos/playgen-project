@@ -12,10 +12,15 @@ Before starting any task, an agent MUST:
 
 ## Active Work
 - [ ] Fix high vulnerabilities (Next.js upgrade, Fastify upgrade, tar override) | @gemini-cli | 2026-04-04
+- [ ] Re-generate single playlist slot (issue #132, feat/issue-132-slot-regen) | @claude-code | 2026-04-05
 - [ ] Generation failure alerting — endpoint + UI red badge (issue #133, feat/issue-133-generation-failure-alerting) | @claude-code | 2026-04-05
-- [ ] Agent workflow analysis + improvement proposals (issue #158, feat/issue-158) | @claude-code | 2026-04-05
+- [ ] Category distribution report by date + chart (issue #134, feat/issue-134-category-distribution-by-date) | @claude-code | 2026-04-05
 
 ## Recently Completed
+- [x] Script template management UI (issue #20, PR #150) | @claude-code | 2026-04-05
+- [x] DJ Show Player with volume control (issue #21, PR #151) | @claude-code | 2026-04-05
+- [x] Spotify/Apple Music embed widgets (issue #22, PR #155) | @claude-code | 2026-04-05
+- [x] Visual show timeline + audio export CSV (issue #23, PR #156) | @claude-code | 2026-04-05
 - [x] Implement GET /api/v1/dashboard/stats endpoint (issue #101, feat/dashboard-stats) | @claude-code | 2026-04-05
 - [x] Add DJ link to sidebar navigation (issue #103, feat/dj-sidebar-nav) | @claude-code | 2026-04-04
 - [x] DJ Personality Feature (persona_config JSONB, PersonaConfig type, prompt builder, seed, frontend form) | @claude-code | 2026-04-04
