@@ -563,6 +563,7 @@ export default function SettingsPage() {
                     >
                       <option value="openai">OpenAI (uses OpenAI API Key)</option>
                       <option value="elevenlabs">ElevenLabs (uses ElevenLabs API Key)</option>
+                      <option value="google">Google TTS (uses Gemini API Key)</option>
                     </select>
                   </div>
 
@@ -571,6 +572,8 @@ export default function SettingsPage() {
                     <p className="text-xs text-gray-500 mb-2">
                       {dj.tts_provider === 'elevenlabs'
                         ? 'ElevenLabs voice ID (e.g. EXAVITQu4vr4xnSDxMaL)'
+                        : dj.tts_provider === 'google'
+                        ? 'Google voice name, e.g. en-US-Neural2-D (Male), en-US-Neural2-F (Female), en-GB-Neural2-B (UK Male)'
                         : 'OpenAI voice name: alloy, echo, fable, nova, onyx, shimmer'}
                     </p>
                     <input
@@ -578,7 +581,13 @@ export default function SettingsPage() {
                       value={dj.tts_voice_id}
                       onChange={(e) => setDj((p) => ({ ...p, tts_voice_id: e.target.value }))}
                       className="input w-full"
-                      placeholder={dj.tts_provider === 'elevenlabs' ? 'EXAVITQu4vr4xnSDxMaL' : 'alloy'}
+                      placeholder={
+                        dj.tts_provider === 'elevenlabs'
+                          ? 'EXAVITQu4vr4xnSDxMaL'
+                          : dj.tts_provider === 'google'
+                          ? 'en-US-Neural2-D'
+                          : 'alloy'
+                      }
                     />
                   </div>
                 </div>

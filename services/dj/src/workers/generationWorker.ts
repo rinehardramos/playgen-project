@@ -148,8 +148,16 @@ export async function runGenerationJob(data: DjGenerationJobData): Promise<void>
     ?? undefined;
 
   const effectiveTtsApiKey = stationSettings['tts_api_key']
-    ?? (effectiveTtsProvider === 'elevenlabs' ? station.elevenlabs_api_key : station.openai_api_key)
-    ?? (effectiveTtsProvider === 'elevenlabs' ? config.tts.elevenlabsApiKey : config.tts.openaiApiKey);
+    ?? (effectiveTtsProvider === 'elevenlabs'
+      ? station.elevenlabs_api_key
+      : effectiveTtsProvider === 'google'
+      ? station.gemini_api_key   // Google TTS uses the same Google/Gemini API key
+      : station.openai_api_key)
+    ?? (effectiveTtsProvider === 'elevenlabs'
+      ? config.tts.elevenlabsApiKey
+      : effectiveTtsProvider === 'google'
+      ? config.tts.googleApiKey
+      : config.tts.openaiApiKey);
 
   const ttsEnabled = !!(effectiveTtsApiKey);
 
