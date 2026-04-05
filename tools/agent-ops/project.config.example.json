@@ -1,0 +1,76 @@
+{
+  "project": {
+    "name": "MyProject",
+    "repo": "owner/repo",
+    "workdir": "/workspace",
+    "board_number": 1,
+    "board_owner": "owner",
+    "board_id": "PVT_xxx",
+    "status_field_id": "PVTSSF_xxx",
+    "board_columns": {
+      "backlog": "backlog_option_id",
+      "todo": "todo_option_id",
+      "in_progress": "in_progress_option_id",
+      "review": "review_option_id",
+      "done": "done_option_id"
+    }
+  },
+  "pool": {
+    "pm-0": {
+      "type": "pm",
+      "always": true,
+      "desc": "Project manager (board sync, coordination, prioritization)"
+    },
+    "ticket-bug-0": {
+      "type": "ticket-bug",
+      "always": true,
+      "desc": "Bugfix worker #1 (priority)"
+    },
+    "ticket-bug-1": {
+      "type": "ticket-bug",
+      "always": false,
+      "desc": "Bugfix worker #2 (when bugs exist)"
+    },
+    "ticket-feat-0": {
+      "type": "ticket-feat",
+      "always": false,
+      "desc": "Feature worker (lower priority)"
+    },
+    "merge-0": {
+      "type": "merge",
+      "always": true,
+      "desc": "PR/Merge checker"
+    },
+    "health-0": {
+      "type": "health",
+      "always": true,
+      "desc": "Health check"
+    }
+  },
+  "reset_hours": [0, 5, 9, 14, 19],
+  "timezone_offset_hours": 8,
+  "tech": {
+    "package_manager": "pnpm",
+    "test_command": "pnpm run test:unit",
+    "build_command": "pnpm run build",
+    "lint_command": "pnpm run lint",
+    "typecheck_command": "pnpm run typecheck",
+    "health_script": "bash scripts/project-health.sh",
+    "collab_file": "tasks/agent-collab.md",
+    "docker_services": []
+  },
+  "deploy": {
+    "vercel": false,
+    "railway": false,
+    "frontend_dir": "frontend",
+    "vercel_org_id_secret": "VERCEL_ORG_ID",
+    "vercel_project_id_secret": "VERCEL_PROJECT_ID",
+    "vercel_token_secret": "VERCEL_TOKEN",
+    "railway_token_secret": "RAILWAY_TOKEN",
+    "db_url_secret": "DATABASE_URL"
+  },
+  "telegram": {
+    "bot_token_env": "TELEGRAM_BOT_TOKEN",
+    "chat_id_env": "TELEGRAM_CHAT_ID"
+  }
+}
