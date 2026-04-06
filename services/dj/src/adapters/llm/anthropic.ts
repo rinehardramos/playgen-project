@@ -4,7 +4,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../../config.js';
-import type { LlmMessage, LlmOptions } from './openrouter.js';
+import type { LlmMessage, LlmOptions, LlmResult } from './openrouter.js';
 
 export type { LlmMessage, LlmOptions };
 
@@ -25,7 +25,7 @@ const DEFAULT_MODEL = 'claude-3-5-haiku-20241022';
 export async function anthropicLlmComplete(
   messages: LlmMessage[],
   options: LlmOptions = {},
-): Promise<string> {
+): Promise<LlmResult> {
   const c = getClient(options.apiKey);
   // OpenRouter uses "anthropic/claude-*" format; Anthropic API expects just "claude-*"
   const rawModel = options.model ?? DEFAULT_MODEL;
@@ -50,5 +50,13 @@ export async function anthropicLlmComplete(
 
   const block = response.content[0];
   if (!block || block.type !== 'text') throw new Error('Anthropic LLM returned empty response');
-  return block.text.trim();
+
+  return {
+    text: block.text.trim(),
+    usage: {
+      prompt_tokens: response.usage.input_tokens,
+      completion_tokens: response.usage.output_tokens,
+      total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+    },
+  };
 }

@@ -2,6 +2,8 @@ import { getTtsAdapter } from '../adapters/tts/openai.js';
 import { getStorageAdapter } from '../lib/storage/index.js';
 import { config } from '../config.js';
 import { getPool } from '../db.js';
+import { logTtsUsage } from '../lib/usageLogger.js';
+import { checkTtsRateLimit } from '../lib/rateLimiter.js';
 
 /** Estimate MP3 duration from buffer size (assumes 128 kbps bitrate). */
 export function estimateMp3Duration(buffer: Buffer): number {
@@ -17,6 +19,8 @@ export interface TtsSegmentInput {
   text: string;
   /** Script ID — used to build the audio directory path */
   script_id: string;
+  /** Station ID — used for usage logging */
+  station_id?: string;
 }
 
 export interface TtsProviderConfig {
@@ -35,6 +39,14 @@ export async function generateSegmentTts(
   segment: TtsSegmentInput,
   providerCfg: TtsProviderConfig,
 ): Promise<{ audio_url: string; audio_duration_sec: number | null }> {
+  // Soft TTS rate limit check (only when station_id is available)
+  if (segment.station_id) {
+    const ttsRateCheck = await checkTtsRateLimit(segment.station_id, segment.text.length);
+    if (!ttsRateCheck.allowed) {
+      throw new Error(`TTS rate limit exceeded: ${ttsRateCheck.reason}`);
+    }
+  }
+
   const ttsAdapter = getTtsAdapter({
     provider: providerCfg.provider,
     apiKey: providerCfg.apiKey,
@@ -64,6 +76,18 @@ export async function generateSegmentTts(
      WHERE id = $3`,
     [audioUrl, duration, segment.id],
   );
+
+  // Fire-and-forget TTS usage log
+  if (segment.station_id) {
+    logTtsUsage({
+      station_id: segment.station_id,
+      script_id: segment.script_id,
+      segment_id: segment.id,
+      provider: providerCfg.provider,
+      character_count: segment.text.length,
+      metadata: { voice_id: providerCfg.voiceId },
+    });
+  }
 
   return { audio_url: audioUrl, audio_duration_sec: duration };
 }

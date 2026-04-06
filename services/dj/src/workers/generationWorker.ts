@@ -3,6 +3,8 @@ import { getSocialProviders } from '../adapters/social/index.js';
 import { llmComplete } from '../adapters/llm/openrouter.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import type { StationIdentity } from '../lib/promptBuilder.js';
+import { logLlmUsage } from '../lib/usageLogger.js';
+import { checkLlmRateLimit } from '../lib/rateLimiter.js';
 import {
   openWeatherMapProvider,
   newsApiProvider,
@@ -469,12 +471,20 @@ export async function runGenerationJob(
     };
     const systemPrompt = buildSystemPrompt(profile!);
     const userPrompt = buildUserPrompt(ctx) + rejectionContext;
+
+    // Soft rate limit check — skip segment rather than abort the whole script
+    const llmRateCheck = await checkLlmRateLimit(data.station_id);
+    if (!llmRateCheck.allowed) {
+      console.warn(`[generationWorker] LLM rate limit hit for segment=${segment_type}: ${llmRateCheck.reason}`);
+      return;
+    }
+
     console.info(
       `[generationWorker] LLM call — provider=${effectiveLlmProvider} model=${effectiveLlmModel} hasKey=${!!effectiveLlmApiKey} segment=${segment_type} (non-song)`,
     );
     let script_text: string;
     try {
-      script_text = await llmComplete(
+      const llmResult = await llmComplete(
         [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -486,6 +496,17 @@ export async function runGenerationJob(
           provider: effectiveLlmProvider,
         },
       );
+      script_text = llmResult.text;
+      if (llmResult.usage) {
+        logLlmUsage({
+          station_id: data.station_id,
+          script_id,
+          provider: effectiveLlmProvider,
+          model: effectiveLlmModel,
+          usage: llmResult.usage,
+          metadata: { segment_type },
+        });
+      }
     } catch (llmErr) {
       console.error(
         `[generationWorker] LLM call FAILED — provider=${effectiveLlmProvider} model=${effectiveLlmModel} error:`,
@@ -626,9 +647,17 @@ export async function runGenerationJob(
       const llmProgress = 10 + Math.round((segmentsDone / totalSegmentSlots) * 80);
       await reportProgress(llmProgress, `Writing ${segment_type.replace('_', ' ')} (${segmentsDone + 1}/${totalSegmentSlots})…`);
 
+      // Soft rate limit check — skip segment rather than abort the whole script
+      const llmRateCheckSong = await checkLlmRateLimit(data.station_id);
+      if (!llmRateCheckSong.allowed) {
+        console.warn(`[generationWorker] LLM rate limit hit for segment=${segment_type}: ${llmRateCheckSong.reason}`);
+        segmentsDone++;
+        continue;
+      }
+
       let script_text: string;
       try {
-        script_text = await llmComplete(
+        const llmResult = await llmComplete(
           [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
@@ -640,6 +669,17 @@ export async function runGenerationJob(
             provider: effectiveLlmProvider,
           },
         );
+        script_text = llmResult.text;
+        if (llmResult.usage) {
+          logLlmUsage({
+            station_id: data.station_id,
+            script_id,
+            provider: effectiveLlmProvider,
+            model: effectiveLlmModel,
+            usage: llmResult.usage,
+            metadata: { segment_type },
+          });
+        }
       } catch (llmErr) {
         console.error(
           `[generationWorker] LLM call FAILED — provider=${effectiveLlmProvider} model=${effectiveLlmModel} error:`,
@@ -692,7 +732,7 @@ export async function runGenerationJob(
 
           let shoutoutText: string;
           try {
-            shoutoutText = await llmComplete(
+            const shoutoutResult = await llmComplete(
               [
                 { role: 'system', content: shoutoutSystemPrompt },
                 { role: 'user', content: shoutoutUserPrompt },
@@ -704,6 +744,17 @@ export async function runGenerationJob(
                 provider: effectiveLlmProvider,
               },
             );
+            shoutoutText = shoutoutResult.text;
+            if (shoutoutResult.usage) {
+              logLlmUsage({
+                station_id: data.station_id,
+                script_id,
+                provider: effectiveLlmProvider,
+                model: effectiveLlmModel,
+                usage: shoutoutResult.usage,
+                metadata: { segment_type: 'listener_activity' },
+              });
+            }
           } catch (llmErr) {
             console.error('[generationWorker] Shoutout LLM call FAILED:', llmErr);
             throw llmErr;

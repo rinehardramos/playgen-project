@@ -12,6 +12,7 @@ import { scriptRoutes } from './routes/scripts.js';
 import { shoutoutRoutes } from './routes/shoutouts.js';
 import { socialAuthRoutes } from './routes/socialAuth.js';
 import { adlibClipRoutes } from './routes/adlibClips.js';
+import { usageRoutes } from './routes/usage.js';
 import { closeQueue } from './queues/djQueue.js';
 import { scheduleAudioCleanup, closeCleanupQueue } from './queues/audioCleanupQueue.js';
 
@@ -49,6 +50,7 @@ app.register(scriptRoutes,         { prefix: '/api/v1' });
 app.register(shoutoutRoutes,       { prefix: '/api/v1' });
 app.register(socialAuthRoutes,     { prefix: '/api/v1' });
 app.register(adlibClipRoutes,     { prefix: '/api/v1' });
+app.register(usageRoutes,         { prefix: '/api/v1' });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 

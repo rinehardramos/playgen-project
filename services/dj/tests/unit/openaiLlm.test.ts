@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockCreate = vi.fn().mockResolvedValue({
   choices: [{ message: { content: 'Hello from GPT-4o!' } }],
+  usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
 });
 
 vi.mock('openai', () => ({
@@ -27,7 +28,25 @@ describe('OpenAiLlmAdapter', () => {
       { role: 'system', content: 'You are Alex, a radio DJ.' },
       { role: 'user', content: 'Introduce the next song.' },
     ]);
-    expect(result).toBe('Hello from GPT-4o!');
+    expect(result.text).toBe('Hello from GPT-4o!');
+  });
+
+  it('returns token usage when available', async () => {
+    const result = await openAiLlmComplete([{ role: 'user', content: 'test' }]);
+    expect(result.usage).toEqual({
+      prompt_tokens: 10,
+      completion_tokens: 5,
+      total_tokens: 15,
+    });
+  });
+
+  it('returns undefined usage when not provided', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: 'Hello!' } }],
+      usage: undefined,
+    });
+    const result = await openAiLlmComplete([{ role: 'user', content: 'test' }]);
+    expect(result.usage).toBeUndefined();
   });
 
   it('uses gpt-4o-mini as default model', async () => {

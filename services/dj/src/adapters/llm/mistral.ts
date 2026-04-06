@@ -2,7 +2,7 @@
  * Mistral LLM adapter — calls the Mistral chat completions API.
  * Docs: https://docs.mistral.ai/api/#tag/chat
  */
-import type { LlmMessage, LlmOptions } from './openrouter.js';
+import type { LlmMessage, LlmOptions, LlmResult } from './openrouter.js';
 
 export type { LlmMessage, LlmOptions };
 
@@ -12,7 +12,7 @@ const BASE_URL = 'https://api.mistral.ai/v1/chat/completions';
 export async function mistralLlmComplete(
   messages: LlmMessage[],
   options: LlmOptions = {},
-): Promise<string> {
+): Promise<LlmResult> {
   const apiKey = options.apiKey;
   if (!apiKey) throw new Error('Mistral API key is required');
 
@@ -39,9 +39,20 @@ export async function mistralLlmComplete(
 
   const data = await res.json() as {
     choices?: Array<{ message?: { content?: string } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   };
 
   const text = data.choices?.[0]?.message?.content;
   if (!text) throw new Error('Mistral returned empty response');
-  return text.trim();
+
+  return {
+    text: text.trim(),
+    usage: data.usage
+      ? {
+          prompt_tokens: data.usage.prompt_tokens ?? 0,
+          completion_tokens: data.usage.completion_tokens ?? 0,
+          total_tokens: data.usage.total_tokens ?? 0,
+        }
+      : undefined,
+  };
 }

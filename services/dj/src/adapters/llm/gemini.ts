@@ -1,7 +1,7 @@
 /**
  * Google Gemini LLM adapter — calls the Gemini generateContent REST API directly.
  */
-import type { LlmMessage, LlmOptions } from './openrouter.js';
+import type { LlmMessage, LlmOptions, LlmResult } from './openrouter.js';
 
 export type { LlmMessage, LlmOptions };
 
@@ -11,7 +11,7 @@ const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 export async function geminiLlmComplete(
   messages: LlmMessage[],
   options: LlmOptions = {},
-): Promise<string> {
+): Promise<LlmResult> {
   const apiKey = options.apiKey;
   if (!apiKey) throw new Error('Gemini API key is required');
 
@@ -57,9 +57,25 @@ export async function geminiLlmComplete(
     candidates?: Array<{
       content?: { parts?: Array<{ text?: string }> };
     }>;
+    usageMetadata?: {
+      promptTokenCount?: number;
+      candidatesTokenCount?: number;
+      totalTokenCount?: number;
+    };
   };
 
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Gemini returned empty response');
-  return text.trim();
+
+  const meta = data.usageMetadata;
+  return {
+    text: text.trim(),
+    usage: meta
+      ? {
+          prompt_tokens: meta.promptTokenCount ?? 0,
+          completion_tokens: meta.candidatesTokenCount ?? 0,
+          total_tokens: meta.totalTokenCount ?? 0,
+        }
+      : undefined,
+  };
 }

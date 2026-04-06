@@ -249,7 +249,7 @@ export async function regenerateSegment(
       segment_type: seg.segment_type,
     }) + rejectionContext;
 
-  const newText = await llmComplete(
+  const llmResult = await llmComplete(
     [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -269,7 +269,7 @@ export async function regenerateSegment(
          rejection_notes = $3, updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
-    [segmentId, newText.trim(), rejectionNotes ?? null],
+    [segmentId, llmResult.text, rejectionNotes ?? null],
   );
   return updated[0] ?? null;
 }
