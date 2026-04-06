@@ -240,6 +240,26 @@ export default function PlaylistDetailPage() {
     }
   }, [activeTab, djScript, djLoading, fetchDjScript]);
 
+  // When the global DJ player fails to load a segment (404), clear its audio_url
+  // so the UI reverts to the "Generate TTS" button.
+  useEffect(() => {
+    const failedId = djPlayer.lastErrorSegmentId;
+    if (!failedId || !djScript) return;
+    const seg = djScript.segments.find((s) => s.id === failedId);
+    if (seg?.audio_url) {
+      setDjScript((prev) =>
+        prev
+          ? {
+              ...prev,
+              segments: prev.segments.map((s) =>
+                s.id === failedId ? { ...s, audio_url: null, audio_duration_sec: null } : s,
+              ),
+            }
+          : prev,
+      );
+    }
+  }, [djPlayer.lastErrorSegmentId, djScript]);
+
   async function fetchPlaylist() {
     setLoading(true);
     setError(null);

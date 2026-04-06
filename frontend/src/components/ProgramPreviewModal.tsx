@@ -58,6 +58,8 @@ export default function ProgramPreviewModal({
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [playingSegmentId, setPlayingSegmentId] = useState<string | null>(null);
   const [isPlayingAll, setIsPlayingAll] = useState(false);
+  /** Segments whose audio returned 404 — hides play button for them */
+  const [staleIds, setStaleIds] = useState<Set<string>>(new Set());
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playQueueRef = useRef<DjSegment[]>([]);
@@ -67,7 +69,7 @@ export default function ProgramPreviewModal({
   const totalDurationSec = timeline.reduce((s, item) => s + item.durationSec, 0);
 
   const djSegmentsWithAudio = script.segments
-    .filter((s) => s.audio_url)
+    .filter((s) => s.audio_url && !staleIds.has(s.id))
     .sort((a, b) => a.position - b.position);
 
   // ── Playback ────────────────────────────────────────────────────────────────
@@ -80,6 +82,10 @@ export default function ProgramPreviewModal({
     playQueueRef.current = [];
     playIdxRef.current = 0;
   }, []);
+
+  function markStale(id: string) {
+    setStaleIds((prev) => new Set(prev).add(id));
+  }
 
   function playNextInQueue() {
     const queue = playQueueRef.current;
@@ -96,8 +102,8 @@ export default function ProgramPreviewModal({
     audioRef.current = audio;
     setPlayingSegmentId(seg.id);
     audio.onended = () => playNextInQueue();
-    audio.onerror = () => playNextInQueue(); // skip failed, continue queue
-    audio.play().catch(() => playNextInQueue());
+    audio.onerror = () => { markStale(seg.id); playNextInQueue(); };
+    audio.play().catch(() => { markStale(seg.id); playNextInQueue(); });
   }
 
   function handlePlayAll() {
@@ -114,7 +120,7 @@ export default function ProgramPreviewModal({
   }
 
   function handlePlaySegment(seg: DjSegment) {
-    if (!seg.audio_url) return;
+    if (!seg.audio_url || staleIds.has(seg.id)) return;
     if (playingSegmentId === seg.id) {
       stopPlayback();
       return;
@@ -125,8 +131,8 @@ export default function ProgramPreviewModal({
     audioRef.current = audio;
     setPlayingSegmentId(seg.id);
     audio.onended = () => { audioRef.current = null; setPlayingSegmentId(null); };
-    audio.onerror = () => { audioRef.current = null; setPlayingSegmentId(null); };
-    audio.play().catch(() => { audioRef.current = null; setPlayingSegmentId(null); });
+    audio.onerror = () => { audioRef.current = null; setPlayingSegmentId(null); markStale(seg.id); };
+    audio.play().catch(() => { audioRef.current = null; setPlayingSegmentId(null); markStale(seg.id); });
   }
 
   // ── Download ────────────────────────────────────────────────────────────────
@@ -357,7 +363,7 @@ export default function ProgramPreviewModal({
               const w = blockPx(item.durationSec, MIN_DJ_PX);
               const isHov = hoveredIdx === idx;
               const isPlaying = playingSegmentId === item.segment.id;
-              const hasAudio = !!item.segment.audio_url;
+              const hasAudio = !!item.segment.audio_url && !staleIds.has(item.segment.id);
 
               return (
                 <div

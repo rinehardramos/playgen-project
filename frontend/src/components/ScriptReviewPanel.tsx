@@ -485,6 +485,16 @@ export default function ScriptReviewPanel({
     }
   }
 
+  /** Clear a segment's audio_url locally so the UI reverts to "Generate TTS". */
+  function clearSegmentAudio(segmentId: string) {
+    updateScript({
+      ...script,
+      segments: script.segments.map((s) =>
+        s.id === segmentId ? { ...s, audio_url: null, audio_duration_sec: null } : s,
+      ),
+    });
+  }
+
   function handlePlayTts(seg: ReviewPanelSegment) {
     if (!seg.audio_url) return;
     // If already playing this segment, pause it
@@ -506,8 +516,8 @@ export default function ScriptReviewPanel({
     audioRef.current = audio;
     setLocalPlayingSegmentId(seg.id);
     audio.onended = () => { audioRef.current = null; setLocalPlayingSegmentId(null); };
-    audio.onerror = () => { audioRef.current = null; setLocalPlayingSegmentId(null); };
-    audio.play().catch(() => { audioRef.current = null; setLocalPlayingSegmentId(null); });
+    audio.onerror = () => { audioRef.current = null; setLocalPlayingSegmentId(null); clearSegmentAudio(seg.id); };
+    audio.play().catch(() => { audioRef.current = null; setLocalPlayingSegmentId(null); clearSegmentAudio(seg.id); });
   }
 
   // ── Bulk TTS generation ─────────────────────────────────────────────────
