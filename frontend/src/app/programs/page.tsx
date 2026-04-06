@@ -126,7 +126,7 @@ export default function ProgramsPage() {
   useEffect(() => {
     const user = getCurrentUser();
     if (!user) { router.push('/login'); return; }
-    api.get<Station[]>('/api/v1/stations')
+    api.get<Station[]>(`/api/v1/companies/${user.company_id}/stations`)
       .then((list) => {
         setStations(list);
         if (list.length > 0) setSelectedStation(list[0].id);

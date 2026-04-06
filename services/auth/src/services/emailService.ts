@@ -1,6 +1,6 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY ?? '');
+const resend = new Resend(process.env.RESEND_API_KEY || 're_stub_noop_key');
 const FROM = process.env.EMAIL_FROM ?? 'PlayGen <noreply@playgen.site>';
 
 export async function sendPasswordResetEmail(to: string, resetLink: string): Promise<void> {

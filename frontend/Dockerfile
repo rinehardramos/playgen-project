@@ -39,6 +39,10 @@ RUN addgroup --system --gid 1001 nodejs \
 RUN mkdir -p ./public ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static     ./.next/static
+# Next standalone in monorepo may place server.js under app/ — hoist it so CMD works from /app
+RUN if [ -f ./app/server.js ] && [ ! -f ./server.js ]; then \
+      cp -r ./app/. ./ && rm -rf ./app; \
+    fi
 
 USER nextjs
 
