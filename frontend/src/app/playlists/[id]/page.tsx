@@ -11,7 +11,6 @@ import { useDjPlayer } from '@/lib/DjPlayerContext';
 import MusicWidget from '@/components/MusicWidget';
 import ShowTimeline from '@/components/ShowTimeline';
 import ScriptReviewPanel, { type ReviewPanelScript, type ReviewPanelSegment } from '@/components/ScriptReviewPanel';
-import ProgramPreviewModal from '@/components/ProgramPreviewModal';
 
 type PlaylistStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'exported' | 'failed';
 type DjReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'auto_approved';
@@ -99,8 +98,6 @@ export default function PlaylistDetailPage() {
   const [generationProgress, setGenerationProgress] = useState<{ pct: number; step: string }>({ pct: 0, step: '' });
   const [stationAutoApprove, setStationAutoApprove] = useState(false);
   const [musicWidgetEntryId, setMusicWidgetEntryId] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
-
   const djPlayer = useDjPlayer();
 
   const fetchDjScript = useCallback(async () => {
@@ -399,6 +396,16 @@ export default function PlaylistDetailPage() {
               >
                 Export CSV
               </a>
+              {/* Preview Show — navigates to the full-page preview route */}
+              <Link
+                href={`/playlists/${playlistId}/preview`}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                </svg>
+                Preview Show
+              </Link>
             </>
           )}
           {playlist?.status === 'ready' && (
@@ -515,16 +522,16 @@ export default function PlaylistDetailPage() {
               {/* Script action bar — Program Preview + Regenerate */}
               <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#2a2a40]">
                 <div className="flex items-center gap-2">
-                  {/* Program Preview — always visible when a script is loaded */}
-                  <button
-                    onClick={() => setShowPreview(true)}
+                  {/* Program Preview — navigates to the dedicated full-page preview route */}
+                  <Link
+                    href={`/playlists/${playlistId}/preview`}
                     className="btn-secondary text-xs flex items-center gap-1.5 bg-violet-600/10 border-violet-500/20 text-violet-300 hover:bg-violet-600/20"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
                     </svg>
                     Program Preview
-                  </button>
+                  </Link>
 
                   {/* Regenerate — only for finalized scripts */}
                   {(djScript.review_status === 'approved' || djScript.review_status === 'auto_approved' || djScript.review_status === 'rejected') && (
@@ -683,22 +690,6 @@ export default function PlaylistDetailPage() {
           </tbody>
         </table>
       </div>
-
-      {/* Program Preview Modal */}
-      {showPreview && djScript && (
-        <ProgramPreviewModal
-          script={djScript}
-          entries={entries.map((e) => ({
-            id: e.id,
-            hour: e.hour,
-            position: e.position,
-            song_title: e.song_title,
-            song_artist: e.song_artist,
-            duration_sec: e.duration_sec,
-          }))}
-          onClose={() => setShowPreview(false)}
-        />
-      )}
 
       {/* Override Modal */}
       {overrideEntry && activeTab === 'playlist' && (
