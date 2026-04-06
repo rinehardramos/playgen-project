@@ -56,6 +56,21 @@ interface Song {
   category_id: string;
 }
 
+// Minimal subset of Program we need for the band overlay on the Log header.
+// See docs/user-journey-programs-logs.md.
+interface LogProgramBand {
+  id: string;
+  name: string;
+  active_days: string[];
+  start_hour: number;
+  end_hour: number;
+  color_tag: string | null;
+  is_active: boolean;
+  is_default: boolean;
+}
+
+const DAY_NAMES_OVERLAY = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
 const STATUS_STYLES: Record<PlaylistStatus, string> = {
   draft: 'bg-gray-800 text-gray-400',
   generating: 'bg-blue-900/30 text-blue-400 animate-pulse',
@@ -98,6 +113,7 @@ export default function PlaylistDetailPage() {
   const [generationProgress, setGenerationProgress] = useState<{ pct: number; step: string }>({ pct: 0, step: '' });
   const [stationAutoApprove, setStationAutoApprove] = useState(false);
   const [musicWidgetEntryId, setMusicWidgetEntryId] = useState<string | null>(null);
+  const [stationPrograms, setStationPrograms] = useState<LogProgramBand[]>([]);
   const djPlayer = useDjPlayer();
 
   const fetchDjScript = useCallback(async () => {
@@ -277,6 +293,14 @@ export default function PlaylistDetailPage() {
         } catch {
           // Non-critical — fall back to false
         }
+        // Fetch programs for the station so we can render which Program owns
+        // each hour of this log. See user-journey-programs-logs.md §overlay.
+        try {
+          const progs = await api.get<LogProgramBand[]>(`/api/v1/stations/${pl.station_id}/programs`);
+          setStationPrograms(progs);
+        } catch {
+          setStationPrograms([]);
+        }
       }
     } catch (err: unknown) {
       setError((err as ApiError).message ?? 'Failed to load playlist');
@@ -374,7 +398,7 @@ export default function PlaylistDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
           <Link href="/playlists" className="text-sm text-gray-500 hover:text-gray-300 transition-colors">
-            ← Playlists
+            ← Logs
           </Link>
           <div>
             <h1 className="text-xl font-bold text-white">
@@ -444,6 +468,11 @@ export default function PlaylistDetailPage() {
         <div className="mb-4 bg-red-900/30 border border-red-700/50 text-red-400 px-4 py-3 rounded-lg text-sm">
           {error}
         </div>
+      )}
+
+      {/* Program band overlay — which Program owns which hour of this log */}
+      {playlist && stationPrograms.length > 0 && (
+        <ProgramBandOverlay programs={stationPrograms} date={playlist.date} />
       )}
 
       {/* Tab bar */}
@@ -769,6 +798,71 @@ export default function PlaylistDetailPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Program band overlay ─────────────────────────────────────────────────────
+// Renders a 24-hour strip showing which Program covers each hour of this Log.
+// Each band links to its program's clock editor. Uncovered hours show a neutral
+// "Default clock" label and link to the new-program form. See T-F / T-G follow-up
+// tickets for a proper reverse Log→Episode query.
+
+function ProgramBandOverlay({ programs, date }: { programs: LogProgramBand[]; date: string }) {
+  const weekday = DAY_NAMES_OVERLAY[new Date(date.slice(0, 10) + 'T00:00:00').getDay()];
+
+  function ownerOfHour(hour: number): LogProgramBand | null {
+    for (const p of programs) {
+      if (!p.is_active || p.is_default) continue;
+      if (!p.active_days.includes(weekday)) continue;
+      if (hour >= p.start_hour && hour < p.end_hour) return p;
+    }
+    return null;
+  }
+
+  interface OverlayBand { program: LogProgramBand | null; start: number; end: number }
+  const bands: OverlayBand[] = [];
+  let cursor = 0;
+  while (cursor < 24) {
+    const owner = ownerOfHour(cursor);
+    let end = cursor + 1;
+    while (end < 24 && ownerOfHour(end)?.id === owner?.id) end++;
+    bands.push({ program: owner, start: cursor, end });
+    cursor = end;
+  }
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+          Programs airing {weekday}
+        </span>
+        <span className="text-[10px] text-gray-600">Click a band to edit its clock</span>
+      </div>
+      <div className="flex h-8 rounded-lg overflow-hidden bg-[#12122a] border border-[#2a2a40]">
+        {bands.map((band, i) => {
+          const widthPct = ((band.end - band.start) / 24) * 100;
+          const bg = band.program?.color_tag ?? '#1e1e2e';
+          const label = band.program?.name ?? 'Default clock';
+          const href = band.program ? `/programs/${band.program.id}/clock` : '/programs/new';
+          const title = band.program
+            ? `${band.program.name} (${band.start}:00–${band.end}:00)`
+            : `No program covers ${band.start}:00–${band.end}:00`;
+          return (
+            <Link
+              key={i}
+              href={href}
+              title={title}
+              style={{ width: `${widthPct}%`, backgroundColor: bg }}
+              className={`h-full flex items-center justify-center text-[10px] font-medium truncate px-1 hover:opacity-80 transition-opacity ${
+                band.program ? 'text-white' : 'text-gray-600 border-r border-dashed border-[#2a2a40] last:border-r-0'
+              }`}
+            >
+              <span className="truncate">{label}</span>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }

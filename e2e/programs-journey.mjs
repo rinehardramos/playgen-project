@@ -157,8 +157,22 @@ async function main() {
   assert(putRes.status === 200, 'PUT /programs/:id returns 200', putRes);
   assert(putRes.data?.name?.endsWith('(edited)'), 'update persists name change');
 
-  // Step 11 — delete program (non-default, should succeed)
+  // Step 11 — /today data surface: fetch the current month's playlists
+  // for the station, which is what the /today page uses to find "today's log".
+  // No dedicated ?date= endpoint exists yet (see ticket T-B); /today filters
+  // the month response client-side, so this asserts the same surface.
   step = 11;
+  const monthKey2 = new Date().toISOString().slice(0, 7);
+  const todayPlaylists = await api(`/api/v1/stations/${station.id}/playlists?month=${monthKey2}`);
+  assert(
+    todayPlaylists.status === 200,
+    'GET /stations/:sid/playlists?month=YYYY-MM returns 200 (powers /today)',
+    todayPlaylists,
+  );
+  assert(Array.isArray(todayPlaylists.data), 'month playlists response is an array');
+
+  // Step 12 — delete program (non-default, should succeed)
+  step = 12;
   const delRes = await api(`/api/v1/programs/${program.id}`, { method: 'DELETE' });
   assert(delRes.status === 204, 'DELETE /programs/:id returns 204', delRes);
 

@@ -83,8 +83,8 @@ export default function EpisodesPage() {
         <div className="text-center py-16 text-gray-500">
           <p className="text-lg mb-2">No episodes yet</p>
           <p className="text-sm">
-            Episodes are created automatically when you generate a playlist for this program&apos;s station.
-            Head to <Link href="/playlists" className="text-violet-400 hover:underline">Playlists</Link> to generate one.
+            Episodes are created automatically when you generate a log for this program&apos;s station.
+            Head to <Link href="/playlists" className="text-violet-400 hover:underline">Logs</Link> to generate one.
           </p>
         </div>
       ) : (
@@ -103,7 +103,7 @@ export default function EpisodesPage() {
               <div className="flex items-center gap-3 text-sm shrink-0">
                 {ep.playlist_id && (
                   <Link href={`/playlists/${ep.playlist_id}`} className="text-blue-400 hover:text-blue-300">
-                    Playlist
+                    Open in Log
                   </Link>
                 )}
                 {ep.dj_script_id && (
