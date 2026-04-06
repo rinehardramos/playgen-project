@@ -92,7 +92,6 @@ function segmentsForEntry(
 
   if (isFirst) {
     types.push('show_intro');
-    types.push('station_id'); // Station ID at top of show
   }
 
   types.push(isFirst ? 'song_intro' : 'song_transition');
