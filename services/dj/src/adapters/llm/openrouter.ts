@@ -16,6 +16,19 @@ export interface LlmOptions {
   provider?: string;
 }
 
+/** Token usage returned alongside the generated text. */
+export interface LlmUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+/** Return value of llmComplete — text plus optional token usage. */
+export interface LlmResult {
+  text: string;
+  usage?: LlmUsage;
+}
+
 let defaultClient: OpenAI | null = null;
 
 function getClient(apiKey?: string): OpenAI {
@@ -46,7 +59,7 @@ function getClient(apiKey?: string): OpenAI {
 export async function llmComplete(
   messages: LlmMessage[],
   options: LlmOptions = {},
-): Promise<string> {
+): Promise<LlmResult> {
   // Dispatch to the appropriate provider
   const provider = options.provider ?? config.llm.provider;
   if (provider === 'openai') {
@@ -78,5 +91,14 @@ export async function llmComplete(
 
   const text = response.choices[0]?.message?.content;
   if (!text) throw new Error('LLM returned empty response');
-  return text.trim();
+
+  const usage: LlmUsage | undefined = response.usage
+    ? {
+        prompt_tokens: response.usage.prompt_tokens,
+        completion_tokens: response.usage.completion_tokens,
+        total_tokens: response.usage.total_tokens,
+      }
+    : undefined;
+
+  return { text: text.trim(), usage };
 }

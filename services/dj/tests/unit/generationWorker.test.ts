@@ -13,6 +13,7 @@ vi.mock('pg', () => ({
 
 const mockLlmCreate = vi.fn().mockResolvedValue({
   choices: [{ message: { content: 'Generated script text' } }],
+  usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
 });
 const mockSpeechCreate = vi.fn().mockResolvedValue({
   arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
@@ -58,6 +59,18 @@ vi.mock('../../src/services/manifestService.js', () => ({
 // Mock news provider — returns empty headlines by default
 vi.mock('../../src/adapters/news/index.js', () => ({
   getNewsProvider: vi.fn(() => ({ fetchHeadlines: vi.fn().mockResolvedValue([]) })),
+}));
+
+// Mock rateLimiter — always allow calls so tests don't need extra DB query setup
+vi.mock('../../src/lib/rateLimiter.js', () => ({
+  checkLlmRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
+  checkTtsRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
+}));
+
+// Mock usageLogger — fire-and-forget; prevents unhandled pool query calls in tests
+vi.mock('../../src/lib/usageLogger.js', () => ({
+  logLlmUsage: vi.fn(),
+  logTtsUsage: vi.fn(),
 }));
 
 // Mock social adapter — returns no providers so the DB is not hit

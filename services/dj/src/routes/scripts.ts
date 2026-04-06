@@ -401,6 +401,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
             position: seg.position,
             text: textToSynth,
             script_id: seg.script_id,
+            station_id: seg.station_id,
           },
           providerCfg,
         );
