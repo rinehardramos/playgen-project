@@ -47,6 +47,14 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
     ...(options?.headers as Record<string, string> | undefined),
   };
 
+  // Strip Content-Type when there is no body (e.g. DELETE requests).
+  // Sending Content-Type: application/json with an empty body causes Fastify to
+  // attempt JSON parsing and return 400.
+  if (!options?.body) {
+    delete headers['Content-Type'];
+    delete headers['content-type'];
+  }
+
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
