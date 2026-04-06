@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
 import { api } from '@/lib/api';
@@ -289,9 +289,8 @@ export default function LogsPage() {
                 </tr>
               )}
               {!loading && logs.map((log) => (
-                <>
+                <Fragment key={log.id}>
                   <tr
-                    key={log.id}
                     className={`border-b border-[#2a2a40] hover:bg-[#1e1e2e] transition-colors cursor-pointer ${ROW_BG[log.level]}`}
                     onClick={() => log.metadata && toggleRow(log.id)}
                   >
@@ -337,7 +336,7 @@ export default function LogsPage() {
 
                   {/* Expanded metadata row */}
                   {expanded.has(log.id) && log.metadata && (
-                    <tr key={`${log.id}-meta`} className={`border-b border-[#2a2a40] ${ROW_BG[log.level]}`}>
+                    <tr className={`border-b border-[#2a2a40] ${ROW_BG[log.level]}`}>
                       <td colSpan={6} className="px-6 py-3">
                         <pre className="text-xs text-gray-300 bg-[#0d0d14] rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all font-mono border border-[#2a2a40]">
                           {JSON.stringify(log.metadata, null, 2)}
@@ -345,7 +344,7 @@ export default function LogsPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
