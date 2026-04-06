@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth';
 import { api } from '@/lib/api';
@@ -35,51 +35,26 @@ const STATUS_COLORS: Record<string, string> = {
 export default function EpisodesPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
-  const stationId = searchParams.get('station_id') ?? '';
   const programId = params.id;
 
   const [program, setProgram] = useState<Program | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [newAirDate, setNewAirDate] = useState('');
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     const user = getCurrentUser();
     if (!user) { router.push('/login'); return; }
 
     Promise.all([
-      api.get<Program>(`/api/v1/stations/${stationId}/programs/${programId}`),
-      api.get<Episode[]>(`/api/v1/stations/${stationId}/programs/${programId}/episodes`),
+      api.get<Program>(`/api/v1/programs/${programId}`),
+      api.get<Episode[]>(`/api/v1/programs/${programId}/episodes`),
     ]).then(([prog, eps]) => {
       setProgram(prog);
       setEpisodes(eps);
     }).catch(() => setError('Failed to load episodes'))
       .finally(() => setLoading(false));
-  }, [router, stationId, programId]);
-
-  async function handleCreateEpisode(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newAirDate) { setError('Air date is required'); return; }
-    setCreating(true);
-    setError('');
-    try {
-      const ep = await api.post<Episode>(
-        `/api/v1/stations/${stationId}/programs/${programId}/episodes`,
-        { air_date: newAirDate },
-      );
-      setEpisodes((prev) => [ep, ...prev]);
-      setShowForm(false);
-      setNewAirDate('');
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create episode');
-    } finally {
-      setCreating(false);
-    }
-  }
+  }, [router, programId]);
 
   if (loading) return <div className="p-8 text-gray-400">Loading…</div>;
   if (!program) return <div className="p-8 text-gray-400">Program not found.</div>;
@@ -93,49 +68,24 @@ export default function EpisodesPage() {
             <h1 className="text-2xl font-bold text-white">{program.name}</h1>
             <p className="text-gray-400 text-sm mt-1">Episode history and schedule</p>
           </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+          <Link
+            href="/playlists"
+            className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded font-medium transition-colors"
           >
-            + New Episode
-          </button>
+            Generate playlist →
+          </Link>
         </div>
       </div>
 
       {error && <p className="text-red-400 text-sm">{error}</p>}
 
-      {showForm && (
-        <form onSubmit={handleCreateEpisode} className="bg-gray-800 rounded-lg p-5 space-y-4 border border-gray-700">
-          <h2 className="text-lg font-semibold text-white">New Episode</h2>
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">Air Date *</label>
-            <input
-              type="date"
-              value={newAirDate}
-              onChange={(e) => setNewAirDate(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-              required
-            />
-          </div>
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={creating}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded font-medium"
-            >
-              {creating ? 'Creating…' : 'Create Episode'}
-            </button>
-            <button type="button" onClick={() => setShowForm(false)} className="text-gray-400 hover:text-white px-4 py-2 rounded">
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-
       {episodes.length === 0 ? (
         <div className="text-center py-16 text-gray-500">
           <p className="text-lg mb-2">No episodes yet</p>
-          <p className="text-sm">Create an episode to link a playlist and DJ script for a specific air date.</p>
+          <p className="text-sm">
+            Episodes are created automatically when you generate a playlist for this program&apos;s station.
+            Head to <Link href="/playlists" className="text-violet-400 hover:underline">Playlists</Link> to generate one.
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
