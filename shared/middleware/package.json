@@ -8,6 +8,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fastify/helmet": "^12.0.1",
+    "@fastify/rate-limit": "^10.2.1",
     "@playgen/types": "workspace:*",
     "jsonwebtoken": "^9.0.2"
   },

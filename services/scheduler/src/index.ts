@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
+import { registerSecurity } from '@playgen/middleware';
 import { schedulerRoutes } from './routes/scheduler';
 import { configRoutes } from './routes/config';
 import { startCron, stopCron } from './services/cronService';
@@ -16,6 +17,7 @@ const app = Fastify({
   },
 });
 
+registerSecurity(app);
 app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
 app.register(sensible);
 

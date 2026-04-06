@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import multipart from '@fastify/multipart';
+import { registerSecurity } from '@playgen/middleware';
 import { categoryRoutes } from './routes/categories';
 import { songRoutes } from './routes/songs';
 import { templateRoutes } from './routes/templates';
@@ -13,11 +14,20 @@ const app = Fastify({
       transport: { target: 'pino-pretty' },
     }),
   },
+  // 1 MB JSON body cap; multipart uploads use the multipart limits below.
+  bodyLimit: 1024 * 1024,
 });
 
+registerSecurity(app, { rateLimit: { max: 100, timeWindow: '1 minute' } });
 app.register(sensible);
 app.register(multipart, {
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: {
+    fileSize: 25 * 1024 * 1024, // 25 MB hard cap (was 50)
+    files: 1,
+    fields: 10,
+    headerPairs: 100,
+    parts: 20,
+  },
 });
 
 app.get('/health', async () => ({ status: 'ok', service: 'library-service' }));

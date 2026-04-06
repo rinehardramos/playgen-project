@@ -16,13 +16,18 @@ import { getPool } from '../db';
 
 export async function authRoutes(app: FastifyInstance) {
   app.post('/auth/login', {
+    config: {
+      // Strict per-route brute-force ceiling: 5 login attempts per IP per minute.
+      rateLimit: { max: 5, timeWindow: '1 minute' },
+    },
     schema: {
       body: {
         type: 'object',
         required: ['email', 'password'],
+        additionalProperties: false,
         properties: {
-          email: { type: 'string', format: 'email' },
-          password: { type: 'string', minLength: 1 },
+          email: { type: 'string', format: 'email', maxLength: 254 },
+          password: { type: 'string', minLength: 1, maxLength: 256 },
         },
       },
     },
@@ -81,12 +86,14 @@ export async function authRoutes(app: FastifyInstance) {
   // Password Reset
 
   app.post('/auth/forgot-password', {
+    config: { rateLimit: { max: 3, timeWindow: '1 minute' } },
     schema: {
       body: {
         type: 'object',
         required: ['email'],
+        additionalProperties: false,
         properties: {
-          email: { type: 'string', format: 'email' },
+          email: { type: 'string', format: 'email', maxLength: 254 },
         },
       },
     },
@@ -97,13 +104,15 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.post('/auth/reset-password', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     schema: {
       body: {
         type: 'object',
         required: ['token', 'password'],
+        additionalProperties: false,
         properties: {
-          token: { type: 'string', minLength: 1 },
-          password: { type: 'string', minLength: 8 },
+          token: { type: 'string', minLength: 1, maxLength: 512 },
+          password: { type: 'string', minLength: 8, maxLength: 256 },
         },
       },
     },
