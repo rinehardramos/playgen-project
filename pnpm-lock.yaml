@@ -170,6 +170,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.717.0
         version: 3.1024.0
+      '@fastify/multipart':
+        specifier: ^9.0.0
+        version: 9.4.0
       '@fastify/rate-limit':
         specifier: ^10.3.0
         version: 10.3.0

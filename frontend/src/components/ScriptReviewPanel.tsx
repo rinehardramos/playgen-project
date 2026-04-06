@@ -17,6 +17,7 @@ type DjSegmentType =
   | 'time_check'
   | 'weather_tease'
   | 'ad_break'
+  | 'adlib'
   | 'current_events'
   | 'listener_activity'
   | 'joke';

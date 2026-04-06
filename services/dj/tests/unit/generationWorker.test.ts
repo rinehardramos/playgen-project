@@ -104,7 +104,9 @@ describe('generationWorker', () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ segment_type: 'show_intro', prompt_template: 'Intro template' }],
     });
-    // 4b. Pending shoutouts (none)
+    // 4b. Pre-recorded adlib clips (none)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 4c. Pending shoutouts (none)
     mockQuery.mockResolvedValueOnce({ rows: [] });
     // 5. Script insert
     mockQuery.mockResolvedValueOnce({
@@ -174,7 +176,9 @@ describe('generationWorker', () => {
     });
     // 4. Script templates
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    // 4b. Pending shoutouts (1 shoutout)
+    // 4b. Pre-recorded adlib clips (none)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 4c. Pending shoutouts (1 shoutout)
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'shoutout-1', listener_name: 'Maria', message: 'Love the morning show!' }],
     });
@@ -209,6 +213,71 @@ describe('generationWorker', () => {
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE listener_shoutouts'),
       expect.arrayContaining([scriptId]),
+    );
+  });
+
+  it('uses a pre-recorded adlib clip when available (skips LLM for adlib)', async () => {
+    const scriptId = 'script-adlib-prerecorded';
+
+    // 1. Station
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1', openrouter_api_key: 'test-key' }],
+    });
+    // 1b. Station settings
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 2. DJ profile — set adlib_interval_songs = 1 so adlib fires at every song
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        id: 'profile-1',
+        llm_model: 'test-model',
+        llm_temperature: 0.8,
+        tts_voice_id: 'alloy',
+        persona_config: { adlib_interval_songs: 1 },
+      }],
+    });
+    // 3. Playlist entries (4 entries so adlib fires at songs 2, 3)
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        { id: 'e1', hour: 10, position: 0, song_title: 'Song 1', song_artist: 'A1', duration_sec: 180 },
+        { id: 'e2', hour: 10, position: 1, song_title: 'Song 2', song_artist: 'A2', duration_sec: 180 },
+        { id: 'e3', hour: 10, position: 2, song_title: 'Song 3', song_artist: 'A3', duration_sec: 180 },
+        { id: 'e4', hour: 10, position: 3, song_title: 'Song 4', song_artist: 'A4', duration_sec: 180 },
+      ],
+    });
+    // 4. Script templates
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 4b. Pre-recorded adlib clips (1 clip)
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'clip-1', name: 'Stay locked in!', audio_url: '/api/v1/dj/audio/adlib-clips/station-1/clip-1.mp3', audio_duration_sec: '3.5' }],
+    });
+    // 4c. Pending shoutouts (none)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 5. Script insert
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: scriptId }] });
+
+    // 6. Segment inserts (show_intro, song_intro, station_id, song_transition×3, show_outro + 2 adlibs at interval 1)
+    // The exact number varies; fall back to the default mock returning segment rows
+    mockQuery.mockResolvedValue({ rows: [{ id: 'seg-x' }] });
+
+    await runGenerationJob({
+      playlist_id: 'playlist-1',
+      station_id: 'station-1',
+      auto_approve: false,
+    });
+
+    // Verify at least one pre-recorded adlib was inserted with auto_approved status
+    const adlibCall = (mockQuery.mock.calls as unknown as Array<[string, unknown[]]>).find(
+      ([sql]) => typeof sql === 'string' && sql.includes('adlib') && sql.includes('auto_approved'),
+    );
+    expect(adlibCall).toBeDefined();
+    // Verify the LLM was NOT called for the adlib (only for other segment types)
+    const llmCallCount = mockLlmCreate.mock.calls.length;
+    // With 4 entries: show_intro, song_intro, 3× song_transition, show_outro + opening station_id = 7 LLM calls
+    // Adlibs should use pre-recorded → no extra LLM calls for 'adlib'
+    expect(llmCallCount).toBeGreaterThan(0);
+    // The adlib INSERT should include the clip audio_url
+    expect(adlibCall?.[1]).toEqual(
+      expect.arrayContaining(['/api/v1/dj/audio/adlib-clips/station-1/clip-1.mp3']),
     );
   });
 });

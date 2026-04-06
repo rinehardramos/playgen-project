@@ -99,10 +99,7 @@ function segmentsForEntry(
     types.push('time_check');
   }
 
-  // Adlib every 4 songs (not first or last)
-  if (!isFirst && !isLast && idx % 4 === 0) {
-    types.push('adlib');
-  }
+
 
   // Joke once, around 1/4 through the show
   if (idx === Math.max(1, Math.floor(total / 4))) {
@@ -313,7 +310,14 @@ export async function runGenerationJob(
     templateMap.set(t.segment_type, t.prompt_template);
   }
 
-  // 4b. Load pending listener shoutouts for this station (max 3 per script)
+  // 4b. Load pre-recorded adlib clips for this station (used to skip LLM for adlib segments)
+  interface AdlibClipRow { id: string; name: string; audio_url: string; audio_duration_sec: string | null; }
+  const { rows: adlibClips } = await pool.query<AdlibClipRow>(
+    `SELECT id, name, audio_url, audio_duration_sec FROM dj_adlib_clips WHERE station_id = $1`,
+    [data.station_id],
+  );
+
+  // 4c. Load pending listener shoutouts for this station (max 3 per script)
   interface ShoutoutRow { id: string; listener_name: string | null; message: string; }
   const { rows: pendingShoutouts } = await pool.query<ShoutoutRow>(
     `SELECT id, listener_name, message FROM listener_shoutouts
@@ -322,7 +326,7 @@ export async function runGenerationJob(
     [data.station_id],
   );
 
-  // 4c. Fetch social posts from connected Facebook/Twitter accounts (non-fatal if unavailable)
+  // 4d. Fetch social posts from connected Facebook/Twitter accounts (non-fatal if unavailable)
   interface SocialShoutout { listener_name: string | null; message: string; }
   const socialShoutouts: SocialShoutout[] = [];
   try {
@@ -416,6 +420,8 @@ export async function runGenerationJob(
   const timeCheckIntervalSec = (personaConfig.time_check_interval_minutes ?? 60) * 60;
   /** Joke style sourced from persona_config. Defaults to 'witty'. */
   const jokeStyle: string = personaConfig.joke_style ?? 'witty';
+  /** Adlib injection interval in songs (default 4). 0 = disabled. */
+  const adlibIntervalSongs = personaConfig.adlib_interval_songs ?? 4;
 
   // Collect all generated segments for variety context
   const generatedSegments: Array<{
@@ -508,12 +514,15 @@ export async function runGenerationJob(
   let lastTimeCheckAtSec = 0;
   /** Whether the opening station_id (right after first song_intro) has been inserted. */
   let openingStationIdInserted = false;
+  /** Songs processed since the last adlib injection (used to enforce adlibIntervalSongs). */
+  let songsSinceLastAdlib = 0;
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     const prev = entries[i - 1];
     const next = entries[i + 1];
     const isFirst = i === 0;
+    const isLast = i === entries.length - 1;
     const segmentTypes = segmentsForEntry(entry, entries, i);
 
     // ── Inject non-song segments BEFORE this song (not at show open) ──────────
@@ -548,6 +557,33 @@ export async function runGenerationJob(
         );
         await generateNonSongSegment('station_id');
         lastStationIdAtSec = cumulativeSec;
+      }
+
+      // adlib: inject every N songs (not first or last), when interval > 0
+      songsSinceLastAdlib++;
+      if (!isLast && adlibIntervalSongs > 0 && songsSinceLastAdlib >= adlibIntervalSongs) {
+        await reportProgress(
+          10 + Math.round((segmentsDone / totalSegmentSlots) * 80),
+          'Writing adlib…',
+        );
+        if (adlibClips.length > 0) {
+          // Use a random pre-recorded clip — skip LLM entirely
+          const clip = adlibClips[Math.floor(Math.random() * adlibClips.length)];
+          const pos = position++;
+          const durationSec = clip.audio_duration_sec != null ? parseFloat(clip.audio_duration_sec) : null;
+          await pool.query(
+            `INSERT INTO dj_segments
+               (script_id, playlist_entry_id, segment_type, position, script_text, audio_url, audio_duration_sec, segment_review_status)
+             VALUES ($1, $2, 'adlib', $3, $4, $5, $6, 'auto_approved')`,
+            [script_id, null, pos, clip.name, clip.audio_url, durationSec],
+          );
+          generatedTexts.push(clip.name);
+        } else {
+          // No pre-recorded clips — generate via LLM
+          await generateNonSongSegment('adlib');
+        }
+        songsSinceLastAdlib = 0;
+        segmentsDone++;
       }
     }
 
