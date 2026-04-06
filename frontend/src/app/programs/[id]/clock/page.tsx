@@ -208,6 +208,18 @@ export default function ShowClockEditorPage() {
 
   async function saveClock() {
     if (!current) return;
+
+    // M5: validate target_minute is in 0–59 range before saving
+    const badMinuteIdx = current.slots.findIndex(s => {
+      if (s.target_minute === '') return false;
+      const m = Number(s.target_minute);
+      return isNaN(m) || !Number.isInteger(m) || m < 0 || m > 59;
+    });
+    if (badMinuteIdx !== -1) {
+      setError(`Slot ${badMinuteIdx + 1}: target minute must be a whole number between 0 and 59.`);
+      return;
+    }
+
     setSaving(true);
     setError('');
     try {

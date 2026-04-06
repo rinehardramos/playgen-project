@@ -111,6 +111,8 @@ export default function ProgramDetailPage() {
   const [editDesc, setEditDesc] = useState('');
   const [editActive, setEditActive] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -175,9 +177,14 @@ export default function ProgramDetailPage() {
 
   async function deleteProgram() {
     if (!program || program.is_default) return;
-    if (!window.confirm(`Delete "${program.name}"? All episodes will be moved to Unassigned.`)) return;
-    await api.delete<unknown>(`/api/v1/programs/${program.id}`);
-    router.push('/programs');
+    setDeleting(true);
+    try {
+      await api.delete<unknown>(`/api/v1/programs/${program.id}`);
+      router.push('/programs');
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
   }
 
   if (loading) {
@@ -474,7 +481,7 @@ export default function ProgramDetailPage() {
           <div className="border-t border-[#2a2a40] pt-5 mt-5">
             <h3 className="text-red-400 text-sm font-medium mb-2">Danger Zone</h3>
             <button
-              onClick={deleteProgram}
+              onClick={() => setShowDeleteConfirm(true)}
               className="text-sm text-red-500 hover:text-red-400 border border-red-900/40 px-4 py-2 rounded-lg transition-colors"
             >
               Delete Program
@@ -485,6 +492,35 @@ export default function ProgramDetailPage() {
       )}
       {tab === 'settings' && program.is_default && (
         <p className="text-gray-500 text-sm">The default program cannot be edited or deleted.</p>
+      )}
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && program && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="relative bg-[#1a1a2e] border border-[#2a2a40] rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-white font-semibold mb-2">Delete &ldquo;{program.name}&rdquo;?</h3>
+            <p className="text-gray-400 text-sm mb-6">
+              All episodes will be moved to the <span className="text-gray-300">Unassigned</span> default program. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm text-gray-300 hover:text-white bg-[#12122a] hover:bg-[#1e1e3a] border border-[#2a2a40] rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteProgram}
+                disabled={deleting}
+                className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg transition-colors"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
