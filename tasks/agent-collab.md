@@ -13,10 +13,8 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
-- [ ] feat(dj): Jokes segment (issue #205, feat/issue-205-dj-jokes) | @claude-code | 2026-04-06 | Migration: 044
-- [ ] Fix DJ Script generation INTERNAL_ERROR — missing API key validation + unmasked LLM errors (issue #183, fix/issue-183) | @claude-code | 2026-04-05
-- [ ] arch: Program as higher-tier entity — programs + program_episodes (issue #210, feat/issue-210-program-entity) | @claude-code | 2026-04-06 | Migration: 034-035
-- [ ] feat(auth): real email reset + verification (issue #224, feat/issue-224-email-reset-verification) | @claude-code | 2026-04-06 | Migration: 047-048
+- [ ] docs(infra): Infrastructure Settings Registry (issue #230, feat/issue-230-infra-docs) | @claude-code | 2026-04-06
+- [ ] feat(dj): Adlib segments — pre-recorded uploads + AI-generated with TTS editing (issue #206, feat/issue-206-adlib-segments) | @claude-code | 2026-04-06 | Migration: 049
 
 ## Recently Completed
 - [x] feat(dj): Weather segment — IDataProvider types, MockWeatherAdapter, weather_tease seed (issue #207, PR #229) | @claude-code | 2026-04-06
