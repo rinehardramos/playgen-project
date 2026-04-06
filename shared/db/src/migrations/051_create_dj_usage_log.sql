@@ -30,7 +30,8 @@ CREATE TABLE dj_usage_log (
 );
 
 -- Index for the monthly usage query (GET /stations/:id/dj/usage?month=YYYY-MM)
-CREATE INDEX idx_dj_usage_log_station_month
-  ON dj_usage_log(station_id, date_trunc('month', created_at));
+-- date_trunc on TIMESTAMPTZ is STABLE not IMMUTABLE, so use a plain btree.
+CREATE INDEX idx_dj_usage_log_station_created
+  ON dj_usage_log(station_id, created_at);
 
 COMMENT ON COLUMN dj_usage_log.metadata IS 'Arbitrary key-value context stored as JSONB — e.g. segment_type for LLM rows, voice_id for TTS rows.';
