@@ -3,6 +3,7 @@ import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
+import multipart from '@fastify/multipart';
 import { config } from './config.js';
 import { profileRoutes } from './routes/profiles.js';
 import { daypartRoutes } from './routes/dayparts.js';
@@ -10,6 +11,7 @@ import { scriptTemplateRoutes } from './routes/scriptTemplates.js';
 import { scriptRoutes } from './routes/scripts.js';
 import { shoutoutRoutes } from './routes/shoutouts.js';
 import { socialAuthRoutes } from './routes/socialAuth.js';
+import { adlibClipRoutes } from './routes/adlibClips.js';
 import { closeQueue } from './queues/djQueue.js';
 import { scheduleAudioCleanup, closeCleanupQueue } from './queues/audioCleanupQueue.js';
 
@@ -24,6 +26,7 @@ const app = Fastify({
 
 app.register(sensible);
 app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
+app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 
 // ── Static file serving for TTS audio ────────────────────────────────────────
 
@@ -45,6 +48,7 @@ app.register(scriptTemplateRoutes, { prefix: '/api/v1' });
 app.register(scriptRoutes,         { prefix: '/api/v1' });
 app.register(shoutoutRoutes,       { prefix: '/api/v1' });
 app.register(socialAuthRoutes,     { prefix: '/api/v1' });
+app.register(adlibClipRoutes,     { prefix: '/api/v1' });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 

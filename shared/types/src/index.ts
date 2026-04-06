@@ -388,8 +388,7 @@ export type DjSegmentType =
   | 'adlib'
   | 'joke'
   | 'current_events'
-  | 'listener_activity'
-  | 'joke';
+  | 'listener_activity';
 
 export interface NewsHeadline {
   title: string;
@@ -406,6 +405,19 @@ export interface ListenerShoutout {
   platform: string | null;
   status: 'pending' | 'used' | 'dismissed';
   used_in_script_id: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface DjAdlibClip {
+  id: string;
+  station_id: string;
+  name: string;
+  audio_url: string;
+  tags: string[];
+  audio_duration_sec: number | null;
+  file_size_bytes: number | null;
+  original_filename: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -431,6 +443,8 @@ export interface PersonaConfig {
   time_check_interval_minutes?: number;
   /** Joke style used for joke segments. Default: 'witty'. */
   joke_style?: 'clean' | 'witty' | 'pun' | 'observational';
+  /** Every N songs an adlib segment is injected (default 4). Set to 0 to disable. */
+  adlib_interval_songs?: number;
 }
 
 export interface DjProfile {
