@@ -3,6 +3,7 @@ import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
+import { registerSecurity } from '@playgen/middleware';
 import { getStorageAdapter } from './lib/storage/index.js';
 import { config } from './config.js';
 import { profileRoutes } from './routes/profiles.js';
@@ -25,6 +26,7 @@ const app = Fastify({
   },
 });
 
+registerSecurity(app);
 app.register(sensible);
 app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
 app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });

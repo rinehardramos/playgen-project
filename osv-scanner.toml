@@ -1,0 +1,35 @@
+# OSV-Scanner ignore list — keep this file SHORT and EXPLAIN every entry.
+# Rule: every ignored advisory must have a CVSS justification + an expiry date.
+# When the expiry passes the entry expires automatically and CI re-fails until
+# someone re-evaluates and either patches or extends.
+#
+# To re-validate: `osv-scanner scan source --recursive --config osv-scanner.toml ./`
+
+[[IgnoredVulns]]
+id = "GHSA-5239-wwwm-4pmq"
+ignoreUntil = 2026-07-01
+reason = """
+Pygments 2.9.0 ReDoS — CVSS 3.3 LOW. Pulled in transitively by pytest in
+tools/task-daemon/tests/requirements-test.txt. Test-only dep, never runs in
+production. Will be addressed when tools/ migrates to uv with hash-pinned
+lockfiles in PR-7 of the security plan.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-5f7q-jpqc-wp7h"
+ignoreUntil = 2026-07-01
+reason = """
+Next.js 16.2.2 — CVSS 5.9 MEDIUM. No upstream fix available at the time of
+writing (FIXED VERSION = "--" in OSV report). Affects SSR error rendering.
+Mitigated by Vercel WAF + the fact that we run Next behind nginx with strict
+CSP on the frontend. Re-evaluate when upstream ships a patch.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-mrwq-x4v8-fh7p"
+ignoreUntil = 2026-07-01
+reason = """
+No metadata returned by OSV at scan time (likely related to the next.js
+advisory above — same package, same scan). Same justification: re-evaluate
+in July 2026.
+"""

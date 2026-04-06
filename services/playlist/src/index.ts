@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
+import { registerSecurity } from '@playgen/middleware';
 import { playlistRoutes } from './routes/playlists';
 
 const app = Fastify({
@@ -12,6 +13,7 @@ const app = Fastify({
   },
 });
 
+registerSecurity(app, { rateLimit: { max: 100, timeWindow: '1 minute' } });
 app.register(sensible);
 
 app.get('/health', async () => ({ status: 'ok', service: 'playlist-service' }));

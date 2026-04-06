@@ -8,6 +8,9 @@ concurrency:
   group: deploy-main
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   # ── Build & push Docker images to GHCR ─────────────────────────
   build-and-push:
@@ -48,17 +51,23 @@ jobs:
             dockerfile: shared/db/Dockerfile
             context: .
     steps:
-      - uses: actions/checkout@v6
+      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+        with:
+          egress-policy: audit
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          persist-credentials: false
 
-      - uses: docker/login-action@v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@v6
+      - uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6
         id: meta
         with:
           images: ghcr.io/${{ github.repository }}/${{ matrix.service }}
@@ -66,7 +75,7 @@ jobs:
             type=sha,prefix=
             type=raw,value=latest
 
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -83,11 +92,17 @@ jobs:
     needs: [build-and-push]
     environment: production
     steps:
-      - uses: actions/checkout@v6
+      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+        with:
+          egress-policy: audit
 
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
         with:
           node-version: 20
           cache: pnpm
@@ -106,11 +121,17 @@ jobs:
     needs: [build-and-push]
     environment: production
     steps:
-      - uses: actions/checkout@v6
+      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+        with:
+          egress-policy: audit
 
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
         with:
           node-version: 20
           cache: pnpm
@@ -131,7 +152,13 @@ jobs:
       matrix:
         service: [auth, station, library, scheduler, playlist, analytics, dj, gateway]
     steps:
-      - uses: actions/checkout@v6
+      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          persist-credentials: false
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli@latest --prefer-online
@@ -148,7 +175,13 @@ jobs:
     needs: [deploy-services, deploy-frontend]
     environment: production
     steps:
-      - uses: actions/checkout@v6
+      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          persist-credentials: false
 
       - name: Wait for deployments to stabilize
         run: sleep 60

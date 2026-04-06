@@ -13,6 +13,7 @@
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
     "@fastify/oauth2": "^8.0.0",
+    "@fastify/rate-limit": "^10.2.1",
     "@fastify/sensible": "^6.0.0",
     "@playgen/middleware": "workspace:*",
     "@playgen/types": "workspace:*",

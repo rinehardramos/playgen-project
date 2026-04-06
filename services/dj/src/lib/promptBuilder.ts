@@ -1,5 +1,24 @@
 import type { DjProfile, DjSegmentType, NewsHeadline, PersonaConfig } from '@playgen/types';
 import type { WeatherData, NewsItem } from '../adapters/data/index.js';
+import { sanitizeUntrusted, wrapUntrusted } from './promptGuard.js';
+
+// Per-field length caps for user-supplied content flowing into prompts.
+// Generous enough for legitimate use, hostile to payload smuggling.
+const LIMITS = {
+  name: 100,
+  personality: 1000,
+  voice_style: 500,
+  backstory: 2000,
+  catchphrase: 200,
+  greeting: 300,
+  topic: 100,
+  station_field: 200,
+  custom_template: 4000,
+  listener_name: 100,
+  listener_message: 500,
+} as const;
+
+const s = sanitizeUntrusted;
 
 export type { WeatherData, NewsItem };
 
@@ -73,12 +92,16 @@ function formalityDescription(formality: string): string {
   }
 }
 
-// Build the structured persona section from persona_config
+// Build the structured persona section from persona_config.
+// All user-supplied strings are sanitized + length-capped here so injection
+// payloads (bidi smuggling, control chars, "ignore instructions" blobs) cannot
+// reach the LLM verbatim. Free-form fields are wrapped in <untrusted> delimiters
+// so the model treats them as character data, not instructions.
 function buildPersonaSection(config: PersonaConfig): string {
   const parts: string[] = [];
 
   if (config.backstory) {
-    parts.push(`Backstory: ${config.backstory}`);
+    parts.push(`Backstory: ${wrapUntrusted('persona.backstory', config.backstory, LIMITS.backstory)}`);
   }
 
   if (config.energy_level != null) {
@@ -94,30 +117,38 @@ function buildPersonaSection(config: PersonaConfig): string {
   }
 
   if (config.catchphrases?.length) {
-    parts.push(`Occasionally use these signature phrases naturally (don't force them every time): ${config.catchphrases.map(p => `"${p}"`).join(', ')}`);
+    const safe = config.catchphrases.map((p) => `"${s(p, LIMITS.catchphrase)}"`).join(', ');
+    parts.push(`Occasionally use these signature phrases naturally (don't force them every time): ${safe}`);
   }
 
   if (config.signature_greeting) {
-    parts.push(`When opening a show, use a greeting like: "${config.signature_greeting}"`);
+    parts.push(`When opening a show, use a greeting like: "${s(config.signature_greeting, LIMITS.greeting)}"`);
   }
 
   if (config.signature_signoff) {
-    parts.push(`When closing a show, sign off with something like: "${config.signature_signoff}"`);
+    parts.push(`When closing a show, sign off with something like: "${s(config.signature_signoff, LIMITS.greeting)}"`);
   }
 
   if (config.topics_to_avoid?.length) {
-    parts.push(`NEVER discuss or reference these topics: ${config.topics_to_avoid.join(', ')}`);
+    const safe = config.topics_to_avoid.map((t) => s(t, LIMITS.topic)).join(', ');
+    parts.push(`NEVER discuss or reference these topics: ${safe}`);
   }
 
   return parts.join('\n');
 }
 
-// System prompt for the DJ persona
+// System prompt for the DJ persona.
+// User-supplied fields (name, personality, voice_style) are sanitized to strip
+// control chars / bidi codepoints / zero-width unicode. Free-form text is
+// further wrapped in <untrusted> delimiters so prompt-injection payloads are
+// treated by the LLM as character data, not directives.
 export function buildSystemPrompt(profile: DjProfile): string {
+  const safeName = s(profile.name, LIMITS.name);
   const lines: string[] = [
-    `You are ${profile.name}, a radio DJ with the following personality: ${profile.personality}`,
+    `You are ${safeName}, a radio DJ. Persona description follows in the <untrusted> block:`,
+    wrapUntrusted('persona.personality', profile.personality, LIMITS.personality),
     '',
-    `Voice style: ${profile.voice_style}`,
+    `Voice style: ${wrapUntrusted('persona.voice_style', profile.voice_style, LIMITS.voice_style)}`,
   ];
 
   // Add structured persona traits if present
@@ -216,25 +247,28 @@ function interpolate(template: string, ctx: ScriptContext): string {
     result = result.replace(/\{\{#city\}\}[\s\S]*?\{\{\/city\}\}/g, '');
   }
 
+  // Every interpolated value is user-controlled (DB-stored station/song/shoutout
+  // data). Sanitize each one to strip control chars / bidi smuggling payloads
+  // before they reach the LLM prompt.
   return result
-    .replace(/\{\{station_name\}\}/g, ctx.station_name)
-    .replace(/\{\{station_city\}\}/g, ctx.station_city ?? ctx.station_name)
+    .replace(/\{\{station_name\}\}/g, s(ctx.station_name, LIMITS.station_field))
+    .replace(/\{\{station_city\}\}/g, s(ctx.station_city ?? ctx.station_name, LIMITS.station_field))
     .replace(/\{\{current_date\}\}/g, ctx.current_date)
     .replace(/\{\{current_hour\}\}/g, String(ctx.current_hour))
     .replace(/\{\{current_time_local\}\}/g, ctx.current_time_local ?? `${ctx.current_hour}:00`)
-    .replace(/\{\{station_id_suffix\}\}/g, stationIdSuffix)
-    .replace(/\{\{callsign\}\}/g, ctx.station_identity?.callsign ?? '')
-    .replace(/\{\{tagline\}\}/g, ctx.station_identity?.tagline ?? '')
-    .replace(/\{\{frequency\}\}/g, ctx.station_identity?.frequency ?? '')
-    .replace(/\{\{city\}\}/g, city)
-    .replace(/\{\{dj_name\}\}/g, ctx.dj_profile.name)
-    .replace(/\{\{joke_style\}\}/g, jokeStyle)
-    .replace(/\{\{prev_song_title\}\}/g, ctx.prev_song?.title ?? '')
-    .replace(/\{\{prev_song_artist\}\}/g, ctx.prev_song?.artist ?? '')
-    .replace(/\{\{next_song_title\}\}/g, ctx.next_song?.title ?? '')
-    .replace(/\{\{next_song_artist\}\}/g, ctx.next_song?.artist ?? '')
-    .replace(/\{\{listener_name\}\}/g, ctx.shoutout?.listener_name ?? 'a listener')
-    .replace(/\{\{listener_message\}\}/g, ctx.shoutout?.listener_message ?? '')
+    .replace(/\{\{station_id_suffix\}\}/g, s(stationIdSuffix, LIMITS.station_field))
+    .replace(/\{\{callsign\}\}/g, s(ctx.station_identity?.callsign, LIMITS.station_field))
+    .replace(/\{\{tagline\}\}/g, s(ctx.station_identity?.tagline, LIMITS.station_field))
+    .replace(/\{\{frequency\}\}/g, s(ctx.station_identity?.frequency, LIMITS.station_field))
+    .replace(/\{\{city\}\}/g, s(city, LIMITS.station_field))
+    .replace(/\{\{dj_name\}\}/g, s(ctx.dj_profile.name, LIMITS.name))
+    .replace(/\{\{joke_style\}\}/g, s(jokeStyle, LIMITS.topic))
+    .replace(/\{\{prev_song_title\}\}/g, s(ctx.prev_song?.title, LIMITS.station_field))
+    .replace(/\{\{prev_song_artist\}\}/g, s(ctx.prev_song?.artist, LIMITS.station_field))
+    .replace(/\{\{next_song_title\}\}/g, s(ctx.next_song?.title, LIMITS.station_field))
+    .replace(/\{\{next_song_artist\}\}/g, s(ctx.next_song?.artist, LIMITS.station_field))
+    .replace(/\{\{listener_name\}\}/g, s(ctx.shoutout?.listener_name, LIMITS.listener_name) || 'a listener')
+    .replace(/\{\{listener_message\}\}/g, s(ctx.shoutout?.listener_message, LIMITS.listener_message))
     .replace(
       /\{\{news_headlines\}\}/g,
       ctx.news_headlines?.length
@@ -249,7 +283,13 @@ function interpolate(template: string, ctx: ScriptContext): string {
 }
 
 export function buildUserPrompt(ctx: ScriptContext): string {
-  const template = ctx.custom_template ?? SEGMENT_DEFAULTS[ctx.segment_type];
+  // custom_template is the highest-risk field — it is free-form text supplied
+  // per-station and gets interpolated into the user message. Sanitize +
+  // length-cap before interpolation; the {{vars}} replacements above are
+  // already individually sanitized.
+  const template = ctx.custom_template
+    ? sanitizeUntrusted(ctx.custom_template, LIMITS.custom_template)
+    : SEGMENT_DEFAULTS[ctx.segment_type];
   let prompt = interpolate(template, ctx);
 
   // Append the last few generated segment texts so the LLM avoids repetition.

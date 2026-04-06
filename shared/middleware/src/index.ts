@@ -2,6 +2,8 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import jwt from 'jsonwebtoken';
 import type { JwtPayload, SubscriptionTier, TierFeature } from '@playgen/types';
 
+export { registerSecurity, type SecurityOptions } from './security';
+
 const ACCESS_SECRET = () =>
   process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret-change-in-prod';
 
