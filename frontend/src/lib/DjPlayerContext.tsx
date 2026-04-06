@@ -17,6 +17,8 @@ interface DjPlayerState {
   progress: number; // 0–1
   volume: number; // 0–1
   queue: DjPlayerSegment[];
+  /** Set whenever a segment fails to load (e.g. 404). Consumers can clear stale audio_url. */
+  lastErrorSegmentId: string | null;
   playSegment: (seg: DjPlayerSegment) => void;
   playQueue: (segments: DjPlayerSegment[]) => void;
   pause: () => void;
@@ -34,6 +36,7 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
   const [progress, setProgress] = useState(0);
   const [volume, setVolumeState] = useState(1);
   const [queue, setQueue] = useState<DjPlayerSegment[]>([]);
+  const [lastErrorSegmentId, setLastErrorSegmentId] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const queueRef = useRef<DjPlayerSegment[]>([]);
@@ -84,8 +87,8 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
       }
     };
     audio.onended = () => playNext();
-    audio.onerror = () => playNext();
-    audio.play().catch(() => playNext());
+    audio.onerror = () => { setLastErrorSegmentId(next.id); playNext(); };
+    audio.play().catch(() => { setLastErrorSegmentId(next.id); playNext(); });
   }, []);
 
   const playSegment = useCallback((seg: DjPlayerSegment) => {
@@ -111,8 +114,9 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
     };
     audio.onerror = () => {
       setIsPlaying(false);
+      setLastErrorSegmentId(seg.id);
     };
-    audio.play().catch(() => setIsPlaying(false));
+    audio.play().catch(() => { setIsPlaying(false); setLastErrorSegmentId(seg.id); });
   }, [stopCurrent]);
 
   const playQueue = useCallback((segments: DjPlayerSegment[]) => {
@@ -135,8 +139,8 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
       }
     };
     audio.onended = () => playNext();
-    audio.onerror = () => playNext();
-    audio.play().catch(() => playNext());
+    audio.onerror = () => { setLastErrorSegmentId(first.id); playNext(); };
+    audio.play().catch(() => { setLastErrorSegmentId(first.id); playNext(); });
   }, [stopCurrent, playNext]);
 
   const pause = useCallback(() => {
@@ -172,6 +176,7 @@ export function DjPlayerProvider({ children }: { children: React.ReactNode }) {
       progress,
       volume,
       queue,
+      lastErrorSegmentId,
       playSegment,
       playQueue,
       pause,

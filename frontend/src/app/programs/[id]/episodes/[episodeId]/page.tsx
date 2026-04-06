@@ -247,10 +247,32 @@ export default function EpisodeDetailPage() {
   const [editTitle, setEditTitle] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
 
+  const djPlayer = useDjPlayer();
+
   useEffect(() => {
     const user = getCurrentUser();
     if (!user) { router.push('/login'); return; }
   }, [router]);
+
+  // When the global DJ player fails to load a segment (404), clear its audio_url
+  // so the UI reverts to the "Generate TTS" button.
+  useEffect(() => {
+    const failedId = djPlayer.lastErrorSegmentId;
+    if (!failedId || !script) return;
+    const seg = script.segments.find((s) => s.id === failedId);
+    if (seg?.audio_url) {
+      setScript((prev) =>
+        prev
+          ? {
+              ...prev,
+              segments: prev.segments.map((s) =>
+                s.id === failedId ? { ...s, audio_url: null, audio_duration_sec: null } : s,
+              ),
+            }
+          : prev,
+      );
+    }
+  }, [djPlayer.lastErrorSegmentId, script]);
 
   const load = useCallback(async () => {
     setLoading(true);

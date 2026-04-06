@@ -1,9 +1,9 @@
 import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
-import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
+import { getStorageAdapter } from './lib/storage/index.js';
 import { config } from './config.js';
 import { profileRoutes } from './routes/profiles.js';
 import { daypartRoutes } from './routes/dayparts.js';
@@ -29,12 +29,23 @@ app.register(sensible);
 app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
 app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 
-// ── Static file serving for TTS audio ────────────────────────────────────────
+// ── Audio file serving (reads through storage adapter — works with local + S3) ─
 
-app.register(fastifyStatic, {
-  root: config.storage.localPath,
-  prefix: '/api/v1/dj/audio/',
-  decorateReply: false,
+app.get('/api/v1/dj/audio/*', async (req, reply) => {
+  const prefix = '/api/v1/dj/audio/';
+  const relativePath = decodeURIComponent(req.url.slice(prefix.length));
+  if (!relativePath) return reply.notFound('Missing audio path');
+
+  const storage = getStorageAdapter();
+  try {
+    const buffer = await storage.read(relativePath);
+    return reply
+      .header('Content-Type', 'audio/mpeg')
+      .header('Cache-Control', 'public, max-age=86400')
+      .send(buffer);
+  } catch {
+    return reply.notFound('Audio file not found');
+  }
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────
