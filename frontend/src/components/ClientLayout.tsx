@@ -9,6 +9,14 @@ import { getCurrentUser } from '@/lib/auth';
 
 const NAV_LINKS = [
   {
+    href: '/today', label: 'Today',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    ),
+  },
+  {
     href: '/dashboard', label: 'Dashboard',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -49,7 +57,7 @@ const NAV_LINKS = [
     ),
   },
   {
-    href: '/playlists', label: 'Playlists',
+    href: '/playlists', label: 'Logs',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10"/>

@@ -288,7 +288,10 @@ export default function PlaylistsPage() {
     <div className="p-6 md:p-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl md:text-2xl font-bold text-white">Playlists</h1>
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold text-white">Station Logs</h1>
+          <p className="text-gray-500 text-xs mt-0.5">Daily airtime logs · one per station per day</p>
+        </div>
         <button
           onClick={handleGenerateMonth}
           disabled={!selectedStation || generating}
