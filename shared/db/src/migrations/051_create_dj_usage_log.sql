@@ -32,3 +32,5 @@ CREATE TABLE dj_usage_log (
 -- Index for the monthly usage query (GET /stations/:id/dj/usage?month=YYYY-MM)
 CREATE INDEX idx_dj_usage_log_station_month
   ON dj_usage_log(station_id, date_trunc('month', created_at));
+
+COMMENT ON COLUMN dj_usage_log.metadata IS 'Arbitrary key-value context stored as JSONB — e.g. segment_type for LLM rows, voice_id for TTS rows.';
