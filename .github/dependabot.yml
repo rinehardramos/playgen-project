@@ -108,3 +108,71 @@ updates:
     labels:
       - "dependencies"
       - "ci"
+      - "security"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Python tools (knowledge-base / task-daemon / agent-ops / tg-agent)
+  - package-ecosystem: "pip"
+    directory: "/tools/knowledge-base"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "python", "security"]
+  - package-ecosystem: "pip"
+    directory: "/tools/task-daemon"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "python", "security"]
+  - package-ecosystem: "pip"
+    directory: "/tools/agent-ops"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "python", "security"]
+  - package-ecosystem: "pip"
+    directory: "/tools/tg-agent"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "python", "security"]
+
+  # Docker base images (one entry per Dockerfile-bearing dir)
+  - package-ecosystem: "docker"
+    directory: "/services/auth"
+    schedule: { interval: "weekly", day: "monday" }
+    labels: ["dependencies", "docker", "security"]
+  - package-ecosystem: "docker"
+    directory: "/services/station"
+    schedule: { interval: "weekly", day: "monday" }
+    labels: ["dependencies", "docker", "security"]
+  - package-ecosystem: "docker"
+    directory: "/services/library"
+    schedule: { interval: "weekly", day: "monday" }
+    labels: ["dependencies", "docker", "security"]
+  - package-ecosystem: "docker"
+    directory: "/services/scheduler"
+    schedule: { interval: "weekly", day: "monday" }
+    labels: ["dependencies", "docker", "security"]
+  - package-ecosystem: "docker"
+    directory: "/services/playlist"
+    schedule: { interval: "weekly", day: "monday" }
+    labels: ["dependencies", "docker", "security"]
+  - package-ecosystem: "docker"
+    directory: "/services/analytics"
+    schedule: { interval: "weekly", day: "monday" }
+    labels: ["dependencies", "docker", "security"]
+  - package-ecosystem: "docker"
+    directory: "/services/dj"
+    schedule: { interval: "weekly", day: "monday" }
+    labels: ["dependencies", "docker", "security"]
+  - package-ecosystem: "docker"
+    directory: "/gateway"
+    schedule: { interval: "weekly", day: "monday" }
+    labels: ["dependencies", "docker", "security"]
+  - package-ecosystem: "docker"
+    directory: "/shared/db"
+    schedule: { interval: "weekly", day: "monday" }
+    labels: ["dependencies", "docker", "security"]
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule: { interval: "weekly", day: "monday" }
+    labels: ["dependencies", "docker", "security"]
