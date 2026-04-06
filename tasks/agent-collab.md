@@ -13,7 +13,6 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
-- [ ] feat(dj): Cost tracking, rate limiting, and default template seeding (issue #26, feat/issue-26-cost-tracking) | @claude-code | 2026-04-06 | Migration: 051
 - [ ] feat: Program Preview full-page route (issue #190, feat/issue-190-program-preview-page) | @claude-code | 2026-04-06
 - [ ] feat(dj): Jokes segment (issue #205, feat/issue-205-dj-jokes) | @claude-code | 2026-04-06 | Migration: 044
 - [ ] Fix DJ Script generation INTERNAL_ERROR — missing API key validation + unmasked LLM errors (issue #183, fix/issue-183) | @claude-code | 2026-04-05
@@ -23,6 +22,7 @@ Before starting any task, an agent MUST:
 ## Recently Completed
 - [x] feat(station): System Logs page — audit trail (issue #197, PR #236) | @claude-code | 2026-04-06 | Migration: 050
 - [x] feat(dj): Adlib segments — pre-recorded clip library + AI-generated + configurable interval (issue #206, PR #232) | @claude-code | 2026-04-06 | Migration: 049
+- [x] feat(dj): Cost tracking, rate limiting, and default template seeding (issue #26, PR #238) | @claude-code | 2026-04-06 | Migration: 051
 - [x] docs(infra): Infrastructure Settings Registry (issue #230, PR #231) | @claude-code | 2026-04-06
 - [x] feat(dj): Facebook + Twitter/X social adapters for listener shoutouts (issues #211, #212, PR #225) | @claude-code | 2026-04-06 | Migrations: 040, 041
 - [x] feat(dj): Weather segment — IDataProvider types, MockWeatherAdapter, weather_tease seed (issue #207, PR #229) | @claude-code | 2026-04-06
