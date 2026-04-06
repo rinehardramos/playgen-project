@@ -12,7 +12,7 @@ check() {
   local name="$1"
   local url="$2"
   local status
-  status=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null || echo "000")
+  status=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null) || status="000"
   echo "$status"
 }
 

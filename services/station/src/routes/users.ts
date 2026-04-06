@@ -72,11 +72,6 @@ export async function userRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
-  app.get('/companies/:id/roles', { onRequest: [requirePermission('users:read')] }, async (req) => {
-    const { id } = req.params as { id: string };
-    return userService.listRoles(id);
-  });
-
   // ─── Invites ────────────────────────────────────────────────────────────────
 
   app.post('/companies/:id/invites', { onRequest: [requirePermission('users:write')] }, async (req, reply) => {
