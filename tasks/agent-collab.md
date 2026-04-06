@@ -13,7 +13,6 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
-- [x] fix: Auth/Station crash-loops on Railway (issue #235, fix/issue-235-crash-loops) | @claude-code | 2026-04-06
 - [ ] feat(dj): Cost tracking, rate limiting, and default template seeding (issue #26, feat/issue-26-cost-tracking) | @claude-code | 2026-04-06 | Migration: 051
 - [ ] feat: Program Preview full-page route (issue #190, feat/issue-190-program-preview-page) | @claude-code | 2026-04-06
 - [ ] feat(dj): Jokes segment (issue #205, feat/issue-205-dj-jokes) | @claude-code | 2026-04-06 | Migration: 044
@@ -22,6 +21,7 @@ Before starting any task, an agent MUST:
 - [ ] feat(auth): real email reset + verification (issue #224, feat/issue-224-email-reset-verification) | @claude-code | 2026-04-06 | Migration: 047-048
 
 ## Recently Completed
+- [x] feat(dj): Streaming output adapter interface — IcecastAdapter stub + unit tests (issue #27, feat/issue-27-streaming-adapter) | @claude-code | 2026-04-06
 - [x] feat(station): System Logs page — audit trail (issue #197, PR #236) | @claude-code | 2026-04-06 | Migration: 050
 - [x] feat(dj): Adlib segments — pre-recorded clip library + AI-generated + configurable interval (issue #206, PR #232) | @claude-code | 2026-04-06 | Migration: 049
 - [x] docs(infra): Infrastructure Settings Registry (issue #230, PR #231) | @claude-code | 2026-04-06
