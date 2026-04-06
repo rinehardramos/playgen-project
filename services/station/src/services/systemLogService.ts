@@ -108,13 +108,16 @@ export async function listLogs(pool: Pool, opts: ListLogsOptions): Promise<LogsP
   };
 }
 
-/** Purge logs older than 90 days — call from a scheduled job or maintenance endpoint. */
-export async function purgeOldLogs(pool: Pool): Promise<number> {
+/** Purge logs older than 90 days for a specific company.
+ *  Scoped to company_id to prevent cross-tenant data deletion. */
+export async function purgeOldLogs(pool: Pool, companyId: string): Promise<number> {
   const result = await pool.query<{ count: string }>(
     `WITH deleted AS (
-       DELETE FROM system_logs WHERE created_at < NOW() - INTERVAL '90 days'
+       DELETE FROM system_logs
+       WHERE company_id = $1 AND created_at < NOW() - INTERVAL '90 days'
        RETURNING id
      ) SELECT COUNT(*) AS count FROM deleted`,
+    [companyId],
   );
   return parseInt(result.rows[0].count, 10);
 }

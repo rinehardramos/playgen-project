@@ -13,6 +13,8 @@ CREATE TABLE system_logs (
   metadata    JSONB
 );
 
+COMMENT ON COLUMN system_logs.metadata IS 'Arbitrary key/value bag for structured context: e.g. { "script_id": "...", "error": "...", "duration_ms": 123 }. Shape varies per category.';
+
 -- Primary query index: company logs newest-first
 CREATE INDEX idx_system_logs_company_created ON system_logs(company_id, created_at DESC);
 

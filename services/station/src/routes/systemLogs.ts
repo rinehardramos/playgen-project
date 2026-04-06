@@ -58,12 +58,13 @@ export async function systemLogRoutes(app: FastifyInstance) {
 
   /**
    * POST /api/v1/companies/:id/logs/purge
-   * Manually trigger 90-day log retention purge. Admin only.
+   * Manually trigger 90-day log retention purge for this company only.
    */
   app.post('/companies/:id/logs/purge', {
     onRequest: [requirePermission('company:write')],
-  }, async (_req, reply) => {
-    const deleted = await purgeOldLogs(getPool());
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const deleted = await purgeOldLogs(getPool(), id);
     return reply.code(200).send({ deleted });
   });
 }
