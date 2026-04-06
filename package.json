@@ -7,6 +7,7 @@
     "test:unit": "pnpm -r --if-present run test:unit",
     "test:integration": "pnpm -r --if-present run test:integration",
     "test:all": "pnpm run test:unit && pnpm run test:integration",
+    "test:e2e:programs": "node e2e/programs-journey.mjs",
     "build": "pnpm -r --if-present run build",
     "lint": "eslint 'services/**/*.ts' 'shared/**/*.ts'",
     "typecheck": "pnpm -r --if-present run build",

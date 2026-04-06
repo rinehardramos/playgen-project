@@ -41,4 +41,6 @@ FROM playlists pl
 JOIN programs p
     ON p.station_id = pl.station_id
     AND p.is_default = TRUE
-ON CONFLICT (playlist_id) DO NOTHING;
+WHERE NOT EXISTS (
+    SELECT 1 FROM program_episodes pe WHERE pe.playlist_id = pl.id
+);

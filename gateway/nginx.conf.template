@@ -135,6 +135,15 @@ server {
         proxy_set_header X-Request-ID $request_id;
     }
 
+    # ─── Station: top-level program / clock / episode routes ──────
+    location ~ ^/api/v1/(programs|program-episodes)(/|$) {
+        set $svc http://${STATION_HOST}:3002;
+        proxy_pass $svc;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Request-ID $request_id;
+    }
+
     # ─── Library: resource-level routes ──────────────────────────
     location ~ ^/api/v1/(songs|categories)/ {
         set $svc http://${LIBRARY_HOST}:3003;
