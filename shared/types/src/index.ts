@@ -694,6 +694,31 @@ export interface CreateEpisodeRequest {
   notes?: string;
 }
 
+// ─── System Logs ─────────────────────────────────────────────────────────────
+
+export type SystemLogLevel = 'info' | 'warn' | 'error';
+
+export type SystemLogCategory = 'dj' | 'tts' | 'review' | 'config' | 'playlist' | 'auth' | 'system';
+
+export interface SystemLogEntry {
+  id: string;
+  created_at: string;
+  level: SystemLogLevel;
+  category: SystemLogCategory;
+  company_id: string | null;
+  station_id: string | null;
+  user_id: string | null;
+  message: string;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface SystemLogsResponse {
+  data: SystemLogEntry[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
 // ─── API Responses ────────────────────────────────────────────────────────────
 
 export interface ApiError {

@@ -9,6 +9,7 @@ import { userRoutes } from './routes/users';
 import { roleRoutes } from './routes/roles';
 import { subscriptionRoutes } from './routes/subscriptions';
 import { programRoutes } from './routes/programs';
+import { systemLogRoutes } from './routes/systemLogs';
 
 const app = Fastify({
   logger: {
@@ -31,6 +32,7 @@ app.register(userRoutes,           { prefix: '/api/v1' });
 app.register(roleRoutes,           { prefix: '/api/v1' });
 app.register(subscriptionRoutes,   { prefix: '/api/v1' });
 app.register(programRoutes,        { prefix: '/api/v1' });
+app.register(systemLogRoutes,      { prefix: '/api/v1' });
 
 app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);
