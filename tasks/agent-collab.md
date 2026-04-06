@@ -13,6 +13,7 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
+- [x] fix(db): migration 026 idempotent DO block + migration 044 ON CONFLICT→WHERE NOT EXISTS (issues #254, #255, fix/issue-254-255-migration-bugs) | @claude-code | 2026-04-06
 - [ ] feat(dj): Cost tracking, rate limiting, and default template seeding (issue #26, feat/issue-26-cost-tracking) | @claude-code | 2026-04-06 | Migration: 051
 - [ ] feat: Program Preview full-page route (issue #190, feat/issue-190-program-preview-page) | @claude-code | 2026-04-06
 - [ ] feat(dj): Jokes segment (issue #205, feat/issue-205-dj-jokes) | @claude-code | 2026-04-06 | Migration: 044
