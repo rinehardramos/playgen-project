@@ -127,7 +127,7 @@ jobs:
             -o sbom.cdx.json \
             ./
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
           name: sbom-cyclonedx
           path: sbom.cdx.json
@@ -181,7 +181,7 @@ jobs:
       - name: Run audit
         run: pnpm audit --audit-level=moderate --json > audit-report.json || true
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
           name: audit-report
           path: audit-report.json
