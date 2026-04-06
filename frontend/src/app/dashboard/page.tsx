@@ -39,6 +39,12 @@ export default function DashboardPage() {
       return;
     }
 
+    loadStats();
+  }, [router]);
+
+  function loadStats() {
+    setLoading(true);
+    setError(null);
     api
       .get<DashboardStats>('/api/v1/dashboard/stats')
       .then((data) => setStats(data))
@@ -47,11 +53,13 @@ export default function DashboardPage() {
         if (err.status === 404) {
           setStats({ active_songs: 0, todays_playlists: 0, pending_approvals: 0, active_stations: 0 });
         } else {
-          setError(err.message ?? 'Failed to load stats');
+          // Graceful degradation: tasteful inline message, not raw gateway text
+          setError('Stats unavailable right now — please try again.');
+          setStats(null);
         }
       })
       .finally(() => setLoading(false));
-  }, [router]);
+  }
 
   if (!mounted || !user) return null;
 
@@ -92,10 +100,16 @@ export default function DashboardPage() {
         <p className="text-sm text-gray-400 mt-1">Here&apos;s an overview of your station activity.</p>
       </div>
 
-      {/* Error state */}
+      {/* Error state — graceful degradation with retry */}
       {error && (
-        <div className="mb-6 rounded-md bg-red-900/30 border border-red-700/50 px-4 py-3">
-          <p className="text-sm text-red-400">{error}</p>
+        <div className="mb-6 flex items-center justify-between gap-4 rounded-md bg-[#1c1c28] border border-[#2a2a40] px-4 py-3">
+          <p className="text-sm text-gray-400">{error}</p>
+          <button
+            onClick={loadStats}
+            className="text-xs font-medium text-violet-400 hover:text-violet-300 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       )}
 
