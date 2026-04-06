@@ -13,6 +13,8 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Active Work
+- [x] feat(dj): Streaming output adapter interface — IcecastAdapter stub (issue #27, feat/issue-27-streaming-adapter) | @claude-code | 2026-04-06
+- [x] docs: User Manual — Playlist section (issue #194, feat/issue-27-streaming-adapter) | @claude-code | 2026-04-06
 - [x] fix: Auth/Station crash-loops on Railway (issue #235, fix/issue-235-crash-loops) | @claude-code | 2026-04-06
 - [ ] feat(dj): Cost tracking, rate limiting, and default template seeding (issue #26, feat/issue-26-cost-tracking) | @claude-code | 2026-04-06 | Migration: 051
 - [ ] feat: Program Preview full-page route (issue #190, feat/issue-190-program-preview-page) | @claude-code | 2026-04-06
