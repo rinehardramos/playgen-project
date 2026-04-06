@@ -19,6 +19,7 @@ Before starting any task, an agent MUST:
 - [ ] feat(auth): real email reset + verification (issue #224, feat/issue-224-email-reset-verification) | @claude-code | 2026-04-06 | Migration: 047-048
 
 ## Recently Completed
+- [x] feat(dj): Facebook + Twitter/X social adapters for listener shoutouts (issues #211, #212, PR #225) | @claude-code | 2026-04-06 | Migrations: 040, 041
 - [x] feat(dj): Weather segment — IDataProvider types, MockWeatherAdapter, weather_tease seed (issue #207, PR #229) | @claude-code | 2026-04-06
 - [x] feat(dj): Time Check segment — localized time_check injection (issue #203, feat/issue-203-204-dj-segments) | @claude-code | 2026-04-06
 - [x] feat(dj): Station ID segment — callsign/tagline/frequency injection (issue #204, feat/issue-203-204-dj-segments) | @claude-code | 2026-04-06
