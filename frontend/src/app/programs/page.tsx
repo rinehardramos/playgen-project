@@ -37,7 +37,9 @@ const PROGRAM_COLORS = [
 ];
 
 function formatHour(h: number): string {
-  if (h === 0 || h === 24) return '12:00 AM';
+  // M4: differentiate midnight (hour 0) from end-of-day (hour 24)
+  if (h === 0) return '12:00 AM';
+  if (h === 24) return '12:00 AM+1';
   if (h === 12) return '12:00 PM';
   return h < 12 ? `${h}:00 AM` : `${h - 12}:00 PM`;
 }
@@ -197,6 +199,9 @@ export default function ProgramsPage() {
           <h3 className="text-white font-semibold mb-2">No programs yet</h3>
           <p className="text-gray-500 text-sm mb-6 max-w-sm mx-auto">
             Programs organise your daily shows (Morning Rush, Afternoon Drive) and link music templates with DJ scripts via a Show Clock.
+            {stations.length === 0 && (
+              <> You&apos;ll need a <Link href="/stations" className="text-violet-400 hover:underline">station</Link> first.</>
+            )}
           </p>
           <Link
             href="/programs/new"
