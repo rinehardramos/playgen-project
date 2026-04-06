@@ -474,14 +474,20 @@ export default function ShowClockEditorPage() {
               )}
             </div>
 
-            {/* Target minute */}
+            {/* Target minute (clamped 0-59) */}
             <div className="bg-[#1a1a2e] px-2 py-1.5">
               <input
                 type="number"
                 min={0}
                 max={59}
                 value={slot.target_minute}
-                onChange={e => updateSlot(i, 'target_minute', e.target.value)}
+                onChange={e => {
+                  const raw = e.target.value;
+                  if (raw === '') { updateSlot(i, 'target_minute', ''); return; }
+                  const n = Number(raw);
+                  if (Number.isNaN(n)) return;
+                  updateSlot(i, 'target_minute', String(Math.max(0, Math.min(59, Math.trunc(n)))));
+                }}
                 placeholder="—"
                 className="w-full bg-transparent text-gray-300 text-xs focus:outline-none placeholder-gray-700"
               />

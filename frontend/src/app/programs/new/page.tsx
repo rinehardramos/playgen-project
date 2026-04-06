@@ -34,6 +34,9 @@ function formatHour(h: number): string {
   return h < 12 ? `${h}:00 AM` : `${h - 12}:00 PM`;
 }
 
+const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+const WEEKEND  = ['saturday', 'sunday'];
+
 const HOURS = Array.from({ length: 25 }, (_, i) => i);
 
 export default function NewProgramPage() {
@@ -193,7 +196,16 @@ export default function NewProgramPage() {
 
         {/* Active Days */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1.5">Airs On</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-sm font-medium text-gray-400">Airs On</label>
+            <div className="flex gap-1 text-xs">
+              <button type="button" onClick={() => setActiveDays(WEEKDAYS)} className="text-gray-500 hover:text-violet-400 px-1.5 py-0.5">Weekdays</button>
+              <span className="text-gray-700">·</span>
+              <button type="button" onClick={() => setActiveDays(WEEKEND)} className="text-gray-500 hover:text-violet-400 px-1.5 py-0.5">Weekend</button>
+              <span className="text-gray-700">·</span>
+              <button type="button" onClick={() => setActiveDays(ALL_DAYS)} className="text-gray-500 hover:text-violet-400 px-1.5 py-0.5">All</button>
+            </div>
+          </div>
           <div className="flex gap-2">
             {ALL_DAYS.map(day => (
               <button
