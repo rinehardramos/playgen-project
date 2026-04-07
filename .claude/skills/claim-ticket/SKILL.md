@@ -1,6 +1,6 @@
 ---
 name: claim-ticket
-description: Coordinate work between agents on the shared PlayGen repo. Use BEFORE starting any GitHub issue/ticket, claiming work, or opening a branch; also before merging a PR that touches shared/db/migrations/. Reads tasks/agent-collab.md for Active Work, Migration Reservation, and mandates.
+description: Use before starting a PlayGen ticket, claiming work, opening a branch, or merging PRs that touch shared/db/migrations/. Reads tasks/agent-collab.md.
 allowed-tools: Read Edit Bash
 ---
 

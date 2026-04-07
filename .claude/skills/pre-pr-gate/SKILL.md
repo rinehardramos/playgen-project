@@ -1,6 +1,6 @@
 ---
 name: pre-pr-gate
-description: Mandatory local gate before any `git push`, PR creation, or merge in the PlayGen monorepo. Runs typecheck + lint + unit tests 1:1 with GitHub Actions, verifies Dockerfile/workspace-dep sync when relevant, and monitors CI/CD after push. Use BEFORE every push or PR.
+description: Run before every `git push`, PR, or merge in PlayGen. pnpm typecheck + lint + test:unit, verifies Dockerfile/workspace-dep sync, monitors CI.
 allowed-tools: Bash Read
 ---
 
