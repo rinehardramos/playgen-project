@@ -7,7 +7,9 @@ dist/
 coverage/
 .nyc_output/
 .next/
-.claude/
+.claude/*
+!.claude/skills/
+.claude/settings.local.json
 memory/
 *.tsbuildinfo
 *.pyc
