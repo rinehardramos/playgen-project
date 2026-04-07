@@ -1,6 +1,6 @@
 ---
 name: agent-ops
-description: Protocols for PlayGen agents spawned by the daemon pool. Use when operating as a daemon-spawned agent (ticket-worker, merge-agent, PM), hitting a Claude Code rate limit mid-session, resolving a complex bug worth persisting to L2 memory, or sending a Telegram report. Covers checkpoints, rate-limit graceful degradation, L2 Qdrant memory, and Telegram-via-file.
+description: Use when running as a PlayGen daemon-spawned agent, hitting a Claude Code rate limit, sending a Telegram report, or persisting a fix to L2 Qdrant memory. Covers checkpoints + degradation.
 allowed-tools: Bash Read Write Edit
 ---
 

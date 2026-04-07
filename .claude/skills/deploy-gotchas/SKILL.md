@@ -1,6 +1,6 @@
 ---
 name: deploy-gotchas
-description: Load-bearing deployment rules and past incident fixes for PlayGen. Use BEFORE touching Dockerfiles, nginx gateway config, Railway deploys, `@fastify/rate-limit` or other Fastify plugins, LLM/embedding integrations, the DJ script→TTS pipeline, or GitHub Projects V2 automation.
+description: Use before touching PlayGen Dockerfiles, nginx gateway, Railway, @fastify/rate-limit or Fastify plugins, LLM/embedding integrations, or the DJ→TTS pipeline. Past incident fixes.
 allowed-tools: Read Bash
 ---
 
