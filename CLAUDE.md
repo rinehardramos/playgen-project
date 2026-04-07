@@ -14,7 +14,6 @@
 ## Skills (invoke by trigger)
 - **`/pre-pr-gate`** — MANDATORY before every `git push`, PR, or merge. Runs typecheck/lint/tests, verifies Dockerfile sync, monitors CI.
 - **`/claim-ticket`** — before starting any GitHub issue or touching `shared/db/migrations/`. Reads `tasks/agent-collab.md` for Active Work and Migration Reservation.
-- **`/review-pr <n>`** — staff-level PR review, local checks, merge or request changes.
 - **`/deploy-gotchas`** — before touching Dockerfiles, nginx gateway, Fastify plugins, LLM adapters, or the DJ pipeline. Load-bearing incident fixes.
 - **`/agent-ops`** — when running as a daemon-spawned agent, hitting a rate limit, or needing Telegram/checkpoint/L2-memory protocols.
 
