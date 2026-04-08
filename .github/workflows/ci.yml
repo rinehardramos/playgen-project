@@ -17,7 +17,7 @@ jobs:
     name: Lint, Typecheck & Unit Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+      - uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
         with:
           egress-policy: audit
 
@@ -25,7 +25,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5.0.0
 
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
         with:
@@ -41,7 +41,7 @@ jobs:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+      - uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
         with:
           egress-policy: audit
 
@@ -49,7 +49,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5.0.0
 
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
         with:
@@ -62,7 +62,7 @@ jobs:
         run: pnpm audit --audit-level=high
 
       - name: Secret scanning
-        uses: trufflesecurity/trufflehog@0f58ae7c5036094a1e3e750d18772af92821b503  # v3.90.5
+        uses: trufflesecurity/trufflehog@6bd2d14f7a4bc1e569fa3550efa7ec632a4fa67b  # v3.94.2
         with:
           extra_args: --only-verified
 
@@ -104,7 +104,7 @@ jobs:
             dockerfile: frontend/Dockerfile
             context: ./frontend
     steps:
-      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+      - uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
         with:
           egress-policy: audit
 
@@ -112,7 +112,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
 
       - uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7
         with:

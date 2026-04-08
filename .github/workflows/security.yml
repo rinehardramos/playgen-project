@@ -16,7 +16,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+      - uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
         with:
           egress-policy: audit
 
@@ -24,18 +24,18 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: github/codeql-action/init@5c8a8a642e79153f5d047b10ec1cba1d1cc65699  # v3
+      - uses: github/codeql-action/init@c10b8064de6f491fea524254123dbe5e09572f13  # v4.35.1
         with:
           languages: javascript-typescript
 
-      - uses: github/codeql-action/analyze@5c8a8a642e79153f5d047b10ec1cba1d1cc65699  # v3
+      - uses: github/codeql-action/analyze@c10b8064de6f491fea524254123dbe5e09572f13  # v4.35.1
 
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+      - uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
         with:
           egress-policy: audit
 
@@ -51,7 +51,7 @@ jobs:
     name: Secret Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+      - uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
         with:
           egress-policy: audit
 
@@ -60,7 +60,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: trufflesecurity/trufflehog@0f58ae7c5036094a1e3e750d18772af92821b503  # v3.90.5
+      - uses: trufflesecurity/trufflehog@6bd2d14f7a4bc1e569fa3550efa7ec632a4fa67b  # v3.94.2
         with:
           extra_args: --only-verified
 
@@ -71,7 +71,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+      - uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
         with:
           egress-policy: audit
 
@@ -100,7 +100,7 @@ jobs:
     name: CycloneDX SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+      - uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
         with:
           egress-policy: audit
 
@@ -108,7 +108,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5.0.0
 
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
         with:
@@ -127,7 +127,7 @@ jobs:
             -o sbom.cdx.json \
             ./
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
           name: sbom-cyclonedx
           path: sbom.cdx.json
@@ -138,7 +138,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || contains(github.event.pull_request.changed_files, 'tools/')
     steps:
-      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+      - uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
         with:
           egress-policy: audit
 
@@ -161,7 +161,7 @@ jobs:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2
+      - uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
         with:
           egress-policy: audit
 
@@ -169,7 +169,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5.0.0
 
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
         with:
@@ -181,7 +181,7 @@ jobs:
       - name: Run audit
         run: pnpm audit --audit-level=moderate --json > audit-report.json || true
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
           name: audit-report
           path: audit-report.json
