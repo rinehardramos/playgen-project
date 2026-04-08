@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:25-alpine AS builder
 WORKDIR /app
 RUN npm install -g pnpm
 COPY pnpm-workspace.yaml ./
@@ -15,7 +15,7 @@ RUN pnpm --filter @playgen/types build
 RUN pnpm --filter @playgen/middleware build
 RUN pnpm --filter @playgen/dj-service build
 
-FROM node:20-alpine
+FROM node:25-alpine
 WORKDIR /app
 RUN npm install -g pnpm
 COPY --from=builder /app/pnpm-workspace.yaml ./
