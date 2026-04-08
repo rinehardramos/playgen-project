@@ -25,6 +25,13 @@ Before starting any task, an agent MUST:
 
 ## Active Work
 _(cleared 2026-04-08 by PM agent — all prior claims verified CLOSED with no open PR)_
+- [ ] feat(shared): @playgen/info-broker-client workspace package (#319, feat/issue-319-info-broker-client) | @claude-code | 2026-04-08
+- [ ] refactor(dj): rewire generationWorker for weather+news via broker (#320, feat/issue-320-broker-weather-news) | @claude-code | 2026-04-08
+- [ ] feat(dj): song enrichment via broker -> richer prompts (#321, feat/issue-321-song-enrichment) | @claude-code | 2026-04-08
+- [ ] feat(dj): jokes via info-broker + adlib guard (#322, feat/issue-322-jokes-broker) | @claude-code | 2026-04-08
+- [ ] feat(dj): social mentions via broker for listener_activity (#323, feat/issue-323-social-mentions) | @claude-code | 2026-04-08
+- [ ] feat(dj): standalone segment API + station news prefs (#324, feat/issue-324-standalone-segment-api) | @claude-code | 2026-04-08 | Migration: 053, 054
+- [ ] chore(db): drop stations.weather_api_key + news_api_key (#325, feat/issue-325-drop-api-key-columns) | @claude-code | 2026-04-08 | Migration: 055
 
 ## Recently Completed
 - [x] feat(dj): Streaming output adapter interface — IcecastAdapter stub + unit tests (issue #27, feat/issue-27-streaming-adapter) | @claude-code | 2026-04-06
