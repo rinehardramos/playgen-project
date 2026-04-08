@@ -1,4 +1,4 @@
-FROM nginx:1.25-alpine
+FROM nginx:1.29-alpine
 
 # Custom startup: auto-detects DNS resolver and runs envsubst before nginx.
 # Bypasses the nginx Docker template mechanism so env vars are correctly
