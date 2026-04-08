@@ -5,10 +5,12 @@ COPY pnpm-workspace.yaml ./
 COPY package.json ./
 COPY shared/types/package.json ./shared/types/
 COPY shared/middleware/package.json ./shared/middleware/
+COPY shared/info-broker-client/package.json ./shared/info-broker-client/
 COPY services/dj/package.json ./services/dj/
 RUN pnpm install --no-frozen-lockfile
 COPY shared/types ./shared/types
 COPY shared/middleware ./shared/middleware
+COPY shared/info-broker-client ./shared/info-broker-client
 COPY services/dj ./services/dj
 COPY tsconfig.base.json ./
 RUN pnpm --filter @playgen/types build
@@ -24,6 +26,8 @@ COPY --from=builder /app/shared/types/package.json ./shared/types/
 COPY --from=builder /app/shared/types/dist ./shared/types/dist
 COPY --from=builder /app/shared/middleware/package.json ./shared/middleware/
 COPY --from=builder /app/shared/middleware/dist ./shared/middleware/dist
+COPY --from=builder /app/shared/info-broker-client/package.json ./shared/info-broker-client/
+COPY --from=builder /app/shared/info-broker-client/dist ./shared/info-broker-client/dist
 COPY --from=builder /app/services/dj/package.json ./services/dj/
 COPY --from=builder /app/services/dj/dist ./services/dj/dist
 RUN pnpm install --prod --no-frozen-lockfile
