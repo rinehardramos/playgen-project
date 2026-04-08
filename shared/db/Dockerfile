@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:25-alpine AS builder
 WORKDIR /app
 
 RUN npm install -g pnpm
@@ -18,7 +18,7 @@ RUN pnpm --filter @playgen/db build
 # Copy SQL migration files into dist (tsc does not copy non-TS assets)
 COPY shared/db/src/migrations ./shared/db/dist/migrations
 
-FROM node:20-alpine
+FROM node:25-alpine
 WORKDIR /app
 
 RUN npm install -g pnpm
