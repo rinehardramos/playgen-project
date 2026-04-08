@@ -18,7 +18,7 @@
     "postcss": "^8.4.49",
     "autoprefixer": "^10.4.20",
     "typescript": "^6.0.2",
-    "@types/node": "^20.0.0",
+    "@types/node": "^25.5.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0"
   },
