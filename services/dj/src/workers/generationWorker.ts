@@ -302,22 +302,42 @@ export async function runGenerationJob(
     [data.station_id],
   );
 
-  // 4d. Fetch social posts from connected Facebook/Twitter accounts (non-fatal if unavailable)
+  // 4d. Fetch social mentions via broker (replaces direct Twitter/Facebook adapter calls).
+  //     Outbound publish + OAuth callbacks remain in DJ adapters.
   interface SocialShoutout { listener_name: string | null; message: string; }
   const socialShoutouts: SocialShoutout[] = [];
-  try {
-    const socialProviders = await getSocialProviders(data.station_id, pool);
-    for (const provider of socialProviders) {
-      const posts = await provider.fetchPosts({ since_hours: 24, limit: 3 });
-      for (const post of posts) {
+  if (broker) {
+    try {
+      const mentionsResult = await broker.getSocialMentions({
+        platform: 'twitter',
+        ownerRef: `station:${data.station_id}`,
+        limit: 10,
+      });
+      for (const mention of mentionsResult?.mentions ?? []) {
         socialShoutouts.push({
-          listener_name: post.author_name ?? post.author_handle,
-          message: post.text,
+          listener_name: mention.author_name ?? mention.author_handle ?? null,
+          message: mention.text,
         });
       }
+    } catch (err) {
+      console.warn('[generationWorker] Broker social mentions fetch failed (non-fatal):', err);
     }
-  } catch (err) {
-    console.warn('[generationWorker] Social fetch failed (non-fatal):', err);
+  } else {
+    // Fallback: direct social provider adapters (legacy, for when broker is not configured)
+    try {
+      const socialProviders = await getSocialProviders(data.station_id, pool);
+      for (const provider of socialProviders) {
+        const posts = await provider.fetchPosts({ since_hours: 24, limit: 3 });
+        for (const post of posts) {
+          socialShoutouts.push({
+            listener_name: post.author_name ?? post.author_handle,
+            message: post.text,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[generationWorker] Social fetch failed (non-fatal):', err);
+    }
   }
 
   // Merge manual shoutouts with social posts (manual first, then social, max 3 total)
