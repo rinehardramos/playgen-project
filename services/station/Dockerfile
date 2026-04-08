@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:25-alpine AS builder
 WORKDIR /app
 
 RUN npm install -g pnpm
@@ -20,7 +20,7 @@ RUN pnpm --filter @playgen/types build
 RUN pnpm --filter @playgen/middleware build
 RUN pnpm --filter @playgen/station-service build
 
-FROM node:20-alpine
+FROM node:25-alpine
 WORKDIR /app
 
 RUN npm install -g pnpm
