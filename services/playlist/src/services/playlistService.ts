@@ -23,9 +23,25 @@ export interface PlaylistWithEntries extends Playlist {
 
 export async function listPlaylists(
   stationId: string,
-  opts: { month?: string } = {}
+  opts: { month?: string; date?: string } = {}
 ): Promise<Playlist[]> {
   const pool = getPool();
+
+  if (opts.date) {
+    // Validate format YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
+      throw new Error('date must be in YYYY-MM-DD format');
+    }
+    const { rows } = await pool.query<Playlist>(
+      `SELECT id, station_id, template_id, date, status,
+              generated_at, generated_by, approved_at, approved_by, notes
+       FROM playlists
+       WHERE station_id = $1 AND date = $2
+       ORDER BY date`,
+      [stationId, opts.date]
+    );
+    return rows;
+  }
 
   if (opts.month) {
     // Validate format YYYY-MM

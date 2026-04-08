@@ -12,10 +12,10 @@ export async function playlistRoutes(app: FastifyInstance) {
     { onRequest: [requirePermission('playlist:read'), requireStationAccess()] },
     async (req, reply) => {
       const { id } = req.params as { id: string };
-      const { month } = req.query as { month?: string };
+      const { month, date } = req.query as { month?: string; date?: string };
 
       try {
-        const playlists = await playlistService.listPlaylists(id, { month });
+        const playlists = await playlistService.listPlaylists(id, { month, date });
         return playlists;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Bad request';

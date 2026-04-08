@@ -12,12 +12,8 @@ Coordination between AI agents on the same repo. Before starting any task:
 8. **Migrations**: check the Migration Reservation section below before touching `shared/db/migrations/`.
 
 ## Active Work
-- [ ] feat(dj): Cost tracking, rate limiting, default template seeding (#26, feat/issue-26-cost-tracking) | @claude-code | 2026-04-06 | Migration: 051
-- [ ] feat: Program Preview full-page route (#190, feat/issue-190-program-preview-page) | @claude-code | 2026-04-06
-- [ ] feat(dj): Jokes segment (#205, feat/issue-205-dj-jokes) | @claude-code | 2026-04-06 | Migration: 044
-- [ ] fix(dj): INTERNAL_ERROR — API key validation + unmasked LLM errors (#183, fix/issue-183) | @claude-code | 2026-04-05
-- [ ] arch(programs): programs + program_episodes (#210, feat/issue-210-program-entity) | @claude-code | 2026-04-06 | Migration: 034-035
-- [ ] feat(auth): real email reset + verification (#224, feat/issue-224-email-reset-verification) | @claude-code | 2026-04-06 | Migration: 047-048
+- [ ] fix(playlist): ?date=YYYY-MM-DD filter on GET /stations/:sid/playlists (#292, fix/issue-292-playlist-date-filter) | @claude-code | 2026-04-08
+_(cleared 2026-04-08 by PM agent — all prior claims verified CLOSED with no open PR)_
 
 ## Migration Reservation
 Claim sequential migration numbers here before writing files. Close older PR on conflict.
