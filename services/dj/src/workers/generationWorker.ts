@@ -5,14 +5,9 @@ import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import type { StationIdentity } from '../lib/promptBuilder.js';
 import { logLlmUsage } from '../lib/usageLogger.js';
 import { checkLlmRateLimit } from '../lib/rateLimiter.js';
-import {
-  openWeatherMapProvider,
-  newsApiProvider,
-  ddgWeatherSearch,
-  ddgNewsSearch,
-  cityFromTimezone,
-} from '../adapters/data/index.js';
-import type { WeatherData, NewsItem } from '../adapters/data/index.js';
+import { getInfoBrokerClient } from '../lib/infoBroker.js';
+import { sanitizeUntrusted } from '../lib/promptGuard.js';
+import type { WeatherResponse, NewsResponse, JokeResponse } from '@playgen/info-broker-client';
 import { config } from '../config.js';
 import { buildManifest } from '../services/manifestService.js';
 import type { DjGenerationJobData, Job } from '../queues/djQueue.js';
@@ -46,8 +41,6 @@ interface StationRow {
   country_code: string | null;
   latitude: number | null;
   longitude: number | null;
-  weather_api_key: string | null;
-  news_api_key: string | null;
   openrouter_api_key: string | null;
   openai_api_key: string | null;
   elevenlabs_api_key: string | null;
@@ -58,6 +51,8 @@ interface StationRow {
   callsign: string | null;
   tagline: string | null;
   frequency: string | null;
+  news_scope: string | null;
+  news_topic: string | null;
 }
 
 /**
@@ -154,9 +149,9 @@ export async function runGenerationJob(
   const { rows: stationRows } = await pool.query<StationRow>(
     `SELECT id, name, timezone, locale_code, company_id,
             city, country_code, latitude, longitude,
-            weather_api_key, news_api_key,
             openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, gemini_api_key, mistral_api_key,
-            callsign, tagline, frequency
+            callsign, tagline, frequency,
+            news_scope, news_topic
      FROM stations WHERE id = $1`,
     [data.station_id],
   );
@@ -218,73 +213,52 @@ export async function runGenerationJob(
     );
   }
 
-  // 1c. Fetch live weather and news data (non-blocking — all failures are soft).
-  //     Priority chain for each:
-  //       1. Dedicated API key (OpenWeatherMap / NewsAPI)
-  //       2. DuckDuckGo Instant Answer (free, no key required)
-  //     City is derived from station.city if set, otherwise inferred from station.timezone.
-  let weatherData: WeatherData | undefined;
-  let newsItems: NewsItem[] | undefined;
+  // 1c. Fetch weather + news via info-broker (soft-fail; null if broker unconfigured/unreachable)
+  let weatherData: WeatherResponse | undefined;
+  let newsData: NewsResponse | undefined;
 
-  const resolvedCity: string = station.city ?? cityFromTimezone(station.timezone);
+  const resolvedCity: string = station.city ?? '';
 
-  // ── Weather ────────────────────────────────────────────────────────────────
-  const weatherApiKey = station.weather_api_key ?? undefined;
-  if (weatherApiKey) {
-    // Primary: OpenWeatherMap
-    try {
-      weatherData = await openWeatherMapProvider.fetch({
-        api_key: weatherApiKey,
-        city: resolvedCity,
+  const broker = getInfoBrokerClient();
+  if (!broker) {
+    console.warn('[generationWorker] INFO_BROKER_BASE_URL not configured — weather_tease/current_events segments will skip external data');
+  } else {
+    const [weatherResult, newsResult] = await Promise.all([
+      broker.getWeather({
+        city: resolvedCity || undefined,
         country_code: station.country_code ?? undefined,
         lat: station.latitude ?? undefined,
         lon: station.longitude ?? undefined,
-      });
-      console.info(`[generationWorker] Weather (OpenWeatherMap): ${weatherData.summary}`);
-    } catch (err) {
-      console.warn('[generationWorker] OpenWeatherMap failed, falling back to DuckDuckGo:', err);
-    }
-  }
-
-  if (!weatherData) {
-    // Fallback: DuckDuckGo web search (no key needed)
-    try {
-      const ddgResult = await ddgWeatherSearch(resolvedCity);
-      if (ddgResult) {
-        weatherData = ddgResult;
-        console.info(`[generationWorker] Weather (DuckDuckGo): ${weatherData.summary}`);
-      }
-    } catch (err) {
-      console.warn('[generationWorker] DuckDuckGo weather search failed (non-fatal):', err);
-    }
-  }
-
-  // ── News ───────────────────────────────────────────────────────────────────
-  const newsApiKey = station.news_api_key ?? undefined;
-  if (newsApiKey) {
-    // Primary: NewsAPI
-    try {
-      newsItems = await newsApiProvider.fetch({
-        api_key: newsApiKey,
+      }),
+      broker.getNews({
+        scope: (station.news_scope as 'global' | 'country' | 'local') ?? 'global',
+        topic: station.news_topic ?? 'any',
         country_code: station.country_code ?? undefined,
-        query: station.city ?? undefined,
-      });
-      console.info(`[generationWorker] News (NewsAPI): ${newsItems.length} headlines`);
-    } catch (err) {
-      console.warn('[generationWorker] NewsAPI failed, falling back to DuckDuckGo:', err);
+        limit: 10,
+      }),
+    ]);
+    if (weatherResult) {
+      weatherData = weatherResult;
+      console.info(`[generationWorker] Weather (broker): ${weatherResult.summary}`);
+    }
+    if (newsResult) {
+      newsData = newsResult;
+      console.info(`[generationWorker] News (broker): ${newsResult.items.length} headlines`);
     }
   }
 
-  if (!newsItems || newsItems.length === 0) {
-    // Fallback: DuckDuckGo web search (no key needed)
-    try {
-      const ddgNews = await ddgNewsSearch(resolvedCity);
-      if (ddgNews.length > 0) {
-        newsItems = ddgNews;
-        console.info(`[generationWorker] News (DuckDuckGo): ${newsItems.length} headlines`);
-      }
-    } catch (err) {
-      console.warn('[generationWorker] DuckDuckGo news search failed (non-fatal):', err);
+  // 1d. Fetch joke for this show (after profile so we have joke_style)
+  const personaConfig = profile.persona_config ?? {};
+  /** Joke style sourced from persona_config. Defaults to 'witty'. */
+  const jokeStyle: string = (personaConfig.joke_style as string) ?? 'witty';
+  let jokeData: JokeResponse | undefined;
+  if (broker) {
+    const jokeResult = await broker.getJoke({
+      style: jokeStyle as import('@playgen/info-broker-client').JokeStyle,
+      safe: true,
+    });
+    if (jokeResult) {
+      jokeData = jokeResult;
     }
   }
 
@@ -328,22 +302,42 @@ export async function runGenerationJob(
     [data.station_id],
   );
 
-  // 4d. Fetch social posts from connected Facebook/Twitter accounts (non-fatal if unavailable)
+  // 4d. Fetch social mentions via broker (replaces direct Twitter/Facebook adapter calls).
+  //     Outbound publish + OAuth callbacks remain in DJ adapters.
   interface SocialShoutout { listener_name: string | null; message: string; }
   const socialShoutouts: SocialShoutout[] = [];
-  try {
-    const socialProviders = await getSocialProviders(data.station_id, pool);
-    for (const provider of socialProviders) {
-      const posts = await provider.fetchPosts({ since_hours: 24, limit: 3 });
-      for (const post of posts) {
+  if (broker) {
+    try {
+      const mentionsResult = await broker.getSocialMentions({
+        platform: 'twitter',
+        ownerRef: `station:${data.station_id}`,
+        limit: 10,
+      });
+      for (const mention of mentionsResult?.mentions ?? []) {
         socialShoutouts.push({
-          listener_name: post.author_name ?? post.author_handle,
-          message: post.text,
+          listener_name: mention.author_name ?? mention.author_handle ?? null,
+          message: mention.text,
         });
       }
+    } catch (err) {
+      console.warn('[generationWorker] Broker social mentions fetch failed (non-fatal):', err);
     }
-  } catch (err) {
-    console.warn('[generationWorker] Social fetch failed (non-fatal):', err);
+  } else {
+    // Fallback: direct social provider adapters (legacy, for when broker is not configured)
+    try {
+      const socialProviders = await getSocialProviders(data.station_id, pool);
+      for (const provider of socialProviders) {
+        const posts = await provider.fetchPosts({ since_hours: 24, limit: 3 });
+        for (const post of posts) {
+          socialShoutouts.push({
+            listener_name: post.author_name ?? post.author_handle,
+            message: post.text,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[generationWorker] Social fetch failed (non-fatal):', err);
+    }
   }
 
   // Merge manual shoutouts with social posts (manual first, then social, max 3 total)
@@ -415,13 +409,10 @@ export async function runGenerationJob(
   void !!(effectiveTtsApiKey);
 
   // ── Interval configuration for station_id and time_check segments ────────────
-  const personaConfig = profile.persona_config ?? {};
   /** Cumulative show content seconds between station_id injections (default 30 min). */
   const stationIdIntervalSec = (personaConfig.station_id_interval_minutes ?? 30) * 60;
   /** Cumulative show content seconds between time_check injections (default 60 min). */
   const timeCheckIntervalSec = (personaConfig.time_check_interval_minutes ?? 60) * 60;
-  /** Joke style sourced from persona_config. Defaults to 'witty'. */
-  const jokeStyle: string = personaConfig.joke_style ?? 'witty';
   /** Adlib injection interval in songs (default 4). 0 = disabled. */
   const adlibIntervalSongs = personaConfig.adlib_interval_songs ?? 4;
 
@@ -466,6 +457,7 @@ export async function runGenerationJob(
       segment_type,
       custom_template: customTemplate,
       joke_style: jokeStyle,
+      broker_joke: segment_type === 'joke' ? jokeData : undefined,
       previousSegmentTexts: generatedTexts.slice(-4),
       segmentIndex: position,
     };
@@ -546,6 +538,38 @@ export async function runGenerationJob(
     const isLast = i === entries.length - 1;
     const segmentTypes = segmentsForEntry(entry, entries, i);
 
+    // Per-song broker enrichment: fetch prev/next song metadata in parallel
+    let prevEnrich: import('@playgen/info-broker-client').SongEnrichment | null = null;
+    let nextEnrich: import('@playgen/info-broker-client').SongEnrichment | null = null;
+    if (broker) {
+      const [pe, ne] = await Promise.all([
+        prev ? broker.enrichSong({ title: prev.song_title, artist: prev.song_artist }) : Promise.resolve(null),
+        next ? broker.enrichSong({ title: next.song_title, artist: next.song_artist }) : Promise.resolve(null),
+      ]);
+      prevEnrich = pe;
+      nextEnrich = ne;
+    }
+
+    const prevSong = prev ? {
+      title: prev.song_title,
+      artist: prev.song_artist,
+      duration_sec: prev.duration_sec,
+      album: prevEnrich?.album,
+      release_year: prevEnrich?.release_year,
+      genres: prevEnrich?.genres,
+      trivia: prevEnrich?.trivia ? sanitizeUntrusted(prevEnrich.trivia, 500) : null,
+    } : undefined;
+
+    const nextSong = next ? {
+      title: next.song_title,
+      artist: next.song_artist,
+      duration_sec: next.duration_sec,
+      album: nextEnrich?.album,
+      release_year: nextEnrich?.release_year,
+      genres: nextEnrich?.genres,
+      trivia: nextEnrich?.trivia ? sanitizeUntrusted(nextEnrich.trivia, 500) : null,
+    } : undefined;
+
     // ── Inject non-song segments BEFORE this song (not at show open) ──────────
     if (!isFirst) {
       // time_check: fire when cumulative show content has crossed a new interval boundary
@@ -601,6 +625,7 @@ export async function runGenerationJob(
           generatedTexts.push(clip.name);
         } else {
           // No pre-recorded clips — generate via LLM
+          // ADLIB GUARD: adlib segments never call the broker — pure persona freeform
           await generateNonSongSegment('adlib');
         }
         songsSinceLastAdlib = 0;
@@ -625,13 +650,14 @@ export async function runGenerationJob(
         current_date: currentDate,
         current_hour: entry.hour,
         dj_profile: profile,
-        prev_song: prev ? { title: prev.song_title, artist: prev.song_artist, duration_sec: prev.duration_sec } : undefined,
-        next_song: next ? { title: next.song_title, artist: next.song_artist, duration_sec: next.duration_sec } : undefined,
+        prev_song: prevSong,
+        next_song: nextSong,
         segment_type,
         custom_template: customTemplate,
         weather: weatherData,
-        news_items: newsItems,
+        news_items: newsData?.items,
         joke_style: jokeStyle,
+        broker_joke: segment_type === 'joke' ? jokeData : undefined,
         previousSegmentTexts: generatedTexts.slice(-4),
         segmentIndex: position,
       };

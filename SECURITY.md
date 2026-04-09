@@ -30,6 +30,9 @@ PlayGen is a multi-tenant SaaS for radio playlist generation. The threats we exp
 | LLM prompt injection (DJ service) | Sanitization (NFKC + bidi/zero-width/control-byte strip + length cap) on every user-controlled field flowing into prompts; free-form fields wrapped in `<untrusted>` delimiters; injection heuristic detector for audit logging; LLM output scrubbed for JWTs / API keys / DSNs before persistence; human review gate before social publication | `services/dj/src/lib/promptGuard.ts`, `services/dj/src/lib/promptBuilder.ts` |
 | Trojan Source attack (CVE-2021-42574) | Bidi override codepoints stripped from all LLM-bound user input | `services/dj/src/lib/promptGuard.ts` |
 | Secret leakage via logs / errors | Auth handler returns generic messages; LLM output scrubber redacts `eyJ`-prefixed JWTs, `sk-`/`xoxb-`/`ghp-` API keys, and `postgres://` DSNs | `services/dj/src/lib/promptGuard.ts` |
+| External upstream API keys (weather, news) | Moved to info-broker (single central key per provider). DJ holds zero upstream secrets. | `shared/info-broker-client/`, migration 055 |
+| Per-station credential leakage via station admin UI | No longer applicable — weather_api_key/news_api_key columns dropped (migration 055). | `shared/db/src/migrations/055_drop_station_external_api_keys.sql` |
+| DJ data exfiltration via inbound social tokens | Tokens now in broker's encrypted vault; DJ holds opaque UUID refs. | `services/dj/src/lib/infoBroker.ts` |
 
 ### Out of scope
 

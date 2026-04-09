@@ -1,6 +1,9 @@
 import type { DjProfile, DjSegmentType, NewsHeadline, PersonaConfig } from '@playgen/types';
-import type { WeatherData, NewsItem } from '../adapters/data/index.js';
+import type { WeatherResponse, NewsItem, JokeResponse } from '@playgen/info-broker-client';
 import { sanitizeUntrusted, wrapUntrusted } from './promptGuard.js';
+
+/** Legacy alias kept for callers that reference WeatherData. */
+export type WeatherData = WeatherResponse;
 
 // Per-field length caps for user-supplied content flowing into prompts.
 // Generous enough for legitimate use, hostile to payload smuggling.
@@ -20,12 +23,17 @@ const LIMITS = {
 
 const s = sanitizeUntrusted;
 
-export type { WeatherData, NewsItem };
+export type { WeatherResponse, NewsItem };
 
 export interface SongContext {
   title: string;
   artist: string;
   duration_sec: number | null;
+  album?: string | null;
+  release_year?: number | null;
+  genres?: string[] | null;
+  /** Trivia from broker — UNTRUSTED, sanitized via promptGuard before LLM injection. */
+  trivia?: string | null;
 }
 
 export interface ShoutoutContext {
@@ -65,6 +73,8 @@ export interface ScriptContext {
   segmentIndex?: number;
   /** Joke style — sourced from persona_config.joke_style, used for joke segments. */
   joke_style?: string;
+  /** Joke from broker — optional, present only for joke segments. */
+  broker_joke?: JokeResponse;
 }
 
 // Map energy level (1-10) to descriptive text
@@ -233,8 +243,8 @@ function interpolate(template: string, ctx: ScriptContext): string {
   const stationIdSuffix = buildStationIdSuffix(ctx.station_identity);
   const resolved = resolveConditionals(template, ctx);
 
-  const newsHeadline1 = ctx.news_items?.[0]?.headline ?? '';
-  const newsHeadline2 = ctx.news_items?.[1]?.headline ?? '';
+  const newsHeadline1 = ctx.news_items?.[0]?.title ?? '';
+  const newsHeadline2 = ctx.news_items?.[1]?.title ?? '';
 
   const city = ctx.station_identity?.city ?? '';
   const jokeStyle = ctx.joke_style ?? 'witty';
@@ -265,8 +275,14 @@ function interpolate(template: string, ctx: ScriptContext): string {
     .replace(/\{\{joke_style\}\}/g, s(jokeStyle, LIMITS.topic))
     .replace(/\{\{prev_song_title\}\}/g, s(ctx.prev_song?.title, LIMITS.station_field))
     .replace(/\{\{prev_song_artist\}\}/g, s(ctx.prev_song?.artist, LIMITS.station_field))
+    .replace(/\{\{prev_song_album\}\}/g, s(ctx.prev_song?.album, LIMITS.station_field))
+    .replace(/\{\{prev_song_year\}\}/g, ctx.prev_song?.release_year != null ? String(ctx.prev_song.release_year) : '')
+    .replace(/\{\{prev_song_trivia\}\}/g, ctx.prev_song?.trivia ? s(ctx.prev_song.trivia, 500) : '')
     .replace(/\{\{next_song_title\}\}/g, s(ctx.next_song?.title, LIMITS.station_field))
     .replace(/\{\{next_song_artist\}\}/g, s(ctx.next_song?.artist, LIMITS.station_field))
+    .replace(/\{\{next_song_album\}\}/g, s(ctx.next_song?.album, LIMITS.station_field))
+    .replace(/\{\{next_song_year\}\}/g, ctx.next_song?.release_year != null ? String(ctx.next_song.release_year) : '')
+    .replace(/\{\{next_song_trivia\}\}/g, ctx.next_song?.trivia ? s(ctx.next_song.trivia, 500) : '')
     .replace(/\{\{listener_name\}\}/g, s(ctx.shoutout?.listener_name, LIMITS.listener_name) || 'a listener')
     .replace(/\{\{listener_message\}\}/g, s(ctx.shoutout?.listener_message, LIMITS.listener_message))
     .replace(
@@ -291,6 +307,31 @@ export function buildUserPrompt(ctx: ScriptContext): string {
     ? sanitizeUntrusted(ctx.custom_template, LIMITS.custom_template)
     : SEGMENT_DEFAULTS[ctx.segment_type];
   let prompt = interpolate(template, ctx);
+
+  // Append song enrichment metadata for song_intro / song_transition segments.
+  // These fields are optional (broker may not be configured) and are appended
+  // as context hints so the LLM can reference them naturally.
+  if (ctx.segment_type === 'song_intro' || ctx.segment_type === 'song_transition') {
+    const songToEnrich = ctx.next_song ?? ctx.prev_song;
+    const enrichLines: string[] = [];
+    if (songToEnrich?.album) enrichLines.push(`Album: ${s(songToEnrich.album, LIMITS.station_field)}`);
+    if (songToEnrich?.release_year != null) enrichLines.push(`Year: ${songToEnrich.release_year}`);
+    if (songToEnrich?.genres?.length) enrichLines.push(`Genres: ${songToEnrich.genres.slice(0, 3).map((g) => s(g, 50)).join(', ')}`);
+    if (songToEnrich?.trivia) enrichLines.push(`Trivia (use naturally if it fits): ${songToEnrich.trivia}`);
+    if (enrichLines.length > 0) {
+      prompt += '\n\nSong enrichment context (from music database — work these in naturally if relevant):\n' + enrichLines.join('\n');
+    }
+  }
+
+  // For joke segments, append broker joke as a seed (treated as untrusted data).
+  if (ctx.segment_type === 'joke' && ctx.broker_joke) {
+    const jokeText = ctx.broker_joke.setup && ctx.broker_joke.punchline
+      ? `${sanitizeUntrusted(ctx.broker_joke.setup, 200)} ${sanitizeUntrusted(ctx.broker_joke.punchline, 200)}`
+      : sanitizeUntrusted(ctx.broker_joke.text, 400);
+    if (jokeText) {
+      prompt += `\n\nJoke seed (from joke service — adapt into your own words and style, don't read it verbatim): ${wrapUntrusted('joke-api', jokeText, 400)}`;
+    }
+  }
 
   // Append the last few generated segment texts so the LLM avoids repetition.
   // Limit to 4 previous segments to keep the context window manageable.
