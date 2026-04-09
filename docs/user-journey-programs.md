@@ -28,7 +28,16 @@ Every station seeds a hidden `is_default` program ("Unassigned") so pre-existing
 **API**: `GET /api/v1/stations` → `GET /api/v1/stations/:stationId/programs`
 
 ### Step 2 — Click `New Program` → `/programs/new`
-**Expect**: form with name, color swatch, description, day-of-week toggles (Mon–Fri preselected), start/end hour, optional music template.
+
+The page behaviour depends on how many stations exist for the company:
+
+| Stations | Behaviour |
+|----------|-----------|
+| **0** | Form is replaced by a CTA card: "You need a station first — Create one →" linking to `/stations`. Submit is unreachable. |
+| **1** | Station is auto-selected (hidden). Full form is shown immediately with no picker. |
+| **≥ 2** | Station dropdown is shown at the top of the form. |
+
+**Expect** (≥ 1 station): form with name, color swatch, description, day-of-week toggles (Mon–Fri preselected), start/end hour, optional music template.
 
 **API**: `GET /api/v1/companies/:companyId/stations`, `GET /api/v1/stations/:stationId/templates`
 
@@ -123,7 +132,7 @@ Actor: Admin super_admin via Claude-in-Chrome against local Docker stack (commit
 
 | # | Where | Issue |
 |---|---|---|
-| U1 | `/programs/new` | If the user has 0 stations, the form shows NO station picker but silently 422s on submit with an inline "Please select a station" — a dead end. |
+| U1 | `/programs/new` | ~~If the user has 0 stations, the form shows NO station picker but silently 422s on submit with an inline "Please select a station" — a dead end.~~ **Fixed (#249)**: zero-stations state now shows an actionable CTA card "You need a station first — Create one →" linking to `/stations`. Form and submit are unreachable until a station exists. |
 | U2 | Sidebar | **Stations has no sidebar entry.** Stations live at `/stations` but are unreachable via nav — users can't discover where to create the prerequisite for Programs. |
 | U3 | `/dashboard` | Top-of-page red "Bad Gateway" alert with no actionable text — dashboard-stats endpoint is failing. |
 | U4 | `/programs` | List page hits `/api/v1/stations` (404) silently via `.catch(() => {})`; users never see a loading or error state. |
