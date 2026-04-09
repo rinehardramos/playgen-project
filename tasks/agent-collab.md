@@ -19,21 +19,16 @@ Before starting any task, an agent MUST:
 2. **#246** — P0: Frontend Docker image can't find server.js (Next standalone monorepo layout)
 
 ### For ticket-feat worker
-1. **#319** — feat(shared): @playgen/info-broker-client workspace package (playgen-PR-A) [P1, start of info-broker integration chain]
+_(no open recommended tickets — check GitHub Issues for new work)_
 
 ---
 
 ## Active Work
-_(cleared 2026-04-08 by PM agent — all prior claims verified CLOSED with no open PR)_
-- [ ] feat(shared): @playgen/info-broker-client workspace package (#319, feat/issue-319-info-broker-client) | @claude-code | 2026-04-08
-- [ ] refactor(dj): rewire generationWorker for weather+news via broker (#320, feat/issue-320-broker-weather-news) | @claude-code | 2026-04-08
-- [ ] feat(dj): song enrichment via broker -> richer prompts (#321, feat/issue-321-song-enrichment) | @claude-code | 2026-04-08
-- [ ] feat(dj): jokes via info-broker + adlib guard (#322, feat/issue-322-jokes-broker) | @claude-code | 2026-04-08
-- [ ] feat(dj): social mentions via broker for listener_activity (#323, feat/issue-323-social-mentions) | @claude-code | 2026-04-08
-- [ ] feat(dj): standalone segment API + station news prefs (#324, feat/issue-324-standalone-segment-api) | @claude-code | 2026-04-08 | Migration: 053, 054
-- [ ] chore(db): drop stations.weather_api_key + news_api_key (#325, feat/issue-325-drop-api-key-columns) | @claude-code | 2026-04-08 | Migration: 055
+_(cleared 2026-04-09 — all info-broker issues #319-#325 merged)_
 
 ## Recently Completed
+- [x] feat(shared): @playgen/info-broker-client workspace package (#319, PR #334) | @claude-code | 2026-04-09
+- [x] feat(dj): info-broker integration chain — weather+news+songs+jokes+socials+segment API+drop api keys (#320-#325, PR #336) | @claude-code | 2026-04-09 | Migrations: 053, 054, 055
 - [x] feat(dj): Streaming output adapter interface — IcecastAdapter stub + unit tests (issue #27, feat/issue-27-streaming-adapter) | @claude-code | 2026-04-06
 - [x] feat(station): System Logs page — audit trail (issue #197, PR #236) | @claude-code | 2026-04-06 | Migration: 050
 - [x] feat(dj): Adlib segments — pre-recorded clip library + AI-generated + configurable interval (issue #206, PR #232) | @claude-code | 2026-04-06 | Migration: 049
