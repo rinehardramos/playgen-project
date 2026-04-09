@@ -21,6 +21,20 @@ interface TemplateSlot {
   category_code: string;
 }
 
+
+interface ProgramClock {
+  program_id: string;
+  start_hour: number;
+  end_hour: number;
+  clock_id: string;
+}
+
+interface ClockSongSlot {
+  clock_id: string;
+  position: number;
+  category_id: string;
+}
+
 interface CandidateSong {
   id: string;
   artist: string;
@@ -68,6 +82,50 @@ export interface GeneratePlaylistResult {
 
 function randomFrom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** Day-of-week string (e.g. 'monday') for a 'YYYY-MM-DD' date string. */
+export function getDayOfWeek(date: string): string {
+  const DOW_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  return DOW_NAMES[new Date(date + 'T12:00:00Z').getUTCDay()];
+}
+
+/**
+ * Build the ordered slot list for a generation run.
+ * Clock slots override template slots per hour. Exported for unit testing.
+ */
+export function buildSlotList(
+  templateSlots: TemplateSlot[],
+  hourClockMap: Map<number, string>,
+  clockSongSlotsMap: Map<string, ClockSongSlot[]>,
+  resolvedTemplateId: string,
+): TemplateSlot[] {
+  const hoursInTemplate = new Set(templateSlots.map((s) => s.hour));
+  const allHours = new Set([...hoursInTemplate, ...hourClockMap.keys()]);
+  const slots: TemplateSlot[] = [];
+
+  for (const hour of [...allHours].sort((a, b) => a - b)) {
+    const clockId = hourClockMap.get(hour);
+    if (clockId) {
+      const clockSlots = clockSongSlotsMap.get(clockId) ?? [];
+      for (const cs of clockSlots) {
+        slots.push({
+          id: `clock:${clockId}:${hour}:${cs.position}`,
+          template_id: resolvedTemplateId,
+          hour,
+          position: cs.position,
+          required_category_id: cs.category_id,
+          category_code: '',
+        });
+      }
+    } else {
+      for (const ts of templateSlots.filter((s) => s.hour === hour)) {
+        slots.push(ts);
+      }
+    }
+  }
+
+  return slots;
 }
 
 /**
@@ -257,7 +315,7 @@ export async function generatePlaylist(
       resolvedTemplateId = tplRes.rows[0].id;
     }
 
-    // ── Step 5: Load template slots ───────────────────────────────────────────
+    // ── Step 5: Load template slots (fallback source) ────────────────────────
     const slotsRes = await pool.query<TemplateSlot>(
       `SELECT ts.id, ts.template_id, ts.hour, ts.position, ts.required_category_id,
               c.code as category_code
@@ -267,7 +325,51 @@ export async function generatePlaylist(
        ORDER BY ts.hour, ts.position`,
       [resolvedTemplateId],
     );
-    const slots = slotsRes.rows;
+    const templateSlots = slotsRes.rows;
+
+    // ── Step 5a: Find programs with clocks covering each hour of this date ───
+    const programClocksRes = await pool.query<ProgramClock>(
+      `SELECT p.id AS program_id, p.start_hour, p.end_hour, p.default_clock_id AS clock_id
+       FROM programs p
+       WHERE p.station_id = $1
+         AND p.is_active = TRUE
+         AND p.default_clock_id IS NOT NULL
+         AND $2 = ANY(p.active_days)
+       ORDER BY p.is_default ASC, p.start_hour ASC`,
+      [stationId, getDayOfWeek(date)],
+    );
+
+    const hourClockMap = new Map<number, string>();
+    for (const pc of programClocksRes.rows) {
+      for (let h = pc.start_hour; h < pc.end_hour; h++) {
+        if (!hourClockMap.has(h)) hourClockMap.set(h, pc.clock_id);
+      }
+    }
+
+    const neededClockIds = [...new Set(hourClockMap.values())];
+    const clockSongSlotsMap = new Map<string, ClockSongSlot[]>();
+    if (neededClockIds.length > 0) {
+      const clockSlotsRes = await pool.query<ClockSongSlot>(
+        `SELECT clock_id, position, category_id
+         FROM show_clock_slots
+         WHERE clock_id = ANY($1) AND content_type = 'song' AND category_id IS NOT NULL
+         ORDER BY clock_id, position`,
+        [neededClockIds],
+      );
+      for (const row of clockSlotsRes.rows) {
+        const arr = clockSongSlotsMap.get(row.clock_id) ?? [];
+        arr.push(row);
+        clockSongSlotsMap.set(row.clock_id, arr);
+      }
+    }
+
+    for (const [hour, clockId] of hourClockMap) {
+      console.info(
+        `[generationEngine] Hour ${hour}: clock ${clockId} (${clockSongSlotsMap.get(clockId)?.length ?? 0} song slots), station=${stationId}`,
+      );
+    }
+
+    const slots = buildSlotList(templateSlots, hourClockMap, clockSongSlotsMap, resolvedTemplateId);
 
     // ── Step 6: Load rotation rules ───────────────────────────────────────────
     const rulesRes = await pool.query<{ rules: RotationRules }>(
@@ -462,7 +564,7 @@ export async function generatePlaylist(
 
     // ── Steps 10–13: Transaction for batch upsert + play_history ──────────────
     const client: PoolClient = await pool.connect();
-    let entriesCount = newEntries.length + overridesRes.rows.length;
+    const entriesCount = newEntries.length + overridesRes.rows.length;
 
     try {
       await client.query('BEGIN');
