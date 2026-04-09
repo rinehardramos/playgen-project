@@ -189,6 +189,9 @@ importers:
       '@fastify/sensible':
         specifier: ^6.0.0
         version: 6.0.4
+      '@playgen/info-broker-client':
+        specifier: workspace:*
+        version: link:../../shared/info-broker-client
       '@playgen/middleware':
         specifier: workspace:*
         version: link:../../shared/middleware
