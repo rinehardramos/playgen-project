@@ -36,7 +36,7 @@ export default function ShoutoutsPage() {
     const user = getCurrentUser();
     if (!user) { router.push('/login'); return; }
 
-    api.get<Station[]>('/api/v1/stations').then((data) => {
+    api.stations.list(user.company_id).then((data) => {
       setStations(data);
       if (data.length > 0) setSelectedStation(data[0].id);
     }).catch(() => setError('Failed to load stations')).finally(() => setLoading(false));

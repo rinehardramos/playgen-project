@@ -57,6 +57,13 @@ export const config = {
   // JWT (shared secret with auth-service)
   jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
 
+  // Info Broker (optional external data service)
+  infoBroker: {
+    baseUrl: process.env.INFO_BROKER_BASE_URL ?? '',
+    apiKey: process.env.INFO_BROKER_API_KEY ?? '',
+    timeoutMs: Number(process.env.INFO_BROKER_TIMEOUT_MS ?? 5000),
+  },
+
   // Social media OAuth (issues #211 Facebook, #212 Twitter)
   social: {
     encryptionKey:       process.env.SOCIAL_TOKEN_ENCRYPTION_KEY ?? '',

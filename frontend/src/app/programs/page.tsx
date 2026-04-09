@@ -123,17 +123,20 @@ export default function ProgramsPage() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [stationsError, setStationsError] = useState<string | null>(null);
 
   // Load stations
   useEffect(() => {
     const user = getCurrentUser();
     if (!user) { router.push('/login'); return; }
-    api.get<Station[]>(`/api/v1/companies/${user.company_id}/stations`)
+    api.stations.list(user.company_id)
       .then((list) => {
         setStations(list);
         if (list.length > 0) setSelectedStation(list[0].id);
       })
-      .catch(() => {});
+      .catch((err: { message?: string }) => {
+        setStationsError(err.message ?? 'Failed to load stations');
+      });
   }, [router]);
 
   const loadPrograms = useCallback(async () => {
@@ -156,6 +159,11 @@ export default function ProgramsPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {stationsError && (
+        <div className="mb-4 p-3 rounded-lg bg-red-900/30 border border-red-700 text-red-400 text-sm">
+          {stationsError}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Programs</h1>

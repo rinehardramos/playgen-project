@@ -101,6 +101,11 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
 export const api = {
   get: <T>(path: string): Promise<T> => apiFetch<T>(path),
 
+  stations: {
+    list: <T = { id: string; name: string }[]>(companyId: string): Promise<T> =>
+      apiFetch<T>(`/api/v1/companies/${companyId}/stations`),
+  },
+
   post: <T>(path: string, body: unknown): Promise<T> =>
     apiFetch<T>(path, {
       method: 'POST',
