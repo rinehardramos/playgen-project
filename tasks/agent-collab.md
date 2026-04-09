@@ -15,8 +15,7 @@ Before starting any task, an agent MUST:
 ## Next Recommended Tickets
 
 ### For ticket-bug workers (P0 first)
-1. **#247** — P0: Frontend /programs page calls /api/v1/stations (404) + /programs/new uses different endpoint
-2. **#246** — P0: Frontend Docker image can't find server.js (Next standalone monorepo layout)
+_(#244–#247 resolved — check GitHub Issues for new P0/P1 bugs)_
 
 ### For ticket-feat worker
 _(no open recommended tickets — check GitHub Issues for new work)_
@@ -27,6 +26,8 @@ _(no open recommended tickets — check GitHub Issues for new work)_
 _(none)_
 
 ## Recently Completed
+- [x] fix(frontend): Docker server.js standalone layout fix + docs (#246, PR #341) | @claude-code | 2026-04-09
+- [x] fix(auth): lazy-init Resend — no crash on missing RESEND_API_KEY (#245, PR #340) | @claude-code | 2026-04-09
 - [x] fix(gateway): document programs routes in api-spec.md + gateway smoke test (#244, PR #343) | @claude-code | 2026-04-09
 - [x] fix(frontend): stations.list helper + fix all /api/v1/stations call sites (#247, PR #342) | @claude-code | 2026-04-09
 - [x] feat(shared): @playgen/info-broker-client workspace package (#319, PR #334) | @claude-code | 2026-04-09
