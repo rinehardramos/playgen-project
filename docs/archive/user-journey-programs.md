@@ -1,4 +1,11 @@
-# User Journey — Programs
+# User Journey — Programs (archived)
+
+> **Moved**: This document has been archived. The canonical reference is now
+> [`docs/user-journey-programs-logs.md`](../user-journey-programs-logs.md), which
+> supersedes this file with the unified Programs + Logs mental model.
+> See GitHub issue #303 for context.
+
+---
 
 > **Purpose**: end-to-end walkthrough of the *Program → Show Clock → Episode → Playlist/DJ Script* flow, as a staff UX + engineering reference and as the script for manual QA.
 >
