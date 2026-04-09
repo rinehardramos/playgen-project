@@ -27,6 +27,7 @@ _(no open recommended tickets — check GitHub Issues for new work)_
 _(none)_
 
 ## Recently Completed
+- [x] fix(gateway): document programs routes in api-spec.md + gateway smoke test (#244, PR #343) | @claude-code | 2026-04-09
 - [x] fix(frontend): stations.list helper + fix all /api/v1/stations call sites (#247, PR #342) | @claude-code | 2026-04-09
 - [x] feat(shared): @playgen/info-broker-client workspace package (#319, PR #334) | @claude-code | 2026-04-09
 - [x] feat(dj): info-broker integration chain — weather+news+songs+jokes+socials+segment API+drop api keys (#320-#325, PR #336) | @claude-code | 2026-04-09 | Migrations: 053, 054, 055 | GitHub issues closed 2026-04-09
