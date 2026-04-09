@@ -12,6 +12,7 @@ const DJ_SEGMENT_TYPES: DjSegmentType[] = [
 export async function segmentRoutes(app: FastifyInstance) {
   // POST /dj/segments/generate — enqueue a standalone segment generation job
   app.post('/dj/segments/generate', {
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
     schema: {
       body: {
         type: 'object',
@@ -58,7 +59,9 @@ export async function segmentRoutes(app: FastifyInstance) {
   });
 
   // GET /dj/segments/jobs/:jobId — poll job status
-  app.get<{ Params: { jobId: string } }>('/dj/segments/jobs/:jobId', async (req, reply) => {
+  app.get<{ Params: { jobId: string } }>('/dj/segments/jobs/:jobId', {
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const job = await segmentQueue.getJob(req.params.jobId);
     if (!job) {
       return reply.code(404).send({ error: 'Job not found' });
