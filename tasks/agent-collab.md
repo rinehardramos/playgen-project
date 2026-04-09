@@ -1,47 +1,77 @@
 # Agent Collaboration Protocol
 
-Coordination between AI agents on the same repo. Before starting any task:
+This file is used to coordinate work between different AI agents working on the same repository.
+Before starting any task, an agent MUST:
+1. Read this file to check `## Active Work`.
+2. NEVER start a ticket that is already claimed in `Active Work`.
+3. Claim its work by adding an entry to `## Active Work`.
+4. Update this file in the SAME commit as the work (start and finish).
+5. When finished, move the entry to `## Recently Completed`.
+6. SECURITY MANDATE: Detect and categorize vulnerabilities (High -> TODO, Medium/Low -> Backlog). Fix easy High ones first. Notify user if unfixable.
+7. PR MERGE MANDATE: Before merging any PR, verify `mergeable_state` is clean. Rebase onto `origin/main` locally, resolve conflicts manually (never blindly `-X theirs`), verify `pnpm run typecheck` passes, then force-push and wait for CI to go green before merging.
+8. **PRE-PR TESTING MANDATE (NON-NEGOTIABLE)**: Before ANY `git push`, run locally: `pnpm run typecheck && pnpm run lint && pnpm run test:unit`. ALL must pass. Local results must be 1:1 with GitHub Actions CI. If a Dockerfile changed or new workspace dep added, also run `docker build -f services/<svc>/Dockerfile .` to verify. NO exceptions — type errors, lint failures, and integration issues must NEVER reach the pipeline.
+9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
-1. Read `## Active Work`. NEVER start a ticket already claimed.
-2. Claim by adding an entry (in the same commit as work start).
-3. On finish, move the entry to `## Recently Completed`.
-4. **Pre-PR gate (NON-NEGOTIABLE)**: `pnpm run typecheck && pnpm run lint && pnpm run test:unit` must pass locally — 1:1 with GitHub Actions. If a Dockerfile/workspace dep changed, also `docker build -f services/<svc>/Dockerfile .`.
-5. **Merge gate**: `mergeable_state` must be clean. Rebase onto `origin/main` locally, resolve conflicts manually (NEVER `-X theirs`), typecheck, push, wait for CI green, then merge.
-6. **Acceptance criteria**: NEVER move a ticket to Done unless all `- [ ]` items in the issue are `- [x]`. Verify via `gh issue view <N>` before `gh project item-edit ... Done`.
-7. **Security**: categorize vulns (High → TODO, Medium/Low → Backlog). Fix easy Highs first. Notify user if unfixable.
-8. **Migrations**: check the Migration Reservation section below before touching `shared/db/migrations/`.
+## Next Recommended Tickets
+
+### For ticket-bug workers (P0 first)
+1. **#247** — P0: Frontend /programs page calls /api/v1/stations (404) + /programs/new uses different endpoint
+2. **#246** — P0: Frontend Docker image can't find server.js (Next standalone monorepo layout)
+
+### For ticket-feat worker
+1. **#319** — feat(shared): @playgen/info-broker-client workspace package (playgen-PR-A) [P1, start of info-broker integration chain]
+
+---
 
 ## Active Work
-- [ ] fix(playlist): ?date=YYYY-MM-DD filter on GET /stations/:sid/playlists (#292, fix/issue-292-playlist-date-filter) | @claude-code | 2026-04-08
 _(cleared 2026-04-08 by PM agent — all prior claims verified CLOSED with no open PR)_
+- [ ] feat(shared): @playgen/info-broker-client workspace package (#319, feat/issue-319-info-broker-client) | @claude-code | 2026-04-08
+- [ ] refactor(dj): rewire generationWorker for weather+news via broker (#320, feat/issue-320-broker-weather-news) | @claude-code | 2026-04-08
+- [ ] feat(dj): song enrichment via broker -> richer prompts (#321, feat/issue-321-song-enrichment) | @claude-code | 2026-04-08
+- [ ] feat(dj): jokes via info-broker + adlib guard (#322, feat/issue-322-jokes-broker) | @claude-code | 2026-04-08
+- [ ] feat(dj): social mentions via broker for listener_activity (#323, feat/issue-323-social-mentions) | @claude-code | 2026-04-08
+- [ ] feat(dj): standalone segment API + station news prefs (#324, feat/issue-324-standalone-segment-api) | @claude-code | 2026-04-08 | Migration: 053, 054
+- [ ] chore(db): drop stations.weather_api_key + news_api_key (#325, feat/issue-325-drop-api-key-columns) | @claude-code | 2026-04-08 | Migration: 055
 
-## Migration Reservation
-Claim sequential migration numbers here before writing files. Close older PR on conflict.
-
-## Recently Completed (last 14 days)
-- [x] fix(db): migration 026 idempotent DO block + 044 ON CONFLICT→WHERE NOT EXISTS (#254/#255, fix/issue-254-255-migration-bugs) | 2026-04-06
-- [x] feat(dj): Streaming output adapter interface — IcecastAdapter stub + unit tests (#27, feat/issue-27-streaming-adapter) | 2026-04-06
-- [x] feat(station): System Logs page — audit trail (#197, PR #236) | 2026-04-06 | Migration: 050
-- [x] feat(dj): Adlib segments — pre-recorded clip library + AI-generated + configurable interval (#206, PR #232) | 2026-04-06 | Migration: 049
-- [x] docs(infra): Infrastructure Settings Registry (#230, PR #231) | 2026-04-06
-- [x] feat(dj): FB + X social adapters (#211/#212, PR #225) | 2026-04-06 | Migrations 040, 041
-- [x] feat(dj): Weather segment — IDataProvider, MockWeatherAdapter, weather_tease seed (#207, PR #229) | 2026-04-06
-- [x] feat(dj): Time Check + Station ID segments (#203/#204, feat/issue-203-204-dj-segments) | 2026-04-06
-- [x] feat(auth): Google OAuth login (#200, feat/issue-200-google-oauth) | 2026-04-05
-- [x] fix(dj): reject handler 422/503 codes (#183, fix/issue-183-dj-error) | 2026-04-05
-- [x] feat(agent-ops): P0 daemon fixes + CLAUDE.md rules (#158) | 2026-04-05
-- [x] feat(dj): chatbox for directed rewrites (#32, PR #180) | 2026-04-05
-- [x] feat(ops): Vercel + Railway deployment monitor (#166, PR #169) | 2026-04-05
-- [x] feat(dj): Script review UI (#31, PR #173) | 2026-04-05
-- [x] feat(scheduler): re-generate single slot (#132, PR #140) | 2026-04-04
-- [x] feat(alerts): generation failure endpoint + red badge (#133, PRs #163/#167) | 2026-04-05
-- [x] feat(analytics): category distribution by date + chart (#134, PR #172) | 2026-04-05
-- [x] chore(deps): Next 15 / Fastify 5 / tar high-vuln override (PR #110) | @gemini-cli | 2026-04-04
-- [x] feat(dj): S3 storage adapter + audio cleanup (#24, PR #176) | 2026-04-05
-- [x] feat(dj): script template management UI (#20, PR #150) | 2026-04-05
-- [x] feat(dj): show player with volume control (#21, PR #151) | 2026-04-05
-- [x] feat(dj): Spotify/Apple embed widgets (#22, PR #155) | 2026-04-05
-- [x] feat(dj): visual timeline + audio CSV export (#23, PR #156) | 2026-04-05
-- [x] feat(dashboard): GET /api/v1/dashboard/stats (#101) | 2026-04-05
-- [x] feat(dj): persona_config JSONB + prompt builder + seed + UI | 2026-04-04
-- [x] fix(deps): @fastify/rate-limit v10→v9 (DJ + Station) | 2026-04-04
+## Recently Completed
+- [x] feat(dj): Streaming output adapter interface — IcecastAdapter stub + unit tests (issue #27, feat/issue-27-streaming-adapter) | @claude-code | 2026-04-06
+- [x] feat(station): System Logs page — audit trail (issue #197, PR #236) | @claude-code | 2026-04-06 | Migration: 050
+- [x] feat(dj): Adlib segments — pre-recorded clip library + AI-generated + configurable interval (issue #206, PR #232) | @claude-code | 2026-04-06 | Migration: 049
+- [x] docs(infra): Infrastructure Settings Registry (issue #230, PR #231) | @claude-code | 2026-04-06
+- [x] feat(dj): Facebook + Twitter/X social adapters for listener shoutouts (issues #211, #212, PR #225) | @claude-code | 2026-04-06 | Migrations: 040, 041
+- [x] feat(dj): Weather segment — IDataProvider types, MockWeatherAdapter, weather_tease seed (issue #207, PR #229) | @claude-code | 2026-04-06
+- [x] feat(dj): Time Check segment — localized time_check injection (issue #203, feat/issue-203-204-dj-segments) | @claude-code | 2026-04-06
+- [x] feat(dj): Station ID segment — callsign/tagline/frequency injection (issue #204, feat/issue-203-204-dj-segments) | @claude-code | 2026-04-06
+- [x] Google OAuth login (issue #200, feat/issue-200-google-oauth) | @claude-code | 2026-04-05
+- [x] Fix DJ INTERNAL_ERROR: reject handler 422/503 error codes (issue #183, fix/issue-183-dj-error) | @claude-code | 2026-04-05
+- [x] Agent workflow improvements — P0 daemon fixes + CLAUDE.md rules (issue #158, feat/issue-158-workflow-improvements) | @claude-code | 2026-04-05
+- [x] Chatbox for directed script rewrite instructions (issue #32, PR #180) | @claude-code | 2026-04-05
+- [x] Deployment monitoring agent — Vercel + Railway (issue #166, PR #169) | @claude-code | 2026-04-05
+- [x] Script review UI (issue #31, PR #173) | @claude-code | 2026-04-05
+- [x] Re-generate single slot (issue #132, PR #140) | @claude-code | 2026-04-04
+- [x] Generation failure alerting — endpoint + UI red badge (issue #133, PRs #163/#167) | @claude-code | 2026-04-05
+- [x] Category distribution report by date + chart (issue #134, PR #172) | @claude-code | 2026-04-05
+- [x] Fix high vulnerabilities (Next.js 15 / Fastify 5 / tar override, PR #110) | @gemini-cli | 2026-04-04
+- [x] S3 storage adapter + audio cleanup job (issue #24, PR #176) | @claude-code | 2026-04-05
+- [x] Script template management UI (issue #20, PR #150) | @claude-code | 2026-04-05
+- [x] DJ Show Player with volume control (issue #21, PR #151) | @claude-code | 2026-04-05
+- [x] Spotify/Apple Music embed widgets (issue #22, PR #155) | @claude-code | 2026-04-05
+- [x] Visual show timeline + audio export CSV (issue #23, PR #156) | @claude-code | 2026-04-05
+- [x] Implement GET /api/v1/dashboard/stats endpoint (issue #101, feat/dashboard-stats) | @claude-code | 2026-04-05
+- [x] Add DJ link to sidebar navigation (issue #103, feat/dj-sidebar-nav) | @claude-code | 2026-04-04
+- [x] DJ Personality Feature (persona_config JSONB, PersonaConfig type, prompt builder, seed, frontend form) | @claude-code | 2026-04-04
+- [x] Fix @fastify/rate-limit v10→v9 for Fastify v4 compatibility (DJ + Station services) | @claude-code | 2026-04-04
+- [x] Implement per-song play history timeline (feat/song-play-history) | @gemini-cli | 2026-04-04
+- [x] Clone template to another station functionality (PR #107) | @gemini-cli | 2026-04-04
+- [x] Create station settings service and UI (PR #96) | @previous-agent | 2026-04-04
+- [x] Implement duplicate detection on song import (PR #99) | @gemini-cli | 2026-04-04
+- [x] Implement self-service profile management and fix frontend Tailwind v4 build (PR #98) | @gemini-cli | 2026-04-04
+- [x] Make AI DJ API keys configurable in Station Settings UI/Backend (PR #96) | @gemini-cli | 2026-04-04
+- [x] Implement and verify DJ service unit tests (TTS, Worker) | @gemini-cli | 2026-04-04
+- [x] Update Nginx gateway with DJ service routes | @gemini-cli | 2026-04-04
+- [x] Initial DJ Service Scaffold (Implicitly completed by previous agent)
+- [x] DB Migrations 016-023 (Implicitly completed by previous agent)
+- [x] LLM Adapter: OpenRouter (Implicitly completed by previous agent)
+- [x] Prompt Builder (Implicitly completed by previous agent)
+- [x] Core Services & Routes (Implicitly completed by previous agent)
+- [x] Script Generation Pipeline (BullMQ) (Implicitly completed by previous agent)
