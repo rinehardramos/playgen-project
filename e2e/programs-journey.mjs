@@ -176,6 +176,26 @@ async function main() {
   const delRes = await api(`/api/v1/programs/${program.id}`, { method: 'DELETE' });
   assert(delRes.status === 204, 'DELETE /programs/:id returns 204', delRes);
 
+  // Step 13 — coverage-gap auto-fix: POST a stub default-clock program to fill a gap (T-L, issue #302).
+  // Simulates clicking "Use station default clock" on an uncovered hour band in /today.
+  step = 13;
+  const gapFix = await api(`/api/v1/stations/${station.id}/programs`, {
+    method: 'POST',
+    body: {
+      name: 'Auto-fill 22:00–24:00',
+      description: 'Auto-created to fill coverage gap (station default clock)',
+      active_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+      start_hour: 22,
+      end_hour: 24,
+      is_default: true,
+    },
+  });
+  assert(gapFix.status === 201 || gapFix.status === 200, 'POST stub default-clock program returns 2xx', gapFix);
+  assert(!!gapFix.data?.id, 'stub program has an id');
+  assert(gapFix.data?.is_default === true, 'stub program is_default=true');
+  // Clean up
+  await api(`/api/v1/programs/${gapFix.data.id}`, { method: 'DELETE' });
+
   console.log('\nAll user-journey assertions passed ✔');
 }
 

@@ -9,7 +9,7 @@
  * log→program query.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth';
@@ -149,6 +149,13 @@ export default function TodayPage() {
 
   const user = getCurrentUser();
 
+  const refreshPrograms = useCallback(() => {
+    if (!selectedStation) return;
+    api.get<Program[]>(`/api/v1/stations/${selectedStation}/programs`)
+      .then(setPrograms)
+      .catch(() => {/* non-critical refresh — ignore transient errors */});
+  }, [selectedStation]);
+
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -202,7 +209,7 @@ export default function TodayPage() {
 
           {/* Coverage gaps alert */}
           {gaps.length > 0 && (
-            <GapAlert gaps={gaps} />
+            <GapAlert gaps={gaps} stationId={selectedStation} onGapFixed={refreshPrograms} />
           )}
 
           {/* Today's log quick actions */}
@@ -343,23 +350,86 @@ function Timeline({ bands, currentHour }: { bands: Band[]; currentHour: number }
   );
 }
 
-function GapAlert({ gaps }: { gaps: Band[] }) {
+function GapAlert({
+  gaps,
+  stationId,
+  onGapFixed,
+}: {
+  gaps: Band[];
+  stationId: string;
+  onGapFixed: () => void;
+}) {
+  const [fixing, setFixing] = useState<Record<string, boolean>>({});
+  const [fixError, setFixError] = useState<string | null>(null);
+
+  async function handleUseDefaultClock(gap: Band) {
+    const key = `${gap.startHour}-${gap.endHour}`;
+    setFixing((prev) => ({ ...prev, [key]: true }));
+    setFixError(null);
+    try {
+      await api.post(`/api/v1/stations/${stationId}/programs`, {
+        name: `Auto-fill ${formatHour(gap.startHour)}–${formatHour(gap.endHour)}`,
+        description: 'Auto-created to fill coverage gap (station default clock)',
+        active_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+        start_hour: gap.startHour,
+        end_hour: gap.endHour,
+        is_default: true,
+      });
+      onGapFixed();
+    } catch (err: unknown) {
+      const msg = (err as { message?: string }).message ?? 'Failed to create program';
+      setFixError(msg);
+    } finally {
+      setFixing((prev) => ({ ...prev, [key]: false }));
+    }
+  }
+
   return (
-    <div className="bg-yellow-900/10 border border-yellow-700/30 rounded-xl px-4 py-3 flex items-start gap-3">
-      <svg className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-      </svg>
-      <div className="flex-1">
-        <p className="text-sm text-yellow-200 font-medium">
-          {gaps.length === 1 ? '1 hour range' : `${gaps.length} hour ranges`} not covered by a program today
-        </p>
-        <p className="text-xs text-yellow-300/70 mt-1">
-          {gaps.map((g) => `${formatHour(g.startHour)}–${formatHour(g.endHour)}`).join(', ')}
-        </p>
-        <Link href="/programs/new" className="inline-block mt-2 text-xs text-yellow-300 hover:text-yellow-200 font-medium">
-          Schedule a program →
-        </Link>
+    <div className="bg-yellow-900/10 border border-yellow-700/30 rounded-xl px-4 py-3">
+      <div className="flex items-start gap-3 mb-3">
+        <svg className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <div>
+          <p className="text-sm text-yellow-200 font-medium">
+            {gaps.length === 1 ? '1 hour range' : `${gaps.length} hour ranges`} not covered by a program today
+          </p>
+          <p className="text-xs text-yellow-300/70 mt-0.5">
+            Fix each gap below or{' '}
+            <Link href="/programs/new" className="text-yellow-300 hover:text-yellow-200 font-medium">
+              create a custom program →
+            </Link>
+          </p>
+        </div>
       </div>
+
+      <ul className="space-y-2">
+        {gaps.map((gap) => {
+          const key = `${gap.startHour}-${gap.endHour}`;
+          const isBusy = fixing[key] ?? false;
+          return (
+            <li
+              key={key}
+              className="flex items-center justify-between gap-3 bg-yellow-900/10 border border-yellow-700/20 rounded-lg px-3 py-2"
+            >
+              <span className="text-xs text-yellow-200 font-medium">
+                {formatHour(gap.startHour)}–{formatHour(gap.endHour)}
+              </span>
+              <button
+                onClick={() => handleUseDefaultClock(gap)}
+                disabled={isBusy}
+                className="text-xs bg-yellow-700/30 hover:bg-yellow-700/50 text-yellow-200 font-medium px-3 py-1 rounded transition-colors disabled:opacity-50"
+              >
+                {isBusy ? 'Creating…' : 'Use station default clock'}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {fixError && (
+        <p className="mt-2 text-xs text-red-400">{fixError}</p>
+      )}
     </div>
   );
 }
