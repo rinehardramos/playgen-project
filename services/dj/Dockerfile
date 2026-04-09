@@ -15,6 +15,7 @@ COPY services/dj ./services/dj
 COPY tsconfig.base.json ./
 RUN pnpm --filter @playgen/types build
 RUN pnpm --filter @playgen/middleware build
+RUN pnpm --filter @playgen/info-broker-client build
 RUN pnpm --filter @playgen/dj-service build
 
 FROM node:25-alpine
