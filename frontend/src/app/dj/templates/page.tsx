@@ -103,7 +103,7 @@ export default function DjTemplatesPage() {
   async function fetchStations() {
     setStationsLoading(true);
     try {
-      const data = await api.stations.list(currentUser!.company_id);
+      const data = await api.get<Station[]>('/api/v1/stations');
       const activeStations = data.filter((s) => s.is_active);
       setStations(activeStations);
       // Auto-select the first station the user has access to
