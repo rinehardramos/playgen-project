@@ -458,6 +458,18 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  shared/info-broker-client:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.2(@types/node@20.19.37)(vite@6.4.2(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0))
+
   shared/middleware:
     dependencies:
       '@fastify/helmet':
