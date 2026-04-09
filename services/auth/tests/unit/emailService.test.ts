@@ -20,6 +20,13 @@ describe('emailService', () => {
     vi.clearAllMocks();
   });
 
+  it('module exports are accessible with no RESEND_API_KEY (lazy-init — no crash on import)', () => {
+    // Resend is now instantiated lazily inside each send* function.
+    // If it were constructed at module level, importing without a key would throw.
+    expect(sendPasswordResetEmail).toBeTypeOf('function');
+    expect(sendVerificationEmail).toBeTypeOf('function');
+  });
+
   it('logs to console when RESEND_API_KEY is not set (password reset)', async () => {
     const savedKey = process.env.RESEND_API_KEY;
     delete process.env.RESEND_API_KEY;

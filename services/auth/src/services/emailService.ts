@@ -1,14 +1,19 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY || 're_stub_noop_key');
 const FROM = process.env.EMAIL_FROM ?? 'PlayGen <noreply@playgen.site>';
+
+function getResend(): Resend {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) throw new Error('[emailService] RESEND_API_KEY not set — email unavailable');
+  return new Resend(key);
+}
 
 export async function sendPasswordResetEmail(to: string, resetLink: string): Promise<void> {
   if (!process.env.RESEND_API_KEY) {
     console.log(`[EMAIL STUB] Password reset for ${to}: ${resetLink}`);
     return;
   }
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: 'Reset your PlayGen password',
@@ -29,7 +34,7 @@ export async function sendVerificationEmail(to: string, verifyLink: string): Pro
     console.log(`[EMAIL STUB] Verify email for ${to}: ${verifyLink}`);
     return;
   }
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: 'Verify your PlayGen email address',
