@@ -65,7 +65,7 @@ export default function AdlibLibraryPage() {
     const user = getCurrentUser();
     if (!user) { router.push('/login'); return; }
 
-    api.get<Station[]>('/api/v1/stations')
+    api.stations.list(user.company_id)
       .then((data) => {
         setStations(data);
         if (data.length > 0) setSelectedStation(data[0].id);
