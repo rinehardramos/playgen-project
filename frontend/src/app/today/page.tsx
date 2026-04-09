@@ -47,11 +47,6 @@ function todayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function todayMonthKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
 function currentWeekday(): string {
   return DAY_NAMES[new Date().getDay()];
 }
@@ -128,16 +123,15 @@ export default function TodayPage() {
   useEffect(() => {
     if (!selectedStation) return;
     setLoading(true);
-    const month = todayMonthKey();
     const iso = todayISO();
 
     Promise.all([
       api.get<Program[]>(`/api/v1/stations/${selectedStation}/programs`).catch(() => []),
-      api.get<Playlist[]>(`/api/v1/stations/${selectedStation}/playlists?month=${month}`).catch(() => []),
+      api.get<Playlist[]>(`/api/v1/stations/${selectedStation}/playlists?date=${iso}`).catch(() => []),
     ])
       .then(([progs, logs]) => {
         setPrograms(progs);
-        const match = logs.find((l) => l.date.slice(0, 10) === iso) ?? null;
+        const match = logs[0] ?? null;
         setTodayLog(match);
       })
       .finally(() => setLoading(false));
