@@ -48,6 +48,26 @@ for svc in auth station library scheduler playlist analytics dj; do
   check_with_retry "$svc" "${GATEWAY_URL}/health/${svc}"
 done
 
+echo ""
+echo "=== Gateway Route Coverage (programs + program-episodes) ==="
+# These routes require auth. We verify nginx routes them (401) rather than dropping with 502.
+check_routed() {
+  local name="$1"
+  local url="$2"
+  local status
+  status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null) || status="000"
+  if [ "$status" = "401" ] || [ "$status" = "200" ]; then
+    echo "[PASS] $name -> $status (gateway routes correctly)"
+  else
+    echo "[FAIL] $name -> $status (expected 401/200 — possible missing nginx location block)"
+    FAILED=1
+  fi
+}
+check_routed "programs-get"         "${GATEWAY_URL}/api/v1/programs/00000000-0000-0000-0000-000000000000"
+check_routed "programs-clocks"      "${GATEWAY_URL}/api/v1/programs/00000000-0000-0000-0000-000000000000/clocks"
+check_routed "programs-episodes"    "${GATEWAY_URL}/api/v1/programs/00000000-0000-0000-0000-000000000000/episodes"
+check_routed "program-episodes-get" "${GATEWAY_URL}/api/v1/program-episodes/00000000-0000-0000-0000-000000000000"
+
 if [ -n "$FRONTEND_URL" ]; then
   echo ""
   echo "=== Frontend Health ==="
