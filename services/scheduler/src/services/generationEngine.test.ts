@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickBestCandidate, filterCandidates } from './generationEngine';
+import { pickBestCandidate, filterCandidates, buildSlotList, getDayOfWeek } from './generationEngine';
 
 // ─── Shared test data types (mirrors generationEngine internals) ─────────────
 
@@ -299,3 +299,38 @@ describe('filterCandidates', () => {
     expect(result).toHaveLength(0);
   });
 });
+
+describe('getDayOfWeek', () => {
+  it('returns the correct day name for known dates', () => {
+    expect(getDayOfWeek('2026-04-06')).toBe('monday');
+    expect(getDayOfWeek('2026-04-11')).toBe('saturday');
+    expect(getDayOfWeek('2026-04-12')).toBe('sunday');
+  });
+});
+
+describe('buildSlotList', () => {
+  const tplId = 'tpl-1';
+  function tplSlot(hour: number, position: number, cat: string) {
+    return { id: `ts:${hour}:${position}`, template_id: tplId, hour, position, required_category_id: cat, category_code: 'X' };
+  }
+  it('returns template slots unchanged when no clocks set', () => {
+    const t = [tplSlot(8, 1, 'c-a'), tplSlot(9, 1, 'c-b')];
+    expect(buildSlotList(t, new Map(), new Map(), tplId)).toHaveLength(2);
+  });
+  it('replaces hour with clock slots when clock set for that hour', () => {
+    const t = [tplSlot(8, 1, 'c-tpl'), tplSlot(9, 1, 'c-tpl')];
+    const hm = new Map<number, string>([[8, 'ck1']]);
+    const cs = new Map([['ck1', [{ clock_id: 'ck1', position: 1, category_id: 'c-clk' }]]]);
+    const r = buildSlotList(t, hm, cs, tplId);
+    expect(r).toHaveLength(2);
+    expect(r[0]).toMatchObject({ hour: 8, required_category_id: 'c-clk' });
+    expect(r[1]).toMatchObject({ hour: 9, required_category_id: 'c-tpl' });
+  });
+  it('produces different output with vs without clock (integration proof)', () => {
+    const t = [tplSlot(10, 1, 'c-template')];
+    const withClock = buildSlotList(t, new Map([[10, 'ck']]), new Map([['ck', [{ clock_id: 'ck', position: 1, category_id: 'c-clock' }]]]), tplId);
+    const withoutClock = buildSlotList(t, new Map(), new Map(), tplId);
+    expect(withClock[0].required_category_id).not.toBe(withoutClock[0].required_category_id);
+  });
+});
+
