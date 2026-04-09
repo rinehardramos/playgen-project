@@ -25,6 +25,7 @@ _(no open recommended tickets — check GitHub Issues for new work)_
 
 ## Active Work
 - [ ] fix(frontend): stations.list helper + fix all /api/v1/stations call sites (#247, fix/issue-247-stations-endpoint) | @claude-code | 2026-04-09
+- [x] fix(gateway): document programs routes in api-spec.md + smoke test (#244, PR #343) | @claude-code | 2026-04-09
 
 ## Recently Completed
 - [x] feat(shared): @playgen/info-broker-client workspace package (#319, PR #334) | @claude-code | 2026-04-09

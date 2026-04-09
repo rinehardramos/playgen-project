@@ -86,6 +86,30 @@
 | GET | `/companies/:id/roles` | `users:read` | List configurable roles |
 | PUT | `/roles/:id` | `company_admin` | Update role label |
 
+### Programs
+**Gateway owner**: Station service (`station :3002`). Nginx routes `/api/v1/programs/*` and `/api/v1/program-episodes/*` → station.
+
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| GET | `/stations/:id/programs` | `station:read` | List programs for station |
+| POST | `/stations/:id/programs` | `station:write` | Create program |
+| GET | `/programs/:id` | `station:read` | Get program |
+| PUT | `/programs/:id` | `station:write` | Update program |
+| DELETE | `/programs/:id` | `station:write` | Delete program |
+| GET | `/programs/:id/clocks` | `station:read` | List show clocks |
+| POST | `/programs/:id/clocks` | `station:write` | Create show clock |
+| PUT | `/programs/:id/clocks/:clockId` | `station:write` | Update show clock |
+| DELETE | `/programs/:id/clocks/:clockId` | `station:write` | Delete show clock |
+| GET | `/programs/:id/episodes` | `station:read` | List episodes (filter by `?month=YYYY-MM`) |
+
+### Program Episodes
+**Gateway owner**: Station service (`station :3002`).
+
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| GET | `/program-episodes/:episodeId` | `station:read` | Get episode detail |
+| PUT | `/program-episodes/:episodeId` | `station:write` | Update episode |
+
 ---
 
 ## Library Service (`/api/v1`)
