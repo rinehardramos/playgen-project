@@ -15,10 +15,11 @@ Before starting any task, an agent MUST:
 ## Next Recommended Tickets
 
 ### For ticket-bug workers (P0 first)
-_(#244–#247 resolved — check GitHub Issues for new P0/P1 bugs)_
+_(no open bugs — all P0/P1 bugs resolved as of 2026-04-12)_
 
 ### For ticket-feat worker
-_(no open recommended tickets — check GitHub Issues for new work)_
+- **#293** T-C: Generate-day-from-Programs orchestration route [P1] — backend route, unclaimed, ready to start
+- **#294** T-D: WebSocket/SSE now-playing channel for /today [P1] — real-time feature, unclaimed
 
 ---
 
