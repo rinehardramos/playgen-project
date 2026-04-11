@@ -24,9 +24,10 @@ _(no open bugs — all P0/P1 bugs resolved as of 2026-04-12)_
 ---
 
 ## Active Work
-- [ ] feat(frontend): mobile polish /today - sticky NowPlaying + timeline scroll (#300, feat/issue-300) | @claude-code | 2026-04-12
+_(none)_
 
 ## Recently Completed
+- [x] feat(frontend): mobile responsive polish for /today — sticky NowPlaying + timeline scroll (#300, PR #350) | @claude-code | 2026-04-12
 - [x] fix(frontend): Docker server.js standalone layout fix + docs (#246, PR #341) | @claude-code | 2026-04-09
 - [x] fix(auth): lazy-init Resend — no crash on missing RESEND_API_KEY (#245, PR #340) | @claude-code | 2026-04-09
 - [x] fix(gateway): document programs routes in api-spec.md + gateway smoke test (#244, PR #343) | @claude-code | 2026-04-09
