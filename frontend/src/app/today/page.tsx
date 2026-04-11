@@ -200,7 +200,9 @@ export default function TodayPage() {
         <div className="space-y-6">
           {/* Now Playing + Next Up cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <NowPlayingCard program={nowProgram} hour={currentHour} stationId={selectedStation} />
+            <div className="sticky top-0 z-10 md:static">
+              <NowPlayingCard program={nowProgram} hour={currentHour} stationId={selectedStation} />
+            </div>
             <NextUpCard band={nextBand} />
           </div>
 
@@ -306,10 +308,12 @@ function Timeline({ bands, currentHour }: { bands: Band[]; currentHour: number }
     <div>
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Today&apos;s Timeline</h2>
-        <span className="text-xs text-gray-600">Tap a band to jump to its program</span>
+        <span className="hidden sm:block text-xs text-gray-600">Tap a band to jump to its program</span>
       </div>
-      <div className="bg-[#1a1a2e] border border-[#2a2a40] rounded-xl p-4 overflow-hidden">
-        <div className="flex h-12 rounded-lg overflow-hidden">
+      <div className="bg-[#1a1a2e] border border-[#2a2a40] rounded-xl p-4">
+        <div className="overflow-x-auto">
+          <div className="min-w-[520px]">
+            <div className="flex h-12 rounded-lg overflow-hidden">
           {bands.map((band, i) => {
             const widthPct = ((band.endHour - band.startHour) / 24) * 100;
             const bg = band.program?.color_tag ?? '#1e1e2e';
@@ -338,12 +342,14 @@ function Timeline({ bands, currentHour }: { bands: Band[]; currentHour: number }
             );
           })}
         </div>
-        <div className="flex justify-between mt-2 text-[10px] text-gray-600">
-          <span>12 AM</span>
-          <span>6 AM</span>
-          <span>12 PM</span>
-          <span>6 PM</span>
-          <span>12 AM</span>
+            <div className="flex justify-between mt-2 text-[10px] text-gray-600">
+              <span>12 AM</span>
+              <span>6 AM</span>
+              <span>12 PM</span>
+              <span>6 PM</span>
+              <span>12 AM</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

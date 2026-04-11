@@ -24,7 +24,7 @@ _(no open bugs — all P0/P1 bugs resolved as of 2026-04-12)_
 ---
 
 ## Active Work
-_(none)_
+- [ ] feat(frontend): mobile polish /today - sticky NowPlaying + timeline scroll (#300, feat/issue-300) | @claude-code | 2026-04-12
 
 ## Recently Completed
 - [x] fix(frontend): Docker server.js standalone layout fix + docs (#246, PR #341) | @claude-code | 2026-04-09
