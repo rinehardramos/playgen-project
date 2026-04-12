@@ -9,7 +9,7 @@
  * log→program query.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth';
@@ -29,6 +29,7 @@ interface Program {
   start_hour: number;
   end_hour: number;
   color_tag: string | null;
+  dj_profile_id: string | null;
   is_active: boolean;
   is_default: boolean;
 }
@@ -241,8 +242,30 @@ function EmptyState({ title, body, cta }: { title: string; body: string; cta: { 
   );
 }
 
+function djInitials(name: string): string {
+  return name.split(' ').slice(0, 2).map((w) => w[0] ?? '').join('').toUpperCase();
+}
+
 function NowPlayingCard({ program, hour, stationId }: { program: Program | null; hour: number; stationId: string }) {
   const color = program?.color_tag ?? '#334155';
+  const [djName, setDjName] = useState<string | null>(null);
+  const fetchedProfileId = useRef<string | null>(null);
+
+  useEffect(() => {
+    const profileId = program?.dj_profile_id ?? null;
+    if (!profileId) {
+      setDjName(null);
+      fetchedProfileId.current = null;
+      return;
+    }
+    // Avoid redundant fetches when program changes but dj_profile_id stays the same
+    if (fetchedProfileId.current === profileId) return;
+    fetchedProfileId.current = profileId;
+    api.get<{ id: string; name: string }>(`/api/v1/dj/profiles/${profileId}`)
+      .then((p) => setDjName(p.name))
+      .catch(() => setDjName(null));
+  }, [program?.dj_profile_id]);
+
   return (
     <div className="bg-[#1a1a2e] border border-[#2a2a40] rounded-xl p-5">
       <div className="flex items-center justify-between mb-3">
@@ -255,9 +278,20 @@ function NowPlayingCard({ program, hour, stationId }: { program: Program | null;
             <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
             <h3 className="text-white font-semibold truncate">{program.name}</h3>
           </div>
-          <p className="text-gray-500 text-xs mb-4">
+          <p className="text-gray-500 text-xs mb-3">
             {formatHour(program.start_hour)} – {formatHour(program.end_hour)}
           </p>
+          {djName && (
+            <Link
+              href={`/stations/${stationId}/dj`}
+              className="flex items-center gap-2 mb-3 text-xs text-gray-400 hover:text-gray-200 transition-colors group"
+            >
+              <div className="w-6 h-6 rounded-full bg-violet-600/20 flex items-center justify-center text-[10px] font-bold text-violet-300 flex-shrink-0 group-hover:bg-violet-600/30">
+                {djInitials(djName)}
+              </div>
+              <span className="truncate">{djName}</span>
+            </Link>
+          )}
           <Link
             href={`/programs/${program.id}/clock`}
             className="inline-block text-xs text-violet-400 hover:text-violet-300 font-medium"
@@ -273,8 +307,6 @@ function NowPlayingCard({ program, hour, stationId }: { program: Program | null;
           </Link>
         </>
       )}
-      {/* stationId reserved for the T-I DJ profile + T-D SSE follow-up */}
-      <span className="sr-only" data-station={stationId} />
     </div>
   );
 }

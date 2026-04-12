@@ -15,19 +15,18 @@ Before starting any task, an agent MUST:
 ## Next Recommended Tickets
 
 ### For ticket-bug workers (P0 first)
-_(no open bugs — all P0/P1 bugs resolved as of 2026-04-12)_
+_(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 
 ### For ticket-feat worker
-- **#293** T-C: Generate-day-from-Programs orchestration route [P1] — backend route, unclaimed, ready to start
-- **#294** T-D: WebSocket/SSE now-playing channel for /today [P1] — real-time feature, unclaimed
+1. **#293** — T-C: Generate-day-from-Programs orchestration route (P1, epic:programs-logs-unification)
+2. **#294** — T-D: WebSocket/SSE now-playing channel for /today (P1, epic:programs-logs-unification)
 
 ---
 
 ## Active Work
-_(none)_
+- [ ] feat(station+frontend): DJ profile on Today's Now Playing card (#299, feat/issue-299) | @claude-code | 2026-04-13 | Migration: 056
 
 ## Recently Completed
-- [x] feat(frontend): mobile responsive polish for /today — sticky NowPlaying + timeline scroll (#300, PR #350) | @claude-code | 2026-04-12
 - [x] fix(frontend): Docker server.js standalone layout fix + docs (#246, PR #341) | @claude-code | 2026-04-09
 - [x] fix(auth): lazy-init Resend — no crash on missing RESEND_API_KEY (#245, PR #340) | @claude-code | 2026-04-09
 - [x] fix(gateway): document programs routes in api-spec.md + gateway smoke test (#244, PR #343) | @claude-code | 2026-04-09

@@ -156,6 +156,8 @@ async function main() {
   });
   assert(putRes.status === 200, 'PUT /programs/:id returns 200', putRes);
   assert(putRes.data?.name?.endsWith('(edited)'), 'update persists name change');
+  // T-I: dj_profile_id column must be present (null when no DJ assigned)
+  assert('dj_profile_id' in (putRes.data ?? {}), 'program response includes dj_profile_id field (T-I: DJ profile on Now Playing)');
 
   // Step 11 — /today data surface: fetch the current month's playlists
   // for the station, which is what the /today page uses to find "today's log".
