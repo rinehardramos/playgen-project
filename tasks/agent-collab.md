@@ -15,10 +15,11 @@ Before starting any task, an agent MUST:
 ## Next Recommended Tickets
 
 ### For ticket-bug workers (P0 first)
-_(#244–#247 resolved — check GitHub Issues for new P0/P1 bugs)_
+_(no open bugs — all P0/P1 bugs resolved as of 2026-04-12)_
 
 ### For ticket-feat worker
-_(no open recommended tickets — check GitHub Issues for new work)_
+- **#293** T-C: Generate-day-from-Programs orchestration route [P1] — backend route, unclaimed, ready to start
+- **#294** T-D: WebSocket/SSE now-playing channel for /today [P1] — real-time feature, unclaimed
 
 ---
 
@@ -26,6 +27,7 @@ _(no open recommended tickets — check GitHub Issues for new work)_
 _(none)_
 
 ## Recently Completed
+- [x] feat(frontend): mobile responsive polish for /today — sticky NowPlaying + timeline scroll (#300, PR #350) | @claude-code | 2026-04-12
 - [x] fix(frontend): Docker server.js standalone layout fix + docs (#246, PR #341) | @claude-code | 2026-04-09
 - [x] fix(auth): lazy-init Resend — no crash on missing RESEND_API_KEY (#245, PR #340) | @claude-code | 2026-04-09
 - [x] fix(gateway): document programs routes in api-spec.md + gateway smoke test (#244, PR #343) | @claude-code | 2026-04-09
