@@ -83,7 +83,7 @@ All three personas land on `/today`.
 
 **Goal**: know what's on air now, grab today's log, print or export.
 
-1. `/today` → sees **Now Playing** card (current hour → active Program → current clock slot), **Next Up** card, and a prominent "Open today's log" button.
+1. `/today` → sees **Now Playing** card (current hour → active Program → DJ avatar/name if assigned → current clock slot), **Next Up** card, and a prominent "Open today's log" button. The DJ badge links to `/stations/:sid/dj`.
 2. Clicks "Open today's log" → `/playlists/:id` with bands.
 3. Reviews, approves, exports XLSX.
 
@@ -116,7 +116,7 @@ See the issues labelled `epic:programs-logs-unification`. Each ticket below is f
 | T-F | P2 | Log → Program backlink in Log header |
 | T-G | P2 | `GET /playlists/:id/episodes` reverse endpoint |
 | T-H | P2 | `useProgramCoverage(stationId, date)` hook + tests |
-| T-I | P2 | DJ profile surfaced on Today's Now Playing card |
+| T-I | P2 | ~~DJ profile surfaced on Today's Now Playing card~~ (done — #299) |
 | T-J | P3 | Mobile responsive polish for `/today` |
 | T-K | P3 | Timeline multi-day view (`?span=3`) |
 | T-L | P3 | Coverage-gap auto-fix CTA |

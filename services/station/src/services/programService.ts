@@ -58,10 +58,11 @@ export async function updateProgram(
     end_hour: number;
     template_id: string | null;
     color_tag: string | null;
+    dj_profile_id: string | null;
     is_active: boolean;
   }>
 ): Promise<Program | null> {
-  const allowed = ['name', 'description', 'active_days', 'start_hour', 'end_hour', 'template_id', 'color_tag', 'is_active'] as const;
+  const allowed = ['name', 'description', 'active_days', 'start_hour', 'end_hour', 'template_id', 'color_tag', 'dj_profile_id', 'is_active'] as const;
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;

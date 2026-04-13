@@ -618,6 +618,7 @@ export interface Program {
   end_hour: number;
   template_id: string | null;
   color_tag: string | null;
+  dj_profile_id: string | null;
   is_active: boolean;
   is_default: boolean;
   created_at: Date;
