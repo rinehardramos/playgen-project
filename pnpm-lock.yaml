@@ -199,8 +199,8 @@ importers:
         specifier: workspace:*
         version: link:../../shared/types
       bullmq:
-        specifier: ^5.73.0
-        version: 5.73.0
+        specifier: ^5.73.5
+        version: 5.73.5
       fastify:
         specifier: ^5.8.4
         version: 5.8.4
@@ -331,8 +331,8 @@ importers:
         specifier: workspace:*
         version: link:../../shared/types
       bullmq:
-        specifier: ^5.73.0
-        version: 5.73.0
+        specifier: ^5.73.5
+        version: 5.73.5
       fastify:
         specifier: ^5.8.4
         version: 5.8.4
@@ -2174,8 +2174,8 @@ packages:
     resolution: {integrity: sha512-9q/rDEGSb/Qsvv2qvzIzdluL5k7AaJOTrw23z9reQthrbF7is4CtlT0DXyO1oei2DCp4uojjzQ7igaSHp1kAEQ==}
     engines: {node: '>=0.2.0'}
 
-  bullmq@5.73.0:
-    resolution: {integrity: sha512-uX8RbQaBbzk0H9JYXKGrNxpDqFcDBQFFKCyKarMjtfYHuct5X48M2LUq3Q9FXt/P2kWzPrqYlNnNqsico7ty5A==}
+  bullmq@5.73.5:
+    resolution: {integrity: sha512-bZu3t1c/1smbA8Jk46OrLA4JRHPTv4uLbqUP0uaviV7S4c/rSl/qKmg3twgKKz+3aB4E0NL0jcjQW5eHwGyQOw==}
 
   call-bind-apply-helpers@1.0.2:
     resolution: {integrity: sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==}
@@ -5579,7 +5579,7 @@ snapshots:
 
   buffers@0.1.1: {}
 
-  bullmq@5.73.0:
+  bullmq@5.73.5:
     dependencies:
       cron-parser: 4.9.0
       ioredis: 5.10.1
