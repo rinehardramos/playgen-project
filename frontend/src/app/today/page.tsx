@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth';
 import { api } from '@/lib/api';
@@ -50,6 +50,28 @@ function todayISO(): string {
 
 function currentWeekday(): string {
   return DAY_NAMES[new Date().getDay()];
+}
+
+/** Return an ISO date string offset by `days` from today (negative = past). */
+function dateISO(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function weekdayForOffset(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return DAY_NAMES[d.getDay()];
+}
+
+function formatDateLabel(days: number): string {
+  if (days === 0) return 'Today';
+  if (days === -1) return 'Yesterday';
+  if (days === 1) return 'Tomorrow';
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function formatHour(h: number): string {
@@ -93,10 +115,14 @@ function computeBands(programs: Program[], weekday: string): Band[] {
 
 export default function TodayPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawSpan = Number(searchParams.get('span') ?? '1');
+  const span = rawSpan === 3 ? 3 : 1;
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState('');
   const [programs, setPrograms] = useState<Program[]>([]);
   const [todayLog, setTodayLog] = useState<Playlist | null>(null);
+  const [dayLogs, setDayLogs] = useState<Record<string, Playlist | null>>({});
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => new Date());
 
@@ -121,22 +147,39 @@ export default function TodayPage() {
       .catch(() => setLoading(false));
   }, [router]);
 
+  // Compute day offsets for the current span (e.g. span=3 → [-1, 0, 1])
+  const dayOffsets = useMemo(() => {
+    if (span === 1) return [0];
+    const half = Math.floor(span / 2);
+    return Array.from({ length: span }, (_, i) => i - half);
+  }, [span]);
+
   useEffect(() => {
     if (!selectedStation) return;
     setLoading(true);
-    const iso = todayISO();
+
+    const logFetches = dayOffsets.map((offset) => {
+      const iso = dateISO(offset);
+      return api.get<Playlist[]>(`/api/v1/stations/${selectedStation}/playlists?date=${iso}`)
+        .then((logs) => [iso, logs[0] ?? null] as const)
+        .catch(() => [iso, null] as const);
+    });
 
     Promise.all([
       api.get<Program[]>(`/api/v1/stations/${selectedStation}/programs`).catch(() => []),
-      api.get<Playlist[]>(`/api/v1/stations/${selectedStation}/playlists?date=${iso}`).catch(() => []),
+      ...logFetches,
     ])
-      .then(([progs, logs]) => {
-        setPrograms(progs);
-        const match = logs[0] ?? null;
-        setTodayLog(match);
+      .then(([progs, ...logEntries]) => {
+        setPrograms(progs as Program[]);
+        const logMap: Record<string, Playlist | null> = {};
+        for (const [iso, log] of logEntries as [string, Playlist | null][]) {
+          logMap[iso] = log;
+        }
+        setDayLogs(logMap);
+        setTodayLog(logMap[todayISO()] ?? null);
       })
       .finally(() => setLoading(false));
-  }, [selectedStation]);
+  }, [selectedStation, dayOffsets]);
 
   const weekday = currentWeekday();
   const currentHour = now.getHours();
@@ -168,17 +211,34 @@ export default function TodayPage() {
             {now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
           </p>
         </div>
-        {stations.length > 1 && (
-          <select
-            value={selectedStation}
-            onChange={(e) => setSelectedStation(e.target.value)}
-            className="bg-[#1a1a2e] border border-[#2a2a40] text-gray-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-violet-500"
-          >
-            {stations.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex bg-[#1a1a2e] border border-[#2a2a40] rounded-lg overflow-hidden">
+            {([1, 3] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => router.push(v === 1 ? '/today' : `/today?span=${v}`)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  span === v
+                    ? 'bg-violet-600 text-white'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {v === 1 ? 'Today' : '3 Days'}
+              </button>
             ))}
-          </select>
-        )}
+          </div>
+          {stations.length > 1 && (
+            <select
+              value={selectedStation}
+              onChange={(e) => setSelectedStation(e.target.value)}
+              className="bg-[#1a1a2e] border border-[#2a2a40] text-gray-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-violet-500"
+            >
+              {stations.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -207,8 +267,32 @@ export default function TodayPage() {
             <NextUpCard band={nextBand} />
           </div>
 
-          {/* Timeline */}
-          <Timeline bands={bands} currentHour={currentHour} />
+          {/* Timeline(s) */}
+          {span === 1 ? (
+            <Timeline bands={bands} currentHour={currentHour} label="Today" />
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Timeline</h2>
+                <span className="hidden sm:block text-xs text-gray-600">Tap a band to jump to its program</span>
+              </div>
+              {dayOffsets.map((offset) => {
+                const dayWeekday = weekdayForOffset(offset);
+                const dayBands = computeBands(programs, dayWeekday);
+                const isToday = offset === 0;
+                return (
+                  <Timeline
+                    key={offset}
+                    bands={dayBands}
+                    currentHour={isToday ? currentHour : -1}
+                    label={formatDateLabel(offset)}
+                    isToday={isToday}
+                    compact
+                  />
+                );
+              })}
+            </div>
+          )}
 
           {/* Coverage gaps alert */}
           {gaps.length > 0 && (
@@ -335,17 +419,34 @@ function NextUpCard({ band }: { band: Band | null }) {
   );
 }
 
-function Timeline({ bands, currentHour }: { bands: Band[]; currentHour: number }) {
+function Timeline({
+  bands,
+  currentHour,
+  label = "Today's Timeline",
+  isToday = true,
+  compact = false,
+}: {
+  bands: Band[];
+  currentHour: number;
+  label?: string;
+  isToday?: boolean;
+  compact?: boolean;
+}) {
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Today&apos;s Timeline</h2>
-        <span className="hidden sm:block text-xs text-gray-600">Tap a band to jump to its program</span>
-      </div>
-      <div className="bg-[#1a1a2e] border border-[#2a2a40] rounded-xl p-4">
+      {!compact && (
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">{label}</h2>
+          <span className="hidden sm:block text-xs text-gray-600">Tap a band to jump to its program</span>
+        </div>
+      )}
+      <div className={`bg-[#1a1a2e] border border-[#2a2a40] rounded-xl ${compact ? 'p-3' : 'p-4'} ${isToday && compact ? 'ring-1 ring-violet-500/30' : ''}`}>
+        {compact && (
+          <p className={`text-xs font-medium mb-2 ${isToday ? 'text-violet-400' : 'text-gray-500'}`}>{label}</p>
+        )}
         <div className="overflow-x-auto">
           <div className="min-w-[520px]">
-            <div className="flex h-12 rounded-lg overflow-hidden">
+            <div className={`flex ${compact ? 'h-9' : 'h-12'} rounded-lg overflow-hidden`}>
           {bands.map((band, i) => {
             const widthPct = ((band.endHour - band.startHour) / 24) * 100;
             const bg = band.program?.color_tag ?? '#1e1e2e';
