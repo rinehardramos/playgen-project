@@ -24,9 +24,10 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 ---
 
 ## Active Work
-- [ ] feat(station+frontend): DJ profile on Today's Now Playing card (#299, feat/issue-299) | @claude-code | 2026-04-13 | Migration: 056
+- [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
 
 ## Recently Completed
+- [x] feat(station+frontend): DJ profile on Today's Now Playing card (#299, PR #351) | @claude-code | 2026-04-13 | Migration: 056
 - [x] fix(frontend): Docker server.js standalone layout fix + docs (#246, PR #341) | @claude-code | 2026-04-09
 - [x] fix(auth): lazy-init Resend — no crash on missing RESEND_API_KEY (#245, PR #340) | @claude-code | 2026-04-09
 - [x] fix(gateway): document programs routes in api-spec.md + gateway smoke test (#244, PR #343) | @claude-code | 2026-04-09
