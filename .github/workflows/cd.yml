@@ -51,7 +51,7 @@ jobs:
             dockerfile: shared/db/Dockerfile
             context: .
     steps:
-      - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
 
@@ -92,7 +92,7 @@ jobs:
     needs: [build-and-push]
     environment: production
     steps:
-      - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
 
@@ -100,9 +100,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@08c4be7e2e672a47d11bd04269e27e5f3e8529cb  # v6.0.0
+      - uses: pnpm/action-setup@078e9d416474b29c0c387560859308974f7e9c53  # v6.0.1
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version: 20
           cache: pnpm
@@ -121,7 +121,7 @@ jobs:
     needs: [build-and-push]
     environment: production
     steps:
-      - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
 
@@ -129,9 +129,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@08c4be7e2e672a47d11bd04269e27e5f3e8529cb  # v6.0.0
+      - uses: pnpm/action-setup@078e9d416474b29c0c387560859308974f7e9c53  # v6.0.1
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version: 20
           cache: pnpm
@@ -152,7 +152,7 @@ jobs:
       matrix:
         service: [auth, station, library, scheduler, playlist, analytics, dj, gateway]
     steps:
-      - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
 
@@ -175,7 +175,7 @@ jobs:
     needs: [deploy-services, deploy-frontend]
     environment: production
     steps:
-      - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
 
