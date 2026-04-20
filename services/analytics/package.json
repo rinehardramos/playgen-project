@@ -13,7 +13,7 @@
   "dependencies": {
     "@playgen/middleware": "workspace:*",
     "@playgen/types": "workspace:*",
-    "fastify": "^5.8.4",
+    "fastify": "^5.8.5",
     "@fastify/sensible": "^6.0.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.0"
