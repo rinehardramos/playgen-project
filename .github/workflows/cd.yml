@@ -54,6 +54,7 @@ jobs:
       - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
         with:
           egress-policy: audit
+          disable-file-monitoring: true
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
@@ -95,6 +96,7 @@ jobs:
       - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
         with:
           egress-policy: audit
+          disable-file-monitoring: true
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
@@ -126,6 +128,7 @@ jobs:
       - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
         with:
           egress-policy: audit
+          disable-file-monitoring: true
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
@@ -159,6 +162,7 @@ jobs:
       - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
         with:
           egress-policy: audit
+          disable-file-monitoring: true
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
@@ -182,6 +186,7 @@ jobs:
       - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
         with:
           egress-policy: audit
+          disable-file-monitoring: true
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
