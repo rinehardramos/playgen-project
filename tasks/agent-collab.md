@@ -25,10 +25,10 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 
 ## Active Work
 - [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
-- [ ] feat(scheduler): dailyProgramJob — program-aware cron for tomorrow's playlists (feat/daily-program-job) | @claude-sonnet-4-6 | 2026-04-22
-- [ ] feat(station): Program Import/Export — .playgen ZIP bundle export/import (feat/program-import-export) | @claude-sonnet-4-6 | 2026-04-22
+- [x] feat(station): Program Import/Export — .playgen ZIP bundle export/import (feat/program-import-export, PR #408) | @claude-sonnet-4-6 | 2026-04-22
 
 ## Recently Completed
+- [x] feat(scheduler): dailyProgramJob — program-aware cron for tomorrow's playlists (feat/daily-program-job, PR #407) | @claude-sonnet-4-6 | 2026-04-22
 - [x] feat(db+types): add audio_url/audio_source columns to songs | @claude-sonnet-4-6 | 2026-04-22 | Migration: 057
 - [x] feat(station+frontend): DJ profile on Today's Now Playing card (#299, PR #351) | @claude-code | 2026-04-13 | Migration: 056
 - [x] fix(frontend): Docker server.js standalone layout fix + docs (#246, PR #341) | @claude-code | 2026-04-09
