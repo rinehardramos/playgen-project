@@ -41,12 +41,8 @@ interface StationRow {
   country_code: string | null;
   latitude: number | null;
   longitude: number | null;
-  openrouter_api_key: string | null;
-  openai_api_key: string | null;
-  elevenlabs_api_key: string | null;
-  anthropic_api_key: string | null;
-  gemini_api_key: string | null;
-  mistral_api_key: string | null;
+  // API keys are resolved from station_settings (multi-tenant) or env vars (fallback).
+  // Per-station column keys were removed — use station_settings['llm_api_key'] etc.
   // Station identity fields (migration 039)
   callsign: string | null;
   tagline: string | null;
@@ -149,7 +145,6 @@ export async function runGenerationJob(
   const { rows: stationRows } = await pool.query<StationRow>(
     `SELECT id, name, timezone, locale_code, company_id,
             city, country_code, latitude, longitude,
-            openrouter_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, gemini_api_key, mistral_api_key,
             callsign, tagline, frequency,
             news_scope, news_topic
      FROM stations WHERE id = $1`,
@@ -186,19 +181,9 @@ export async function runGenerationJob(
   // 2b. Pre-flight: fail fast if no LLM API key is available before creating any DB records.
   //     Both per-station keys (from station columns / station_settings) and env var defaults
   //     are checked so the error message tells the operator exactly what to configure.
+  // Multi-tenant key resolution: station_settings first, env var fallback.
   const earlyLlmProvider = stationSettings['llm_provider'] ?? config.llm.provider;
-  const earlyLlmApiKey =
-    stationSettings['llm_api_key'] ??
-    (earlyLlmProvider === 'anthropic'
-      ? station.anthropic_api_key
-      : earlyLlmProvider === 'gemini'
-      ? station.gemini_api_key
-      : earlyLlmProvider === 'openai'
-      ? station.openai_api_key
-      : earlyLlmProvider === 'mistral'
-      ? station.mistral_api_key
-      : station.openrouter_api_key) ??
-    undefined;
+  const earlyLlmApiKey = stationSettings['llm_api_key'] ?? undefined;
   const earlyLlmFallback =
     earlyLlmProvider === 'openai'
       ? config.llm.openaiApiKey
@@ -372,29 +357,10 @@ export async function runGenerationJob(
   const effectiveLlmProvider = stationSettings['llm_provider'] ?? config.llm.provider;
   const effectiveLlmModel    = stationSettings['llm_model'] || profile.llm_model;
 
-  const effectiveLlmApiKey = stationSettings['llm_api_key']
-    ?? (effectiveLlmProvider === 'anthropic'
-      ? station.anthropic_api_key
-      : effectiveLlmProvider === 'gemini'
-      ? station.gemini_api_key
-      : effectiveLlmProvider === 'openai'
-      ? station.openai_api_key
-      : effectiveLlmProvider === 'mistral'
-      ? station.mistral_api_key
-      : station.openrouter_api_key)
-    ?? undefined;
+  const effectiveLlmApiKey = stationSettings['llm_api_key'] ?? undefined;
 
   const effectiveTtsProvider = (stationSettings['tts_provider'] ?? config.tts.provider) as string;
   const effectiveTtsApiKey = stationSettings['tts_api_key']
-    ?? (effectiveTtsProvider === 'elevenlabs'
-      ? station.elevenlabs_api_key
-      : effectiveTtsProvider === 'google'
-      ? station.gemini_api_key   // Google TTS uses the same Google/Gemini API key
-      : effectiveTtsProvider === 'gemini_tts'
-      ? station.gemini_api_key   // Gemini native TTS also uses the Gemini API key
-      : effectiveTtsProvider === 'mistral'
-      ? station.mistral_api_key
-      : station.openai_api_key)
     ?? (effectiveTtsProvider === 'elevenlabs'
       ? config.tts.elevenlabsApiKey
       : effectiveTtsProvider === 'google'
