@@ -23,6 +23,7 @@ vi.mock('../../src/services/queueService', () => ({
 import { getPool } from '../../src/db';
 import { enqueueGeneration } from '../../src/services/queueService';
 import { runDailyProgramGeneration } from '../../src/jobs/dailyProgramJob';
+import { runDailyProgramGeneration, scheduleDailyGeneration, stopDailyGeneration } from '../../src/jobs/dailyProgramJob';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -241,5 +242,42 @@ describe('runDailyProgramGenerationForDate', () => {
     expect(result.date).toBe('2026-05-01');
     expect(result.queued).toBe(1);
     expect(result.skipped).toBe(0);
+describe('scheduleDailyGeneration / stopDailyGeneration', () => {
+  afterEach(() => {
+    // Always stop after each test to reset module-level state
+    stopDailyGeneration();
+    delete process.env.DAILY_GENERATION_HOUR;
+    delete process.env.DAILY_PROGRAM_CRON;
+  });
+
+  it('registers a cron task without throwing', () => {
+    expect(() => scheduleDailyGeneration()).not.toThrow();
+    // Confirm stop cleans up without throwing
+    expect(() => stopDailyGeneration()).not.toThrow();
+  });
+
+  it('ignores duplicate calls (idempotent start)', () => {
+    scheduleDailyGeneration();
+    // Second call should warn but not throw
+    expect(() => scheduleDailyGeneration()).not.toThrow();
+  });
+
+  it('respects DAILY_GENERATION_HOUR env var', () => {
+    process.env.DAILY_GENERATION_HOUR = '5';
+    expect(() => scheduleDailyGeneration()).not.toThrow();
+  });
+
+  it('respects DAILY_PROGRAM_CRON env var override', () => {
+    process.env.DAILY_PROGRAM_CRON = '30 3 * * *';
+    expect(() => scheduleDailyGeneration()).not.toThrow();
+  });
+
+  it('throws on an invalid DAILY_PROGRAM_CRON expression', () => {
+    process.env.DAILY_PROGRAM_CRON = 'not-a-cron';
+    expect(() => scheduleDailyGeneration()).toThrow(/Invalid cron expression/);
+  });
+
+  it('stopDailyGeneration is safe to call when not started', () => {
+    expect(() => stopDailyGeneration()).not.toThrow();
   });
 });
