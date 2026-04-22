@@ -156,13 +156,38 @@ export async function programRoutes(app: FastifyInstance) {
     return episode;
   });
 
+  // Validate publish readiness (dry-run)
+  app.get('/program-episodes/:episodeId/publish-check', {
+    onRequest: [requirePermission('program:read')],
+  }, async (req) => {
+    const { episodeId } = req.params as { episodeId: string };
+    return programService.validatePublishReadiness(episodeId);
+  });
+
+  // Publish episode (validates, builds manifest, sets status)
   app.post('/program-episodes/:episodeId/publish', {
     onRequest: [requirePermission('program:write')],
   }, async (req, reply) => {
     const { episodeId } = req.params as { episodeId: string };
     const user = (req as unknown as { user: { sub: string } }).user;
-    const episode = await programService.publishEpisode(episodeId, user.sub);
-    if (!episode) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Episode not found' } });
-    return episode;
+    const body = req.body as { force?: boolean } | undefined;
+
+    const result = await programService.publishEpisode(episodeId, user.sub, { force: body?.force });
+
+    if (!result.episode && !result.validation.ready) {
+      return reply.code(422).send({
+        error: { code: 'NOT_READY', message: 'Episode is not ready for publishing' },
+        validation: result.validation,
+      });
+    }
+    if (!result.episode) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Episode not found' } });
+    }
+
+    return {
+      episode: result.episode,
+      validation: result.validation,
+      manifest_url: result.manifest_url,
+    };
   });
 }

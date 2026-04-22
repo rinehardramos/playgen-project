@@ -7,7 +7,7 @@ import { schedulerRoutes } from './routes/scheduler';
 import { configRoutes } from './routes/config';
 import { startCron, stopCron } from './services/cronService';
 import { closeQueue } from './services/queueService';
-import { scheduleDailyGeneration, stopDailyGeneration } from './jobs/dailyProgramJob';
+import { dailyProgramRoutes } from './routes/dailyProgram';
 
 const app = Fastify({
   logger: {
@@ -30,6 +30,7 @@ app.get('/health', async () => ({ status: 'ok', service: 'scheduler-service' }))
 
 app.register(schedulerRoutes, { prefix: '/api/v1' });
 app.register(configRoutes, { prefix: '/api/v1' });
+app.register(dailyProgramRoutes, { prefix: '/api/v1' });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 
@@ -55,7 +56,6 @@ async function shutdown(signal: string): Promise<void> {
   app.log.info(`Received ${signal}, shutting down gracefully`);
   try {
     stopCron();
-    stopDailyGeneration();
     await closeQueue();
     await app.close();
     process.exit(0);
@@ -79,7 +79,6 @@ app.listen({ port, host }, (err) => {
     process.exit(1);
   }
   startCron();
-  scheduleDailyGeneration();
   app.log.info(`scheduler-service listening on port ${port}`);
 });
 

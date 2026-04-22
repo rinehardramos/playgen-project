@@ -22,7 +22,7 @@ vi.mock('../../src/services/queueService', () => ({
 
 import { getPool } from '../../src/db';
 import { enqueueGeneration } from '../../src/services/queueService';
-import { runDailyProgramGeneration, scheduleDailyGeneration, stopDailyGeneration } from '../../src/jobs/dailyProgramJob';
+import { runDailyProgramGeneration } from '../../src/jobs/dailyProgramJob';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -220,42 +220,26 @@ describe('runDailyProgramGeneration', () => {
   });
 });
 
-describe('scheduleDailyGeneration / stopDailyGeneration', () => {
-  afterEach(() => {
-    // Always stop after each test to reset module-level state
-    stopDailyGeneration();
-    delete process.env.DAILY_GENERATION_HOUR;
-    delete process.env.DAILY_PROGRAM_CRON;
-  });
+describe('runDailyProgramGenerationForDate', () => {
+  it('accepts a specific date and returns results', async () => {
+    const { runDailyProgramGenerationForDate } = await import('../../src/jobs/dailyProgramJob');
 
-  it('registers a cron task without throwing', () => {
-    expect(() => scheduleDailyGeneration()).not.toThrow();
-    // Confirm stop cleans up without throwing
-    expect(() => stopDailyGeneration()).not.toThrow();
-  });
+    const pool = makePoolMock((sql) => {
+      if (sql.includes('FROM programs')) {
+        return { rows: [{ id: 'prog-1', station_id: 'station-a', template_id: null }] };
+      }
+      if (sql.includes('FROM playlists')) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
 
-  it('ignores duplicate calls (idempotent start)', () => {
-    scheduleDailyGeneration();
-    // Second call should warn but not throw
-    expect(() => scheduleDailyGeneration()).not.toThrow();
-  });
+    vi.mocked(getPool).mockReturnValue(pool as never);
+    vi.mocked(enqueueGeneration).mockResolvedValue('job-1');
 
-  it('respects DAILY_GENERATION_HOUR env var', () => {
-    process.env.DAILY_GENERATION_HOUR = '5';
-    expect(() => scheduleDailyGeneration()).not.toThrow();
-  });
-
-  it('respects DAILY_PROGRAM_CRON env var override', () => {
-    process.env.DAILY_PROGRAM_CRON = '30 3 * * *';
-    expect(() => scheduleDailyGeneration()).not.toThrow();
-  });
-
-  it('throws on an invalid DAILY_PROGRAM_CRON expression', () => {
-    process.env.DAILY_PROGRAM_CRON = 'not-a-cron';
-    expect(() => scheduleDailyGeneration()).toThrow(/Invalid cron expression/);
-  });
-
-  it('stopDailyGeneration is safe to call when not started', () => {
-    expect(() => stopDailyGeneration()).not.toThrow();
+    const result = await runDailyProgramGenerationForDate('2026-05-01');
+    expect(result.date).toBe('2026-05-01');
+    expect(result.queued).toBe(1);
+    expect(result.skipped).toBe(0);
   });
 });

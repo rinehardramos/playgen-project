@@ -15,6 +15,8 @@ import { socialAuthRoutes } from './routes/socialAuth.js';
 import { adlibClipRoutes } from './routes/adlibClips.js';
 import { usageRoutes } from './routes/usage.js';
 import { segmentRoutes } from './routes/segments.js';
+import { manifestRoutes } from './routes/manifests.js';
+import { streamRoutes } from './playout/streamRoutes.js';
 import { closeQueue } from './queues/djQueue.js';
 import { scheduleAudioCleanup, closeCleanupQueue } from './queues/audioCleanupQueue.js';
 
@@ -66,6 +68,8 @@ app.register(socialAuthRoutes,     { prefix: '/api/v1' });
 app.register(adlibClipRoutes,     { prefix: '/api/v1' });
 app.register(usageRoutes,         { prefix: '/api/v1' });
 app.register(segmentRoutes,       { prefix: '/api/v1' });
+app.register(manifestRoutes);  // Internal routes, no prefix — not gateway-exposed
+app.register(streamRoutes);    // HLS streaming + playout control
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 

@@ -1,4 +1,3 @@
-import cron, { ScheduledTask } from 'node-cron';
 import { getPool } from '../db';
 import { enqueueGeneration } from '../services/queueService';
 import { getDayOfWeek } from '../services/generationEngine';
@@ -11,11 +10,7 @@ interface ActiveProgram {
   template_id: string | null;
 }
 
-// ─── Cron state ───────────────────────────────────────────────────────────────
-
-let _scheduledTask: ScheduledTask | null = null;
-
-// ─── Core tick handler ────────────────────────────────────────────────────────
+// ─── Core generation handler ─────────────────────────────────────────────────
 
 /**
  * Query active programs for tomorrow's day-of-week and enqueue playlist
@@ -116,44 +111,60 @@ export async function runDailyProgramGeneration(): Promise<void> {
   );
 }
 
-// ─── Schedule registration ────────────────────────────────────────────────────
-
 /**
- * Register the daily program generation cron job using BullMQ's node-cron
- * compatible expression.
- *
- * Hour is configurable via DAILY_GENERATION_HOUR (0–23, default 2).
- * Full expression can be overridden with DAILY_PROGRAM_CRON.
+ * Run daily generation for a specific date (defaults to tomorrow).
+ * Returns summary of what was queued.
  */
-export function scheduleDailyGeneration(): void {
-  if (_scheduledTask) {
-    console.warn('[dailyProgramJob] Already scheduled — ignoring duplicate call');
-    return;
+export async function runDailyProgramGenerationForDate(
+  targetDate?: string,
+): Promise<{ date: string; queued: number; skipped: number }> {
+  const date = targetDate ?? getDefaultTargetDate();
+  const dayOfWeek = getDayOfWeek(date);
+
+  console.info(`[dailyProgramJob] Triggered for date=${date} dayOfWeek=${dayOfWeek}`);
+
+  const pool = getPool();
+
+  const { rows: programs } = await pool.query<ActiveProgram>(
+    `SELECT p.id, p.station_id, p.template_id
+     FROM programs p
+     WHERE p.is_active = TRUE AND $1 = ANY(p.active_days)`,
+    [dayOfWeek],
+  );
+
+  if (programs.length === 0) {
+    return { date, queued: 0, skipped: 0 };
   }
 
-  const hour = Number(process.env.DAILY_GENERATION_HOUR ?? 2);
-  const expression = process.env.DAILY_PROGRAM_CRON ?? `0 ${hour} * * *`;
+  const stationIds = [...new Set(programs.map(p => p.station_id))];
+  const { rows: existing } = await pool.query<{ station_id: string }>(
+    `SELECT station_id FROM playlists
+     WHERE date = $1 AND station_id = ANY($2)
+       AND status IN ('approved', 'ready', 'generating')`,
+    [date, stationIds],
+  );
+  const skipSet = new Set(existing.map(r => r.station_id));
 
-  if (!cron.validate(expression)) {
-    throw new Error(`[dailyProgramJob] Invalid cron expression: "${expression}"`);
-  }
+  let queued = 0;
+  let skipped = 0;
 
-  _scheduledTask = cron.schedule(expression, () => {
-    runDailyProgramGeneration().catch((err) => {
-      console.error('[dailyProgramJob] Unhandled error in runDailyProgramGeneration', err);
+  for (const program of programs) {
+    if (skipSet.has(program.station_id)) { skipped++; continue; }
+    await enqueueGeneration({
+      stationId: program.station_id,
+      date,
+      templateId: program.template_id ?? undefined,
+      triggeredBy: 'cron',
     });
-  });
+    queued++;
+    skipSet.add(program.station_id);
+  }
 
-  console.info(`[dailyProgramJob] Scheduled with expression="${expression}"`);
+  return { date, queued, skipped };
 }
 
-/**
- * Stop the daily program generation cron job. Called on graceful shutdown.
- */
-export function stopDailyGeneration(): void {
-  if (_scheduledTask) {
-    _scheduledTask.stop();
-    _scheduledTask = null;
-    console.info('[dailyProgramJob] Stopped');
-  }
+function getDefaultTargetDate(): string {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return tomorrow.toISOString().slice(0, 10);
 }

@@ -278,6 +278,8 @@ export interface Song {
   duration_sec: number | null;
   is_active: boolean;
   raw_material: string | null;
+  audio_url: string | null;
+  audio_source: string | null;
   created_at: Date;
   updated_at: Date;
 }

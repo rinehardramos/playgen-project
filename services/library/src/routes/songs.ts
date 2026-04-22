@@ -6,6 +6,8 @@ import { pipeline } from 'stream/promises';
 import { authenticate, requirePermission, requireStationAccess } from '@playgen/middleware';
 import * as songService from '../services/songService';
 import { importXlsmSongs, importXlsmLoadHistory } from '../services/importService';
+import { storeAudioStream } from '../services/audioStorageService';
+import { sourceFromYouTube, bulkSourceFromYouTube, bulkImportFromDirectory } from '../services/audioSourceService';
 
 export async function songRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate);
@@ -103,5 +105,74 @@ export async function songRoutes(app: FastifyInstance) {
     } finally {
       fs.unlink(tmpPath, () => {});
     }
+  });
+
+  // ── Audio upload for a single song ──────────────────────────────────────────
+  app.post('/songs/:id/upload-audio', {
+    onRequest: [requirePermission('library:write')],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const song = await songService.getSong(id);
+    if (!song) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Song not found' } });
+
+    const data = await req.file();
+    if (!data) return reply.code(400).send({ error: { code: 'BAD_REQUEST', message: 'No file uploaded' } });
+
+    const ext = path.extname(data.filename).toLowerCase();
+    const allowed = new Set(['.mp3', '.flac', '.wav', '.aac', '.ogg', '.m4a', '.opus']);
+    if (!allowed.has(ext)) {
+      return reply.code(400).send({ error: { code: 'BAD_REQUEST', message: `Unsupported format: ${ext}` } });
+    }
+
+    const { audioUrl, durationSec } = await storeAudioStream(song.station_id, id, data.file, ext);
+
+    const updated = await songService.updateSong(id, {
+      ...(durationSec != null ? { duration_sec: durationSec } : {}),
+    });
+
+    // Update audio_url and audio_source directly (not in songService.updateSong's allowed list yet)
+    const { getPool } = await import('../db');
+    await getPool().query(
+      `UPDATE songs SET audio_url = $1, audio_source = 'upload', updated_at = NOW() WHERE id = $2`,
+      [audioUrl, id],
+    );
+
+    return reply.code(200).send({ audio_url: audioUrl, duration_sec: durationSec, song: updated });
+  });
+
+  // ── Source audio from YouTube (single song) ─────────────────────────────────
+  app.post('/songs/:id/source-audio', {
+    onRequest: [requirePermission('library:write')],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const song = await songService.getSong(id);
+    if (!song) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Song not found' } });
+
+    const result = await sourceFromYouTube(id, song.station_id, song.title, song.artist);
+    return reply.code(200).send(result);
+  });
+
+  // ── Bulk source audio from YouTube (all missing in station) ─────────────────
+  app.post('/stations/:id/songs/source-audio', {
+    onRequest: [requirePermission('library:write'), requireStationAccess()],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const query = req.query as { limit?: string };
+    const limit = query.limit ? parseInt(query.limit, 10) : 50;
+
+    const result = await bulkSourceFromYouTube(id, { limit });
+    return reply.code(200).send(result);
+  });
+
+  // ── Bulk import from local directory ────────────────────────────────────────
+  app.post('/stations/:id/songs/import-directory', {
+    onRequest: [requirePermission('library:write'), requireStationAccess()],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { directory } = req.body as { directory: string };
+    if (!directory) return reply.code(400).send({ error: { code: 'BAD_REQUEST', message: 'directory path required' } });
+
+    const result = await bulkImportFromDirectory(id, directory);
+    return reply.code(200).send(result);
   });
 }
