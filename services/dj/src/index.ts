@@ -81,6 +81,12 @@ app.setErrorHandler((err: FastifyError, req, reply) => {
   if ((err as NodeJS.ErrnoException).code === '23505') {
     return reply.code(409).send({ error: { code: 'CONFLICT', message: 'Resource already exists' } });
   }
+  if ((err as NodeJS.ErrnoException).code === '23502') {
+    const pgErr = err as unknown as { column?: string; table?: string; detail?: string };
+    return reply.code(400).send({
+      error: { code: '23502', message: `NOT NULL violation: column "${pgErr.column}" in table "${pgErr.table}"` },
+    });
+  }
   const statusCode = err.statusCode ?? 500;
   const isExposed = statusCode < 500;
   return reply.code(statusCode).send({
