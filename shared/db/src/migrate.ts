@@ -40,6 +40,15 @@ async function migrate() {
       }
     }
 
+    // Idempotent error codes — these mean the object already exists
+    // and the migration can be safely marked as applied.
+    const IDEMPOTENT_CODES = new Set([
+      '42P07', // duplicate_table (relation already exists)
+      '42P06', // duplicate_schema
+      '42710', // duplicate_object (type, index, constraint already exists)
+      '42701', // duplicate_column
+    ]);
+
     for (const file of files) {
       const version = file.replace(/\.sql$/, '');
       const { rowCount } = await client.query(
@@ -60,9 +69,20 @@ async function migrate() {
         );
         await client.query('COMMIT');
         console.log(`[done] ${file}`);
-      } catch (err) {
+      } catch (err: unknown) {
         await client.query('ROLLBACK');
-        throw err;
+        const pgErr = err as { code?: string; message?: string };
+        if (pgErr.code && IDEMPOTENT_CODES.has(pgErr.code)) {
+          // Object already exists — schema was applied outside migration tracking.
+          // Record it as applied so future runs skip it.
+          await client.query(
+            'INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING',
+            [version]
+          );
+          console.log(`[exists] ${file} — ${pgErr.message?.split('\n')[0]}`);
+        } else {
+          throw err;
+        }
       }
     }
     console.log('Migrations complete.');
