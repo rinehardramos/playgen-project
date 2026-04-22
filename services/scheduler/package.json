@@ -11,12 +11,12 @@
     "test:integration": "vitest run tests/integration"
   },
   "dependencies": {
-    "@playgen/middleware": "workspace:*",
-    "@playgen/types": "workspace:*",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/sensible": "^6.0.0",
+    "@playgen/middleware": "workspace:*",
+    "@playgen/types": "workspace:*",
     "bullmq": "^5.73.5",
-    "fastify": "^5.8.4",
+    "fastify": "^5.8.5",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.2.1",
     "pg": "^8.11.0"
