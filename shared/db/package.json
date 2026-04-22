@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "migrate": "node dist/migrate.js",
     "seed": "node dist/seeds/index.js",
-    "seed:playgen": "node dist/seeds/playgen.js"
+    "seed:playgen": "node dist/seeds/playgen.js",
+    "seed:dj-personas": "node dist/seeds/dj-personas.js"
   },
   "dependencies": {
     "pg": "^8.11.0",
