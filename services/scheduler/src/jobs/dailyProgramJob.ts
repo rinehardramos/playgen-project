@@ -173,6 +173,8 @@ function getDefaultTargetDate(): string {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   return tomorrow.toISOString().slice(0, 10);
+}
+
 // ─── Schedule registration ────────────────────────────────────────────────────
 
 /**
