@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate, requirePermission, requireStationAccess } from '@playgen/middleware';
 import * as playlistService from '../services/playlistService';
 import { exportPlaylistXlsx, exportPlaylistCsv } from '../services/exportService';
+import { requestAudioSourcing } from '../services/infoBrokerService';
+import { getPool } from '../db';
 
 export async function playlistRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate);
@@ -55,6 +57,20 @@ export async function playlistRoutes(app: FastifyInstance) {
           },
         });
       }
+
+      // Fire-and-forget: ask info-broker to source audio for songs missing audio_url
+      getPool()
+        .query<{ song_id: string; title: string; artist: string }>(
+          `SELECT s.id AS song_id, s.title, s.artist
+           FROM playlist_entries pe
+           JOIN songs s ON s.id = pe.song_id
+           WHERE pe.playlist_id = $1
+             AND (s.audio_url IS NULL OR s.audio_url = '')`,
+          [id],
+        )
+        .then(({ rows }) => requestAudioSourcing(playlist.station_id, rows))
+        .catch((err) => console.error('[playlists] audio sourcing trigger failed', err));
+
       return playlist;
     }
   );
