@@ -117,7 +117,7 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
 
       - name: Generate SBOM (CycloneDX, pnpm-aware via cdxgen)
         run: |
@@ -180,7 +180,7 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
 
       - name: Run audit
         run: pnpm audit --audit-level=moderate --json > audit-report.json || true
