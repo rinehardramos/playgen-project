@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate, requirePermission, requireStationAccess } from '@playgen/middleware';
 import * as programService from '../services/programService';
+import { notifyStreamUrlChange } from '../services/streamControlNotifier';
+import { getPool } from '../db';
 
 export async function programRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate);
@@ -182,6 +184,21 @@ export async function programRoutes(app: FastifyInstance) {
     }
     if (!result.episode) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Episode not found' } });
+    }
+
+    // Fire-and-forget: notify OwnRadio of the new stream URL if a manifest was built
+    if (result.manifest_url) {
+      const { rows } = await getPool().query<{ slug: string }>(
+        `SELECT s.slug FROM stations s
+         JOIN programs p ON p.station_id = s.id
+         WHERE p.id = (SELECT program_id FROM program_episodes WHERE id = $1)`,
+        [episodeId],
+      );
+      if (rows[0]?.slug) {
+        notifyStreamUrlChange(rows[0].slug, result.manifest_url).catch((err) => {
+          req.log.warn({ err }, 'stream-control notify failed');
+        });
+      }
     }
 
     return {
