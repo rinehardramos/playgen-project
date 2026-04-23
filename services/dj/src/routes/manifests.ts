@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { buildProgramManifest, getManifestByScript } from '../services/manifestService.js';
+import { triggerPlayout } from '../playout/playoutTrigger.js';
 
 /**
  * Internal manifest routes — not exposed through the gateway.
@@ -12,6 +13,9 @@ export async function manifestRoutes(app: FastifyInstance) {
     if (!episode_id) return reply.code(400).send({ error: 'episode_id required' });
 
     const manifest = await buildProgramManifest(episode_id);
+    triggerPlayout(manifest).catch((err) =>
+      app.log.error({ err }, '[manifests] triggerPlayout failed'),
+    );
     return {
       manifest_url: `manifests/${episode_id}.json`,
       total_duration_sec: manifest.total_duration_sec,
