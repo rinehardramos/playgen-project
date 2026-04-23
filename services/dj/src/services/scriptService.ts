@@ -201,6 +201,8 @@ export async function regenerateSegment(
       ? config.llm.openaiApiKey
       : effectiveLlmProvider === 'anthropic'
       ? config.llm.anthropicApiKey
+      : effectiveLlmProvider === 'gemini'
+      ? config.llm.geminiApiKey
       : config.openRouter.apiKey;
   if (!effectiveLlmApiKey && !globalLlmFallback) {
     throw new Error(
