@@ -145,20 +145,42 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       const manifestRow = await manifestService.getManifestByScript(id);
       if (!manifestRow?.manifest_url) return reply.notFound('Manifest not found');
 
-      // Extract path from URL: /api/v1/dj/audio/...
-      const prefix = '/api/v1/dj/audio/';
-      if (!manifestRow.manifest_url.startsWith(prefix)) {
-        return reply.badRequest('Invalid manifest URL format');
+      // S3/R2 storage returns a full public URL — redirect the client directly.
+      // localStorage returns /api/v1/dj/audio/<path> — serve through the proxy.
+      const localPrefix = '/api/v1/dj/audio/';
+      if (!manifestRow.manifest_url.startsWith(localPrefix)) {
+        // Validate it looks like a URL before redirecting
+        try { new URL(manifestRow.manifest_url); } catch {
+          return reply.badRequest('Invalid manifest URL format');
+        }
+        return reply.redirect(manifestRow.manifest_url);
       }
 
-      const relativePath = manifestRow.manifest_url.substring(prefix.length);
+      const relativePath = manifestRow.manifest_url.substring(localPrefix.length);
       const storage = getStorageAdapter();
-      
       try {
         const buffer = await storage.read(relativePath);
         return reply.type('application/json').send(buffer);
       } catch (err) {
         return reply.notFound('Manifest file not found on storage');
+      }
+    },
+  );
+
+  // Rebuild show manifest from current segment TTS audio
+  app.post<{ Params: { id: string } }>(
+    '/dj/scripts/:id/rebuild-manifest',
+    async (req, reply) => {
+      const { id } = req.params;
+      try {
+        await manifestService.buildManifest(id);
+        const manifestRow = await manifestService.getManifestByScript(id);
+        return { manifest_url: manifestRow?.manifest_url ?? null };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Manifest build failed';
+        if (message.includes('not found')) return reply.notFound(message);
+        req.log.error({ err }, '[rebuild-manifest] failed');
+        return reply.internalServerError(message);
       }
     },
   );
