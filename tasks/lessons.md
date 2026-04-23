@@ -47,3 +47,8 @@ Self-improvement log. Rules are ALWAYS/NEVER. Review at session start. Format: `
 ## [tooling] LM Studio embeddings: raw fetch + sequential only — 2026-04-04
 **Trigger**: OpenAI SDK returned 192 dims (truncated from 768) on MoE models; batch input also returned truncated dims; single calls via fetch returned full dims.
 **Rule**: ALWAYS call LM Studio embeddings via raw `fetch` (NEVER OpenAI SDK) and sequentially (NEVER batch array input). For PlayGen's agent KB, use `text-embedding-nomic-embed-code` (3584 dims) — better semantic clustering on technical content than `nomic-embed-text` (768).
+
+## [testing] New routes require route-level tests before deploying — 2026-04-23
+**Trigger**: `POST /playlists/:id/source-audio` was pushed to main and deployed without tests. A Fastify v5 behaviour (rejects empty JSON body when Content-Type: application/json is set) caused 500 in production; caught locally in 2 minutes via docker logs, but only after the broken code was already live.
+**Rule**: ALWAYS write at least a smoke-test for every new route (happy path, 404 on missing resource, auth check). Run `pnpm test` locally before committing. Use a feature branch — never push endpoint changes directly to main.
+**Why**: Routes fail in ways that unit tests of the service layer don't catch (content-type parsing, middleware ordering, Fastify version quirks). The test file for the route would have shown the failure before any git push.
