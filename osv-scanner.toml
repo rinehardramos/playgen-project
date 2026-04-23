@@ -16,20 +16,28 @@ lockfiles in PR-7 of the security plan.
 """
 
 [[IgnoredVulns]]
-id = "GHSA-5f7q-jpqc-wp7h"
-ignoreUntil = 2026-07-01
-reason = """
-Next.js 16.2.2 — CVSS 5.9 MEDIUM. No upstream fix available at the time of
-writing (FIXED VERSION = "--" in OSV report). Affects SSR error rendering.
-Mitigated by Vercel WAF + the fact that we run Next behind nginx with strict
-CSP on the frontend. Re-evaluate when upstream ships a patch.
-"""
-
-[[IgnoredVulns]]
 id = "GHSA-mrwq-x4v8-fh7p"
 ignoreUntil = 2026-07-01
 reason = """
 No metadata returned by OSV at scan time (likely related to the next.js
 advisory above — same package, same scan). Same justification: re-evaluate
 in July 2026.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-gh4j-gqv2-49f6"
+ignoreUntil = 2026-07-01
+reason = """
+fast-xml-parser < 5.7.0 — CVSS 6.1 MEDIUM. Pulled in transitively via
+@aws-sdk/client-s3. Fix requires bumping AWS SDK. Pre-existing on main;
+scheduled for resolution when AWS SDK is next bumped.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-w5hq-g745-h8pq"
+ignoreUntil = 2026-07-01
+reason = """
+uuid < 14.0.0 — CVSS 6.3 MEDIUM. Multiple transitive versions (8.3.2, 10.0.0,
+11.1.0) pulled in by various deps. Major version bump required (14.0.0).
+Pre-existing on main; scheduled for resolution in a dedicated deps-update PR.
 """
