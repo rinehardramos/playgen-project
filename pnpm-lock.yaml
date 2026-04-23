@@ -195,6 +195,9 @@ importers:
       '@playgen/middleware':
         specifier: workspace:*
         version: link:../../shared/middleware
+      '@playgen/storage':
+        specifier: workspace:*
+        version: link:../../shared/storage
       '@playgen/types':
         specifier: workspace:*
         version: link:../../shared/types
@@ -244,6 +247,9 @@ importers:
       '@playgen/middleware':
         specifier: workspace:*
         version: link:../../shared/middleware
+      '@playgen/storage':
+        specifier: workspace:*
+        version: link:../../shared/storage
       '@playgen/types':
         specifier: workspace:*
         version: link:../../shared/types
@@ -506,6 +512,19 @@ importers:
       vitest:
         specifier: ^4.1.2
         version: 4.1.2(@types/node@25.5.2)(vite@8.0.8(@types/node@25.5.2)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0))
+
+  shared/storage:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.717.0
+        version: 3.1024.0
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
   shared/types:
     devDependencies:

@@ -1,12 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { config } from '../../config.js';
 import type { StorageAdapter } from './interface.js';
 
 export class LocalStorageAdapter implements StorageAdapter {
   private baseDir: string;
 
-  constructor(baseDir: string = config.storage.localPath) {
+  constructor(baseDir: string = '/tmp/playgen-audio') {
     this.baseDir = baseDir;
   }
 

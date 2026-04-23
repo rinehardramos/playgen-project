@@ -1,21 +1,18 @@
+import { initStorage, getStorageAdapter } from '@playgen/storage';
 import { config } from '../../config.js';
-import type { StorageAdapter } from './interface.js';
-import { LocalStorageAdapter } from './localStorage.js';
-import { S3StorageAdapter } from './s3Storage.js';
 
-let adapter: StorageAdapter | null = null;
+// Initialize on first import
+initStorage({
+  provider: config.storage.provider as 'local' | 's3',
+  localPath: config.storage.localPath,
+  s3Bucket: config.storage.s3Bucket,
+  s3Region: config.storage.s3Region,
+  s3Prefix: config.storage.s3Prefix,
+  s3Endpoint: config.storage.s3Endpoint,
+  s3PublicUrlBase: config.storage.s3PublicUrlBase,
+  awsAccessKeyId: config.storage.awsAccessKeyId,
+  awsSecretAccessKey: config.storage.awsSecretAccessKey,
+});
 
-export function getStorageAdapter(): StorageAdapter {
-  if (!adapter) {
-    if (config.storage.provider === 'local') {
-      adapter = new LocalStorageAdapter();
-    } else if (config.storage.provider === 's3') {
-      adapter = new S3StorageAdapter();
-    } else {
-      throw new Error(`Unknown storage provider: ${config.storage.provider}`);
-    }
-  }
-  return adapter;
-}
-
-export * from './interface.js';
+export { getStorageAdapter };
+export type { StorageAdapter } from '@playgen/storage';
