@@ -75,6 +75,31 @@ export async function playlistRoutes(app: FastifyInstance) {
     }
   );
 
+  // POST /playlists/:id/source-audio — re-trigger info-broker audio sourcing
+  app.post(
+    '/playlists/:id/source-audio',
+    { onRequest: [requirePermission('playlist:write')] },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const playlist = await playlistService.getPlaylist(id);
+      if (!playlist) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Playlist not found' } });
+      }
+
+      const { rows } = await getPool().query<{ song_id: string; title: string; artist: string }>(
+        `SELECT s.id AS song_id, s.title, s.artist
+         FROM playlist_entries pe
+         JOIN songs s ON s.id = pe.song_id
+         WHERE pe.playlist_id = $1
+           AND (s.audio_url IS NULL OR s.audio_url = '')`,
+        [id],
+      );
+
+      await requestAudioSourcing(playlist.station_id, rows);
+      return { queued: rows.length };
+    }
+  );
+
   // PUT /playlists/:id/notes — update notes
   app.put(
     '/playlists/:id/notes',
