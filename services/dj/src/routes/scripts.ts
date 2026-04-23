@@ -182,7 +182,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       if (!station.dj_enabled) return reply.badRequest('DJ is not enabled for this station');
 
       // Resolve DJ profile
-      let dj_profile_id = (req.body as any).dj_profile_id ?? null;
+      let dj_profile_id = (req.body as any)?.dj_profile_id ?? null;
       if (!dj_profile_id) {
         const defaultProfile = await getDefaultProfile(station.company_id);
         if (!defaultProfile) return reply.badRequest('No DJ profile configured for this station');

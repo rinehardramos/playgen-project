@@ -15,7 +15,10 @@ export async function geminiLlmComplete(
   const apiKey = options.apiKey;
   if (!apiKey) throw new Error('Gemini API key is required');
 
-  const model = options.model || DEFAULT_MODEL;
+  // OpenRouter model strings contain a slash (e.g. "anthropic/claude-sonnet-4-5").
+  // Strip them so we don't pass a non-Gemini model to the Gemini API.
+  const rawModel = options.model || DEFAULT_MODEL;
+  const model = rawModel.includes('/') ? DEFAULT_MODEL : rawModel;
   const url = `${BASE_URL}/${model}:generateContent?key=${apiKey}`;
 
   // Separate system messages from conversation messages
