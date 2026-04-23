@@ -24,6 +24,7 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 ---
 
 ## Active Work
+- [ ] feat(playlist+library): info-broker audio sourcing + /internal/songs/audio-sourced callback (feat/audio-sourcing-integration) | @claude-sonnet-4-6 | 2026-04-23
 - [ ] feat(dj+gateway): OwnRadio HLS streaming integration (feat/ownradio-hls, main) | @claude-sonnet-4-6 | 2026-04-23
 - [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
 - [x] feat(station): Program Import/Export — .playgen ZIP bundle export/import (feat/program-import-export, PR #408) | @claude-sonnet-4-6 | 2026-04-22
