@@ -86,6 +86,8 @@ export async function updateStation(id: string, data: Partial<{
   primary_color: string;
   secondary_color: string;
   website_url: string;
+  // OwnRadio integration
+  slug: string;
 }>): Promise<Station | null> {
   const fields: string[] = [];
   const values: unknown[] = [];
@@ -102,6 +104,8 @@ export async function updateStation(id: string, data: Partial<{
     'facebook_page_id', 'facebook_page_url', 'twitter_handle', 'instagram_handle', 'youtube_channel_url',
     // Branding
     'logo_url', 'primary_color', 'secondary_color', 'website_url',
+    // OwnRadio integration
+    'slug',
   ] as const;
   for (const key of allowed) {
     if (data[key] !== undefined) { fields.push(`${key} = $${i++}`); values.push(data[key]); }
