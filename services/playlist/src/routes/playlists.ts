@@ -95,7 +95,9 @@ export async function playlistRoutes(app: FastifyInstance) {
         [id],
       );
 
-      await requestAudioSourcing(playlist.station_id, rows);
+      if (rows.length > 0) {
+        await requestAudioSourcing(playlist.station_id, rows);
+      }
       return { queued: rows.length };
     }
   );
