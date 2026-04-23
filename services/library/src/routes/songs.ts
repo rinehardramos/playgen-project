@@ -8,6 +8,7 @@ import * as songService from '../services/songService';
 import { importXlsmSongs, importXlsmLoadHistory } from '../services/importService';
 import { storeAudioStream } from '../services/audioStorageService';
 import { sourceFromYouTube, bulkSourceFromYouTube, bulkImportFromDirectory } from '../services/audioSourceService';
+import { getPresignedPutUrl, songAudioKey } from '../services/presignedUrlService';
 
 export async function songRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authenticate);
@@ -138,6 +139,52 @@ export async function songRoutes(app: FastifyInstance) {
     );
 
     return reply.code(200).send({ audio_url: audioUrl, duration_sec: durationSec, song: updated });
+  });
+
+  // ── Presigned PUT URL for direct client → R2/S3 upload ─────────────────────
+  // When STORAGE_PROVIDER=s3 this returns a presigned PUT URL so the client
+  // can upload audio directly to R2/B2/S3, bypassing the API/nginx entirely.
+  // When STORAGE_PROVIDER=local, returns { upload_url: null } (use upload-audio instead).
+  app.post('/songs/:id/upload-url', {
+    onRequest: [requirePermission('library:write')],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const song = await songService.getSong(id);
+    if (!song) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Song not found' } });
+
+    const { ext = '.mp3' } = (req.body as { ext?: string }) ?? {};
+    const allowed = new Set(['.mp3', '.flac', '.wav', '.aac', '.ogg', '.m4a', '.opus']);
+    if (!allowed.has(ext)) {
+      return reply.code(400).send({ error: { code: 'BAD_REQUEST', message: `Unsupported format: ${ext}` } });
+    }
+
+    const key = songAudioKey(song.station_id, id, ext);
+    const uploadUrl = await getPresignedPutUrl(key, 'audio/mpeg');
+
+    return reply.code(200).send({ upload_url: uploadUrl, storage_key: uploadUrl ? key : null });
+  });
+
+  // ── Confirm upload after client PUT to presigned URL ────────────────────────
+  app.post('/songs/:id/upload-confirm', {
+    onRequest: [requirePermission('library:write')],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const song = await songService.getSong(id);
+    if (!song) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Song not found' } });
+
+    const { storage_key, duration_sec } = req.body as { storage_key: string; duration_sec?: number };
+    if (!storage_key) {
+      return reply.code(400).send({ error: { code: 'BAD_REQUEST', message: 'storage_key required' } });
+    }
+
+    const { getPool } = await import('../db');
+    await getPool().query(
+      `UPDATE songs SET audio_url = $1, audio_source = 'upload', duration_sec = COALESCE($2, duration_sec), updated_at = NOW() WHERE id = $3`,
+      [storage_key, duration_sec ?? null, id],
+    );
+
+    const updated = await songService.getSong(id);
+    return reply.code(200).send({ audio_url: storage_key, duration_sec: duration_sec ?? null, song: updated });
   });
 
   // ── Source audio from YouTube (single song) ─────────────────────────────────

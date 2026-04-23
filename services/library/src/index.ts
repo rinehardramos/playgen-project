@@ -3,9 +3,23 @@ import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import multipart from '@fastify/multipart';
 import { registerSecurity } from '@playgen/middleware';
+import { initStorage } from '@playgen/storage';
 import { categoryRoutes } from './routes/categories';
 import { songRoutes } from './routes/songs';
 import { templateRoutes } from './routes/templates';
+
+// Initialize object storage (local for dev, S3-compatible for prod)
+initStorage({
+  provider: (process.env.STORAGE_PROVIDER ?? 'local') as 'local' | 's3',
+  localPath: process.env.STORAGE_LOCAL_PATH ?? '/tmp/playgen-library',
+  s3Bucket: process.env.S3_BUCKET ?? '',
+  s3Region: process.env.S3_REGION ?? 'us-east-1',
+  s3Prefix: process.env.S3_PREFIX ?? 'songs',
+  s3Endpoint: process.env.S3_ENDPOINT ?? '',
+  s3PublicUrlBase: process.env.S3_PUBLIC_URL_BASE ?? '',
+  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
+  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
+});
 
 const app = Fastify({
   logger: {

@@ -5,6 +5,7 @@ import {
   HeadObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { StorageAdapter, StorageConfig } from './interface.js';
 
 export class S3StorageAdapter implements StorageAdapter {
@@ -104,6 +105,23 @@ export class S3StorageAdapter implements StorageAdapter {
       return `${this.s3PublicUrlBase}/${this.key(filePath)}`;
     }
     return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${this.key(filePath)}`;
+  }
+
+  /**
+   * Generate a presigned PUT URL for direct client → S3/R2/B2 upload.
+   * The client can PUT an audio file directly to object storage, bypassing the API.
+   */
+  async getPresignedPutUrl(filePath: string, contentType = 'audio/mpeg', expiresIn = 3600): Promise<string> {
+    const cmd = new PutObjectCommand({ Bucket: this.bucket, Key: this.key(filePath), ContentType: contentType });
+    return getSignedUrl(this.client, cmd, { expiresIn });
+  }
+
+  /**
+   * Generate a presigned GET URL for direct client download.
+   */
+  async getPresignedGetUrl(filePath: string, expiresIn = 3600): Promise<string> {
+    const cmd = new GetObjectCommand({ Bucket: this.bucket, Key: this.key(filePath) });
+    return getSignedUrl(this.client, cmd, { expiresIn });
   }
 
   /** Expose the S3 client for presigned URL generation. */
