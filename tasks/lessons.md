@@ -39,6 +39,11 @@ Self-improvement log. Rules are ALWAYS/NEVER. Review at session start. Format: `
 **Rule**: DJ pipeline MUST pause at `pending_review` after LLM generation. NEVER auto-proceed to TTS unless the station has `dj_auto_approve = true`.
 **Why**: TTS costs real money per character; review catches bad scripts before sunk cost.
 
+## [deployment] nginx.conf.template must mirror nginx.conf — 2026-04-23
+**Trigger**: `POST /api/v1/daily-program/*` returned 404 in production even though the service route existed and nginx.conf had the location block. Root cause: `nginx.conf.template` (the file actually used by the Docker entrypoint via `envsubst`) was not updated when the route was first added directly to `nginx.conf`.
+**Rule**: ALWAYS edit `gateway/nginx.conf.template` — never `nginx.conf` directly. Treat `nginx.conf` as a generated artifact (it is overwritten at container start by `docker-start.sh`). When adding a new service route, add it to the template first; the nginx.conf in the repo should be treated as read-only documentation only.
+**Why**: `gateway/docker-start.sh` runs `envsubst` on `nginx.conf.template` and writes the result to `nginx.conf` at container startup. Any manual edits to `nginx.conf` are silently overwritten, causing drift that only surfaces in production.
+
 ## [tooling] LM Studio embeddings: raw fetch + sequential only — 2026-04-04
 **Trigger**: OpenAI SDK returned 192 dims (truncated from 768) on MoE models; batch input also returned truncated dims; single calls via fetch returned full dims.
 **Rule**: ALWAYS call LM Studio embeddings via raw `fetch` (NEVER OpenAI SDK) and sequentially (NEVER batch array input). For PlayGen's agent KB, use `text-embedding-nomic-embed-code` (3584 dims) — better semantic clustering on technical content than `nomic-embed-text` (768).

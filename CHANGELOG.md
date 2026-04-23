@@ -5,6 +5,18 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.30] - 2026-04-23
+
+### Added
+- **Cloudflare R2 storage backend**: `@playgen/storage` shared package extracts all storage adapters (S3-compatible R2, local filesystem) from the DJ and library services. Bucket: `ownradio`. Prefix: `dj-audio` for DJ TTS segments, `songs` for library uploads. R2 connectivity verified (PUT/GET/DELETE tested against bucket). All new audio and song file writes go to R2; local filesystem adapter retained for dev/test.
+- **OwnRadio HLS streaming design**: Architecture spec finalised at `docs/superpowers/specs/2026-04-23-ownradio-hls-streaming-design.md`. PlayGen DJ service (`hlsGenerator`, `playoutScheduler`, `streamRoutes`) is the source; ownradio.net is the consumer via HLS.js. Three wires identified as pending implementation: (1) gateway `/stream/*` location block, (2) auto-start playout after manifest publish, (3) R2-to-local cache constraint for ffmpeg (documented; optimization deferred).
+- **Info-broker audio sourcing integration design**: PlayGen will call `POST /v1/playlists/source-audio` on the info-broker service with `{ station_id, songs, callback_url }` when a playlist needs audio sourced from YouTube. The info-broker downloads, transcodes, and uploads to R2, then POSTs the callback URL with resolved `audio_url` values per song. Implementation pending.
+
+### Fixed
+- **Gateway daily-program route**: `POST /api/v1/daily-program/*` was missing from `gateway/nginx.conf.template`, causing 404s in production while the service route existed. Added location block (commit 47b4c62). Root cause: `nginx.conf.template` was not kept in sync when the daily-program route was first added to nginx.conf directly.
+
+---
+
 ## [1.29] - 2026-04-05
 
 ### Fixed
