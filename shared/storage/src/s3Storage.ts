@@ -5,31 +5,32 @@ import {
   HeadObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
-import { config } from '../../config.js';
-import type { StorageAdapter } from './interface.js';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { StorageAdapter, StorageConfig } from './interface.js';
 
 export class S3StorageAdapter implements StorageAdapter {
   private client: S3Client;
   private bucket: string;
   private prefix: string;
   private region: string;
+  private s3PublicUrlBase?: string;
 
-  constructor(
-    bucket: string = config.storage.s3Bucket,
-    region: string = config.storage.s3Region,
-    prefix: string = config.storage.s3Prefix,
-  ) {
-    this.bucket = bucket;
-    this.region = region;
-    this.prefix = prefix;
+  constructor(config: Pick<StorageConfig, 's3Bucket' | 's3Region' | 's3Prefix' | 's3Endpoint' | 's3PublicUrlBase' | 'awsAccessKeyId' | 'awsSecretAccessKey'>) {
+    this.bucket = config.s3Bucket ?? '';
+    this.region = config.s3Region ?? 'us-east-1';
+    this.prefix = config.s3Prefix ?? '';
+    this.s3PublicUrlBase = config.s3PublicUrlBase;
 
     this.client = new S3Client({
-      region,
-      ...(config.storage.awsAccessKeyId && config.storage.awsSecretAccessKey
+      region: this.region,
+      // Custom endpoint for R2 (Cloudflare) or B2 (Backblaze) — S3-compatible
+      ...(config.s3Endpoint ? { endpoint: config.s3Endpoint } : {}),
+      forcePathStyle: !!config.s3Endpoint, // Required for R2/B2
+      ...(config.awsAccessKeyId && config.awsSecretAccessKey
         ? {
             credentials: {
-              accessKeyId: config.storage.awsAccessKeyId,
-              secretAccessKey: config.storage.awsSecretAccessKey,
+              accessKeyId: config.awsAccessKeyId,
+              secretAccessKey: config.awsSecretAccessKey,
             },
           }
         : {}),
@@ -99,6 +100,32 @@ export class S3StorageAdapter implements StorageAdapter {
   }
 
   getPublicUrl(filePath: string): string {
+    // R2 custom domain or B2 friendly URL
+    if (this.s3PublicUrlBase) {
+      return `${this.s3PublicUrlBase}/${this.key(filePath)}`;
+    }
     return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${this.key(filePath)}`;
   }
+
+  /**
+   * Generate a presigned PUT URL for direct client → S3/R2/B2 upload.
+   * The client can PUT an audio file directly to object storage, bypassing the API.
+   */
+  async getPresignedPutUrl(filePath: string, contentType = 'audio/mpeg', expiresIn = 3600): Promise<string> {
+    const cmd = new PutObjectCommand({ Bucket: this.bucket, Key: this.key(filePath), ContentType: contentType });
+    return getSignedUrl(this.client, cmd, { expiresIn });
+  }
+
+  /**
+   * Generate a presigned GET URL for direct client download.
+   */
+  async getPresignedGetUrl(filePath: string, expiresIn = 3600): Promise<string> {
+    const cmd = new GetObjectCommand({ Bucket: this.bucket, Key: this.key(filePath) });
+    return getSignedUrl(this.client, cmd, { expiresIn });
+  }
+
+  /** Expose the S3 client for presigned URL generation. */
+  getClient(): S3Client { return this.client; }
+  getBucket(): string { return this.bucket; }
+  buildKey(filePath: string): string { return this.key(filePath); }
 }

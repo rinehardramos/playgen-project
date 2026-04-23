@@ -23,20 +23,7 @@ vi.mock('@aws-sdk/client-s3', () => {
   return { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand };
 });
 
-// Mock config so the adapter can be constructed without real env vars
-vi.mock('../../src/config.js', () => ({
-  config: {
-    storage: {
-      s3Bucket: 'test-bucket',
-      s3Region: 'us-east-1',
-      s3Prefix: 'dj-audio',
-      awsAccessKeyId: 'AKIATEST',
-      awsSecretAccessKey: 'secret',
-    },
-  },
-}));
-
-import { S3StorageAdapter } from '../../src/lib/storage/s3Storage.js';
+import { S3StorageAdapter } from '@playgen/storage';
 
 // Helper to create an async iterable from an array of Uint8Arrays
 function makeAsyncIterable(chunks: Uint8Array[]): AsyncIterable<Uint8Array> {
@@ -50,7 +37,13 @@ function makeAsyncIterable(chunks: Uint8Array[]): AsyncIterable<Uint8Array> {
 }
 
 describe('S3StorageAdapter', () => {
-  const adapter = new S3StorageAdapter('test-bucket', 'us-east-1', 'dj-audio');
+  const adapter = new S3StorageAdapter({
+    s3Bucket: 'test-bucket',
+    s3Region: 'us-east-1',
+    s3Prefix: 'dj-audio',
+    awsAccessKeyId: 'AKIATEST',
+    awsSecretAccessKey: 'secret',
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -138,7 +131,7 @@ describe('S3StorageAdapter', () => {
   });
 
   it('builds key without prefix when prefix is empty', async () => {
-    const noPrefix = new S3StorageAdapter('test-bucket', 'us-east-1', '');
+    const noPrefix = new S3StorageAdapter({ s3Bucket: 'test-bucket', s3Region: 'us-east-1', s3Prefix: '' });
     mockSend.mockResolvedValueOnce({});
     await noPrefix.write('file.mp3', Buffer.from('x'));
     const command = mockSend.mock.calls[0][0];

@@ -47,6 +47,8 @@ export const config = {
     s3Bucket: process.env.S3_BUCKET ?? '',
     s3Region: process.env.S3_REGION ?? 'us-east-1',
     s3Prefix: process.env.S3_PREFIX ?? 'dj-audio',
+    s3Endpoint: process.env.S3_ENDPOINT ?? '',          // R2/B2 custom endpoint
+    s3PublicUrlBase: process.env.S3_PUBLIC_URL_BASE ?? '', // R2 custom domain for public URLs
     awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
     awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
   },

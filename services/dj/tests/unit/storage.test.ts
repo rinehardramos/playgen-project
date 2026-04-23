@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
-import { LocalStorageAdapter } from '../../src/lib/storage/localStorage';
+import { LocalStorageAdapter } from '@playgen/storage';
 
 vi.mock('fs/promises', () => ({
   default: {

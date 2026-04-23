@@ -96,8 +96,8 @@ describe('generationWorker', () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1', openrouter_api_key: 'test-key' }],
     });
-    // 1b. Station settings (loadStationSettings)
-    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 1b. Station settings (loadStationSettings) — provide llm_api_key so pre-flight passes
+    mockQuery.mockResolvedValueOnce({ rows: [{ key: 'llm_api_key', value: 'test-key' }] });
     // 2. DJ profile
     mockQuery.mockResolvedValueOnce({
       rows: [{
@@ -177,8 +177,8 @@ describe('generationWorker', () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1', openrouter_api_key: 'test-key' }],
     });
-    // 1b. Station settings
-    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 1b. Station settings — provide llm_api_key so pre-flight passes
+    mockQuery.mockResolvedValueOnce({ rows: [{ key: 'llm_api_key', value: 'test-key' }] });
     // 2. DJ profile
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'profile-1', llm_model: 'test-model', llm_temperature: 0.8, tts_voice_id: 'alloy' }],
@@ -236,8 +236,8 @@ describe('generationWorker', () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1', openrouter_api_key: 'test-key' }],
     });
-    // 1b. Station settings
-    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 1b. Station settings — provide llm_api_key so pre-flight passes
+    mockQuery.mockResolvedValueOnce({ rows: [{ key: 'llm_api_key', value: 'test-key' }] });
     // 2. DJ profile — set adlib_interval_songs = 1 so adlib fires at every song
     mockQuery.mockResolvedValueOnce({
       rows: [{
