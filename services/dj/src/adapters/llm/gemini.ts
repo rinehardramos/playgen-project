@@ -5,7 +5,7 @@ import type { LlmMessage, LlmOptions, LlmResult } from './openrouter.js';
 
 export type { LlmMessage, LlmOptions };
 
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+const DEFAULT_MODEL = 'gemini-3-flash-preview';
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 export async function geminiLlmComplete(
