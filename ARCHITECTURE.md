@@ -392,9 +392,9 @@ OwnRadio Browser
 
 **Playout state machine:** `idle` → `generating` (ffmpeg running) → `live` (m3u8 ready, ownradio notified) → `ended` (cleanup).
 
-**Three wires pending implementation** (see `docs/superpowers/specs/2026-04-23-ownradio-hls-streaming-design.md`):
-1. **Wire 1** — `gateway/nginx.conf.template`: add `/stream/` location block proxying to DJ service port 3007, no auth, `proxy_buffering off`.
-2. **Wire 2** — `services/dj/src/services/manifestService.ts`: after `buildProgramManifest` completes, call `startPlayout(stationId)` → `generateHls(stationId, manifest)` (background) → `notifyStreamUrlChange(slug, streamUrl)`.
+**All three wires now implemented (2026-04-23):**
+1. **Wire 1** — `gateway/nginx.conf.template`: `/stream/*` location block added, proxying to DJ service port 3007, no auth, `proxy_buffering off`.
+2. **Wire 2** — `services/dj/src/playout/playoutTrigger.ts`: after `buildProgramManifest` completes, auto-starts playout (`startPlayout` → `generateHls` in background) and notifies OwnRadio via `notifyStreamUrlChange(slug, streamUrl)`.
 3. **Wire 3** — R2-to-local cache constraint: `hlsGenerator.resolveAudioPath()` downloads all R2 audio before ffmpeg starts. Documented limit: `HLS_MAX_PREFETCH_MB` (default 500 MB). Segment-by-segment optimization deferred.
 
 **Known constraints:** Single ffmpeg process per station; HLS segments are local to the DJ container (lost on restart); no DVR/time-shift.
@@ -405,8 +405,13 @@ OwnRadio Browser
 |---|---|---|
 | dj-service | `HLS_OUTPUT_PATH` | Local path for `.ts` segments + `.m3u8` |
 | dj-service | `HLS_MAX_PREFETCH_MB` | Max R2 download before ffmpeg (default 500) |
-| station-service | `OWNRADIO_WEBHOOK_URL` | Base URL for ownradio webhook (`https://ownradio.net`) |
-| station-service | `PLAYGEN_WEBHOOK_SECRET` | Shared secret for webhook auth |
+| dj-service | `OWNRADIO_WEBHOOK_URL` | OwnRadio webhook base URL (e.g. `https://ownradio.net`) |
+| dj-service | `PLAYGEN_WEBHOOK_SECRET` | Shared secret for PlayGen → OwnRadio webhook (X-PlayGen-Secret header) |
+| dj-service | `GATEWAY_URL` | Public-facing gateway URL (used to construct HLS stream URLs) |
+| playlist-service | `INFO_BROKER_URL` | info-broker internal URL (`http://info-broker.railway.internal:8000`) |
+| playlist-service | `INFO_BROKER_API_KEY` | Shared API key for info-broker (X-API-Key header) |
+| playlist-service | `PLAYGEN_INTERNAL_URL` | PlayGen's own base URL (used as callback root sent to info-broker) |
+| library-service | `S3_PUBLIC_URL_BASE` | Public base URL for R2/S3 objects (written as `audio_url` on songs) |
 
 ---
 
@@ -439,7 +444,7 @@ The info-broker: searches YouTube for each song, downloads, transcodes to MP3, u
 
 PlayGen playlist service (or scheduler service) handles the callback by writing `audio_url` and `audio_source` to the `songs` table rows.
 
-**Status:** Integration design finalised 2026-04-23. Implementation pending — callback endpoint does not yet exist. See `tasks/todo.md` for the pending task.
+**Status:** Implemented 2026-04-23. PlayGen playlist service calls `POST /v1/playlists/source-audio` via `services/playlist/src/services/infoBrokerService.ts`. Library service receives the callback at `POST /internal/songs/audio-sourced` (`services/library/src/routes/internal.ts`).
 
 ---
 
