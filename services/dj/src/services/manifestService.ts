@@ -61,7 +61,7 @@ export async function buildManifest(scriptId: string): Promise<string> {
 
   // 2. Get playlist entries
   const { rows: entries } = await pool.query(
-    `SELECT pe.id, pe.hour, pe.position, s.title, s.artist, s.duration_sec
+    `SELECT pe.id, pe.hour, pe.position, s.title, s.artist, s.duration_sec, s.audio_url
      FROM playlist_entries pe
      JOIN songs s ON s.id = pe.song_id
      WHERE pe.playlist_id = $1
@@ -110,6 +110,7 @@ export async function buildManifest(scriptId: string): Promise<string> {
       position: entry.position,
       title: entry.title,
       artist: entry.artist,
+      ...(entry.audio_url ? { file_path: entry.audio_url } : {}),
       duration_ms: songDurationMs,
       cumulative_ms: cumulativeMs,
     });
