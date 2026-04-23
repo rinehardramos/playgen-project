@@ -8,6 +8,7 @@ export interface PlayoutState {
   startedAt: number;  // Unix timestamp (ms) when playout began
   currentSegmentIndex: number;
   isPlaying: boolean;
+  status: 'generating' | 'live' | 'ended';
 }
 
 export interface NowPlaying {
@@ -67,6 +68,7 @@ export async function startPlayout(stationId: string): Promise<PlayoutState | nu
     startedAt: Date.now(),
     currentSegmentIndex: 0,
     isPlaying: true,
+    status: 'generating',
   };
 
   activePlayouts.set(stationId, state);
@@ -125,6 +127,11 @@ export function getActivePlayouts(): string[] {
 /** Get the manifest for an active playout. */
 export function getPlayoutManifest(stationId: string): ProgramManifest | null {
   return activePlayouts.get(stationId)?.manifest ?? null;
+}
+
+/** Get the current playout status for a station, or null if no active playout. */
+export function getPlayoutStatus(stationId: string): PlayoutState['status'] | null {
+  return activePlayouts.get(stationId)?.status ?? null;
 }
 
 // ── Advance timer: fires when current segment ends ──────────────────────────
