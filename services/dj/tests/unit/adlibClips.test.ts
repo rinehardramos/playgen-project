@@ -70,8 +70,8 @@ function setupMocks(opts: {
   mockQuery.mockResolvedValueOnce({
     rows: [{ id: 'station-1', name: 'Test FM', timezone: 'UTC', company_id: 'company-1', openrouter_api_key: 'test-key' }],
   });
-  // 2. Station settings
-  mockQuery.mockResolvedValueOnce({ rows: [] });
+  // 2. Station settings — provide llm_api_key so the pre-flight check passes
+  mockQuery.mockResolvedValueOnce({ rows: [{ key: 'llm_api_key', value: 'test-key' }] });
   // 3. DJ profile with optional personaConfig
   mockQuery.mockResolvedValueOnce({
     rows: [{ id: 'profile-1', llm_model: 'test-model', llm_temperature: 0.8, tts_voice_id: 'alloy', persona_config: personaConfig }],

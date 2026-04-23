@@ -16,6 +16,21 @@ check() {
   echo "$status"
 }
 
+# check_routed verifies a protected route is reachable through the gateway by
+# expecting a 401 (unauthenticated) rather than 502 (no nginx location block).
+check_routed() {
+  local name="$1"
+  local url="$2"
+  local status
+  status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null) || status="000"
+  if [ "$status" = "401" ] || [ "$status" = "200" ]; then
+    echo "[PASS] $name -> $status (gateway routes correctly)"
+  else
+    echo "[FAIL] $name -> $status (expected 401/200, got $status — possible missing nginx location)"
+    FAILED=1
+  fi
+}
+
 check_with_retry() {
   local name="$1"
   local url="$2"

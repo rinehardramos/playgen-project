@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       '@playgen/types': path.resolve(__dirname, '../../shared/types/src/index.ts'),
       '@playgen/middleware': path.resolve(__dirname, '../../shared/middleware/src/index.ts'),
+      '@playgen/storage': path.resolve(__dirname, '../../shared/storage/src/index.ts'),
     },
   },
   test: {
