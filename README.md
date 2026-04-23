@@ -31,8 +31,10 @@ Stateless REST API microservices behind an API gateway. See [`ARCHITECTURE.md`](
 | `scheduler-service` | Template management, playlist generation engine |
 | `playlist-service` | Playlist CRUD, export, manual overrides |
 | `analytics-service` | Play history, rotation reports |
+| `dj-service` | AI DJ script generation, TTS, HLS playout, OwnRadio webhook |
 | `frontend` | Next.js web UI |
-| `gateway` | Nginx — routing, rate limiting |
+| `gateway` | Nginx — routing, rate limiting, `/stream/*` → dj-service |
+| `info-broker` | Audio sourcing via yt-dlp; deployed as a Railway service in the same project |
 
 ## Quick Start
 
@@ -71,6 +73,7 @@ pnpm --filter @playgen/library-service dev   # :3003
 pnpm --filter @playgen/scheduler-service dev # :3004
 pnpm --filter @playgen/playlist-service dev  # :3005
 pnpm --filter @playgen/analytics-service dev # :3006
+pnpm --filter @playgen/dj-service dev        # :3007
 
 cd frontend && pnpm dev              # :3000 (Next.js with hot-reload)
 ```

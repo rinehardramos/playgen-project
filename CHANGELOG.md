@@ -5,6 +5,16 @@ Version format: `{major}.{minor}{fix}` (e.g. `1.01`)
 
 ---
 
+## [1.31] - 2026-04-23
+
+### Added
+- **HLS streaming wired**: DJ service now auto-starts HLS playout after manifest publish (`services/dj/src/playout/playoutTrigger.ts`) and notifies OwnRadio via webhook. Gateway exposes `/stream/*` routes to DJ service (no auth, `proxy_buffering off`). Unit tests added under `services/dj/tests/unit/`.
+- **Audio sourcing integration**: Playlist service calls `POST /v1/playlists/source-audio` on info-broker after playlist approval (`services/playlist/src/services/infoBrokerService.ts`). Library service receives sourcing callbacks at `POST /internal/songs/audio-sourced` (`services/library/src/routes/internal.ts`), writing `audio_url` and `audio_source` back to the songs table.
+- **info-broker deployed on Railway**: info-broker is now a service within the PlayGen Railway project. Internal hostname: `info-broker.railway.internal:8000`.
+- **New env vars** (see `.env.example`): DJ service — `OWNRADIO_WEBHOOK_URL`, `PLAYGEN_WEBHOOK_SECRET`, `GATEWAY_URL`, `HLS_OUTPUT_PATH`. Playlist service — `INFO_BROKER_URL`, `INFO_BROKER_API_KEY`, `PLAYGEN_INTERNAL_URL`. Library service — `S3_PUBLIC_URL_BASE`.
+
+---
+
 ## [1.30] - 2026-04-23
 
 ### Added

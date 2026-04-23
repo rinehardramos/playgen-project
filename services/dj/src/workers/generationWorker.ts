@@ -1,6 +1,6 @@
 import { getPool } from '../db.js';
 import { getSocialProviders } from '../adapters/social/index.js';
-import { llmComplete } from '../adapters/llm/openrouter.js';
+import { llmComplete } from '../adapters/llm/index.js';
 import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import type { StationIdentity } from '../lib/promptBuilder.js';
 import { logLlmUsage } from '../lib/usageLogger.js';
@@ -189,6 +189,8 @@ export async function runGenerationJob(
       ? config.llm.openaiApiKey
       : earlyLlmProvider === 'anthropic'
       ? config.llm.anthropicApiKey
+      : earlyLlmProvider === 'gemini'
+      ? config.llm.geminiApiKey
       : config.openRouter.apiKey;
   if (!earlyLlmApiKey && !earlyLlmFallback) {
     throw new Error(
@@ -357,7 +359,15 @@ export async function runGenerationJob(
   const effectiveLlmProvider = stationSettings['llm_provider'] ?? config.llm.provider;
   const effectiveLlmModel    = stationSettings['llm_model'] || profile.llm_model;
 
-  const effectiveLlmApiKey = stationSettings['llm_api_key'] ?? undefined;
+  const effectiveLlmApiKey =
+    stationSettings['llm_api_key'] ??
+    (effectiveLlmProvider === 'openai'
+      ? config.llm.openaiApiKey || undefined
+      : effectiveLlmProvider === 'anthropic'
+      ? config.llm.anthropicApiKey || undefined
+      : effectiveLlmProvider === 'gemini'
+      ? config.llm.geminiApiKey || undefined
+      : config.openRouter.apiKey || undefined);
 
   const effectiveTtsProvider = (stationSettings['tts_provider'] ?? config.tts.provider) as string;
   const effectiveTtsApiKey = stationSettings['tts_api_key']
