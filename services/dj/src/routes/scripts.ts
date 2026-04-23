@@ -146,9 +146,10 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       // Join to get company_id so we can reconstruct the storage path without
       // double-applying the S3 prefix that getPublicUrl() already includes.
       const { rows } = await getPool().query<{ station_id: string; company_id: string; manifest_url: string }>(
-        `SELECT m.station_id, m.manifest_url, s.company_id
+        `SELECT m.station_id, m.manifest_url, st.company_id
          FROM dj_show_manifests m
          JOIN dj_scripts s ON s.id = m.script_id
+         JOIN stations st ON st.id = s.station_id
          WHERE m.script_id = $1`,
         [id],
       );
