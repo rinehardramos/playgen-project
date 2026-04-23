@@ -23,6 +23,7 @@ RUN pnpm --filter @playgen/dj-service build
 
 FROM node:25-alpine
 WORKDIR /app
+RUN apk add --no-cache ffmpeg
 RUN npm install -g pnpm
 COPY --from=builder /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/package.json ./
