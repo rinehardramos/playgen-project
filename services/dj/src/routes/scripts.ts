@@ -142,21 +142,21 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     '/dj/scripts/:id/manifest',
     async (req, reply) => {
       const { id } = req.params;
-      const manifestRow = await manifestService.getManifestByScript(id);
-      if (!manifestRow?.manifest_url) return reply.notFound('Manifest not found');
 
-      // S3/R2 storage returns a full public URL — redirect the client directly.
-      // localStorage returns /api/v1/dj/audio/<path> — serve through the proxy.
-      const localPrefix = '/api/v1/dj/audio/';
-      if (!manifestRow.manifest_url.startsWith(localPrefix)) {
-        // Validate it looks like a URL before redirecting
-        try { new URL(manifestRow.manifest_url); } catch {
-          return reply.badRequest('Invalid manifest URL format');
-        }
-        return reply.redirect(manifestRow.manifest_url);
-      }
+      // Join to get company_id so we can reconstruct the storage path without
+      // double-applying the S3 prefix that getPublicUrl() already includes.
+      const { rows } = await getPool().query<{ station_id: string; company_id: string; manifest_url: string }>(
+        `SELECT m.station_id, m.manifest_url, s.company_id
+         FROM dj_show_manifests m
+         JOIN dj_scripts s ON s.id = m.script_id
+         WHERE m.script_id = $1`,
+        [id],
+      );
+      const manifest = rows[0];
+      if (!manifest?.manifest_url) return reply.notFound('Manifest not found');
 
-      const relativePath = manifestRow.manifest_url.substring(localPrefix.length);
+      // Relative path matches what buildManifest() passed to storage.write()
+      const relativePath = `${manifest.company_id}/${manifest.station_id}/${id}_manifest.json`;
       const storage = getStorageAdapter();
       try {
         const buffer = await storage.read(relativePath);
