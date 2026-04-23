@@ -57,10 +57,17 @@ export async function startPlayout(stationId: string): Promise<PlayoutState | nu
 
   if (!episode?.manifest_url) return null;
 
-  // Load manifest from storage
-  const storage = getStorageAdapter();
-  const manifestBuffer = await storage.read(episode.manifest_url);
-  const manifest: ProgramManifest = JSON.parse(manifestBuffer.toString());
+  // Load manifest — manifest_url may be a full public CDN URL or a relative storage key
+  let manifest: ProgramManifest;
+  if (episode.manifest_url.startsWith('http')) {
+    const res = await fetch(episode.manifest_url);
+    if (!res.ok) throw new Error(`Failed to fetch manifest: ${res.status} ${episode.manifest_url}`);
+    manifest = await res.json() as ProgramManifest;
+  } else {
+    const storage = getStorageAdapter();
+    const manifestBuffer = await storage.read(episode.manifest_url);
+    manifest = JSON.parse(manifestBuffer.toString()) as ProgramManifest;
+  }
 
   const state: PlayoutState = {
     stationId,

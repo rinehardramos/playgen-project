@@ -116,17 +116,29 @@ async function resolveAudioPath(
   audioUrl: string,
   storage: ReturnType<typeof getStorageAdapter>,
 ): Promise<string | null> {
-  // If it's already an absolute path
+  // If it's already an absolute path on disk
   if (path.isAbsolute(audioUrl) && fs.existsSync(audioUrl)) {
     return audioUrl;
   }
 
-  // Try as a storage-relative path
+  const cacheKey = audioUrl.replace(/[/\\:?=&]/g, '_').replace(/^https?__/, '');
+  const tmpPath = path.join(HLS_OUTPUT_DIR, '.cache', cacheKey);
+  fs.mkdirSync(path.dirname(tmpPath), { recursive: true });
+
+  // If already cached locally, reuse it
+  if (fs.existsSync(tmpPath)) return tmpPath;
+
   try {
-    const buffer = await storage.read(audioUrl);
-    // Write to a temp location for ffmpeg access
-    const tmpPath = path.join(HLS_OUTPUT_DIR, '.cache', audioUrl.replace(/[/\\]/g, '_'));
-    fs.mkdirSync(path.dirname(tmpPath), { recursive: true });
+    let buffer: Buffer;
+    if (audioUrl.startsWith('http')) {
+      // Full public URL — download via HTTP
+      const res = await fetch(audioUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${audioUrl}`);
+      buffer = Buffer.from(await res.arrayBuffer());
+    } else {
+      // Relative storage key — read via adapter
+      buffer = await storage.read(audioUrl);
+    }
     await fs.promises.writeFile(tmpPath, buffer);
     return tmpPath;
   } catch {
