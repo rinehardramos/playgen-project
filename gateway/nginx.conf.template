@@ -145,7 +145,7 @@ server {
     }
 
     # ─── Station: top-level program / clock / episode routes ──────
-    location ~ ^/api/v1/(programs|program-episodes)(/|$) {
+    location ~ ^/api/v1/(programs|program-episodes)(/|$|/.+) {
         set $svc http://${STATION_HOST}:3002;
         proxy_pass $svc;
         proxy_set_header Host $host;
