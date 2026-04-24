@@ -10,9 +10,9 @@
  * Production notifies OwnRadio after trigger_playout (not the local pipeline's job).
  *
  * Required env vars:
- *   GATEWAY_URL           — e.g. https://api.playgen.site
- *   ACCESS_TOKEN          — JWT for production (or fetched via ADMIN_EMAIL/ADMIN_PASSWORD)
- *   ADMIN_EMAIL / ADMIN_PASSWORD — used to auto-refresh token when ACCESS_TOKEN is absent
+ *   PROD_GATEWAY_URL      — e.g. https://api.playgen.site
+ *   ACCESS_TOKEN          — prod JWT; auto-fetched via PROD_USERNAME/PROD_PASSWORD if absent
+ *   PROD_USERNAME / PROD_PASSWORD — used to auto-refresh token when ACCESS_TOKEN is absent
  *   AWS_ACCESS_KEY_ID          — R2 write key (same creds used by production)
  *   AWS_SECRET_ACCESS_KEY
  *   S3_ENDPOINT                — R2 endpoint
@@ -64,11 +64,11 @@ async function getProdToken(): Promise<string> {
   const token = process.env.ACCESS_TOKEN;
   if (token) return token;
 
-  const gw = process.env.GATEWAY_URL ?? 'https://api.playgen.site';
-  const email = process.env.ADMIN_EMAIL;
-  const password = process.env.ADMIN_PASSWORD;
+  const gw = process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
+  const email = process.env.PROD_USERNAME;
+  const password = process.env.PROD_PASSWORD;
   if (!email || !password) {
-    throw new Error('ACCESS_TOKEN or ADMIN_EMAIL+ADMIN_PASSWORD required');
+    throw new Error('ACCESS_TOKEN or PROD_USERNAME + PROD_PASSWORD required');
   }
 
   const res = await fetch(`${gw}/api/v1/auth/login`, {
@@ -222,7 +222,7 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
 
 async function stageIngestProduction(scriptId: string, token: string): Promise<void> {
   const pool = getPool();
-  const gw = process.env.GATEWAY_URL ?? 'https://api.playgen.site';
+  const gw = process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
 
   // Build the full ingest payload from local DB
   const { rows: scriptRows } = await pool.query<{
@@ -336,7 +336,7 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<v
 
 async function stageTriggerPlayout(scriptId: string, token: string): Promise<string> {
   const pool = getPool();
-  const gw = process.env.GATEWAY_URL ?? 'https://api.playgen.site';
+  const gw = process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
 
   // Look up the production script ID by matching slug + playlist date
   // The ingest route returns the prod script_id but we need to retrieve it.
