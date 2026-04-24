@@ -462,6 +462,101 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  /**
+   * POST /dj/scripts/:id/tts
+   *
+   * Generate TTS audio for all segments of a script that don't have audio yet.
+   * Runs segments sequentially in the background; returns 202 immediately.
+   *
+   * Query params:
+   *   ?force=true  — re-generate audio even for segments that already have an audio_url
+   */
+  app.post<{ Params: { id: string }; Querystring: { force?: string } }>(
+    '/dj/scripts/:id/tts',
+    async (req, reply) => {
+      const { id } = req.params;
+      const force = req.query.force === 'true';
+      const pool = getPool();
+
+      // Verify script exists and is approved
+      const { rows: scriptRows } = await pool.query<{
+        id: string; station_id: string; review_status: string; dj_profile_id: string;
+      }>(
+        `SELECT id, station_id, review_status, dj_profile_id FROM dj_scripts WHERE id = $1`,
+        [id],
+      );
+      const script = scriptRows[0];
+      if (!script) return reply.notFound('Script not found');
+      if (!['approved', 'auto_approved'].includes(script.review_status)) {
+        return reply.badRequest(`Script must be approved before TTS (status: ${script.review_status})`);
+      }
+
+      // Load TTS config once for the station
+      const { rows: profileRows } = await pool.query<{ tts_voice_id: string }>(
+        `SELECT tts_voice_id FROM dj_profiles WHERE id = $1`,
+        [script.dj_profile_id],
+      );
+      const fallbackVoiceId = profileRows[0]?.tts_voice_id ?? 'alloy';
+      const providerCfg = await loadTtsProviderConfig(script.station_id, fallbackVoiceId);
+      if (!providerCfg) {
+        return reply.badRequest('TTS is not configured for this station');
+      }
+
+      // Fetch segments to process
+      const { rows: segments } = await pool.query<{
+        id: string; position: number; script_text: string;
+        edited_text: string | null; audio_url: string | null;
+      }>(
+        `SELECT id, position, script_text, edited_text, audio_url
+         FROM dj_segments WHERE script_id = $1 ORDER BY position`,
+        [id],
+      );
+
+      const pending = force
+        ? segments
+        : segments.filter((s) => !s.audio_url);
+
+      if (pending.length === 0) {
+        return reply.code(200).send({
+          status: 'already_complete',
+          total: segments.length,
+          generated: 0,
+        });
+      }
+
+      // Fire-and-forget: run TTS sequentially for all pending segments
+      (async () => {
+        let generated = 0;
+        let failed = 0;
+        for (const seg of pending) {
+          try {
+            await generateSegmentTts(
+              {
+                id: seg.id,
+                position: seg.position,
+                text: seg.edited_text ?? seg.script_text,
+                script_id: id,
+                station_id: script.station_id,
+              },
+              providerCfg,
+            );
+            generated++;
+          } catch (err) {
+            failed++;
+            req.log.warn({ segmentId: seg.id, err }, '[script-tts] segment TTS failed');
+          }
+        }
+        req.log.info({ scriptId: id, generated, failed }, '[script-tts] TTS run complete');
+      })();
+
+      return reply.code(202).send({
+        status: 'generating',
+        total: segments.length,
+        pending: pending.length,
+      });
+    },
+  );
+
   // POST /dj/scripts/:id/approve — approve whole script (separate from /review action)
   app.post<{ Params: { id: string }; Body: { review_notes?: string } }>(
     '/dj/scripts/:id/approve',
