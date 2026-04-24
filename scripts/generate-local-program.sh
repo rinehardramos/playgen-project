@@ -71,7 +71,7 @@ echo ""
 echo "▸ Step 1/8: Authenticating…"
 TOKEN=$(curl -sf -X POST "$GATEWAY/api/v1/auth/login" \
   -H "Content-Type: application/json" \
-  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" | jq -r '.access_token')
+  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" | jq -r '.tokens.access_token // .access_token')
 
 if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
   echo "  ✗ Authentication failed. Is the local stack running?"
@@ -91,9 +91,9 @@ echo "  ✓ Company: $COMPANY_ID"
 # ── Step 3: Create or get station ─────────────────────────────────────────
 echo "▸ Step 3/8: Creating station '$STATION_NAME'…"
 
-# Check if station with this slug already exists
+# Check if station with this name already exists for this company
 EXISTING_STATION=$(gw "$GATEWAY/api/v1/companies/$COMPANY_ID/stations" | \
-  jq -r ".[] | select(.slug == \"$STATION_SLUG\") | .id" 2>/dev/null || echo "")
+  jq -r ".[] | select(.name == \"$STATION_NAME\") | .id" 2>/dev/null | head -1 || echo "")
 
 if [ -n "$EXISTING_STATION" ] && [ "$EXISTING_STATION" != "null" ]; then
   STATION_ID="$EXISTING_STATION"
@@ -117,10 +117,6 @@ else
     exit 1
   fi
 
-  # Set the slug
-  gw -X PUT "$GATEWAY/api/v1/stations/$STATION_ID" \
-    -d "{\"slug\": \"$STATION_SLUG\"}" > /dev/null || true
-
   echo "  ✓ Station created: $STATION_ID"
 fi
 
@@ -140,6 +136,7 @@ else
       "name": "Camille — Metro Manila Mix",
       "personality": "Energetic, warm, and relatable Manila millennial DJ. Speaks Taglish naturally — mostly English with Tagalog words and phrases sprinkled in. Loves referencing local culture: EDSA traffic, street food, pop culture, OPM, and the fast-paced Metro Manila lifestyle. Never forced or try-hard — the Tagalog flows naturally like how young Manila professionals actually talk.",
       "voice_style": "Upbeat and confident with a clear, bright radio voice. Energy like a morning drive show host. Pronounces Tagalog words with correct Filipino accent. Keeps banter short and punchy — never over-explains.",
+      "llm_temperature": "0.80",
       "persona_config": {
         "catchphrases": ["Grabe naman!", "Talaga?!", "Sige let'\''s go!", "Stay fab, Manila!"],
         "signature_greeting": "Good morning, Manila! Kamusta na kayo? Ito na naman tayo!",
@@ -152,7 +149,9 @@ else
       },
       "llm_model": "claude-sonnet-4-6",
       "tts_provider": "mistral",
-      "tts_voice_id": "energetic_female"
+      "tts_voice_id": "energetic_female",
+      "is_default": false,
+      "is_active": true
     }' | jq -r '.id')
 
   if [ -z "$PROFILE_ID" ] || [ "$PROFILE_ID" = "null" ]; then
@@ -174,39 +173,25 @@ gw -X POST "$GATEWAY/api/v1/stations/$STATION_ID/settings" \
 echo "  ✓ Station settings configured (Mistral TTS + Anthropic LLM)"
 
 # ── Step 5: Create playlist and populate with songs ───────────────────────
-echo "▸ Step 5/8: Creating playlist for $PLAYLIST_DATE…"
+echo "▸ Step 5/8: Creating playlist for ${PLAYLIST_DATE}..."
 
-# Generate playlist via the scheduler service (triggers PlaylistService.buildPlaylist)
-PLAYLIST_ID=$(gw -X POST "$GATEWAY/api/v1/playlists/generate" \
-  -d "{
-    \"station_id\": \"$STATION_ID\",
-    \"date\": \"$PLAYLIST_DATE\",
-    \"hours\": $BROADCAST_HOURS
-  }" | jq -r '.playlist_id // .id // empty')
+# Generate playlist via the scheduler service (POST /stations/:id/playlists/generate)
+GEN_RESP=$(curl -s -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -X POST "$GATEWAY/api/v1/stations/$STATION_ID/playlists/generate" \
+  -d "{\"date\": \"$PLAYLIST_DATE\"}")
+PLAYLIST_ID=$(echo "$GEN_RESP" | jq -r '.playlist_id // .id // empty' 2>/dev/null || echo "")
 
 if [ -z "$PLAYLIST_ID" ] || [ "$PLAYLIST_ID" = "null" ]; then
-  # Fallback: create playlist manually and use whatever songs exist in the library
-  echo "  ⚠ Auto-generate failed — creating playlist manually from library…"
-  PLAYLIST_ID=$(gw -X POST "$GATEWAY/api/v1/playlists" \
-    -d "{\"station_id\": \"$STATION_ID\", \"date\": \"$PLAYLIST_DATE\"}" | jq -r '.id')
-
+  # Fallback: look for existing playlist for this station/date
+  echo "  ⚠ Generate response: $GEN_RESP"
+  PLAYLIST_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+    "$GATEWAY/api/v1/stations/$STATION_ID/playlists?date=$PLAYLIST_DATE" | \
+    jq -r '.[0].id // empty' 2>/dev/null || echo "")
   if [ -z "$PLAYLIST_ID" ] || [ "$PLAYLIST_ID" = "null" ]; then
-    echo "  ✗ Failed to create playlist"
+    echo "  ✗ Failed to create or find playlist for $STATION_ID on $PLAYLIST_DATE"
     exit 1
   fi
-
-  # Add songs from the library to this playlist
-  echo "  Adding songs from library…"
-  SONGS=$(gw "$GATEWAY/api/v1/songs?station_id=$STATION_ID&limit=20" | jq -r '.[].id' 2>/dev/null || echo "")
-  POS=1
-  HOUR=6
-  for SONG_ID in $SONGS; do
-    [ "$POS" -gt 20 ] && break
-    gw -X POST "$GATEWAY/api/v1/playlists/$PLAYLIST_ID/entries" \
-      -d "{\"song_id\":\"$SONG_ID\",\"hour\":$HOUR,\"position\":$POS}" > /dev/null || true
-    POS=$(( POS + 1 ))
-    [ $(( POS % 4 )) -eq 1 ] && HOUR=$(( HOUR + 1 ))
-  done
+  echo "  ✓ Using existing playlist: $PLAYLIST_ID"
 fi
 
 echo "  ✓ Playlist: $PLAYLIST_ID"
@@ -228,8 +213,9 @@ echo ""
 echo "  ✓ DJ script submitted to PlayGen"
 
 # Fetch the script ID for TTS step
-SCRIPT_ID=$(gw "$GATEWAY/api/v1/dj/scripts?playlist_id=$PLAYLIST_ID" | \
-  jq -r '.[0].id // .script_id // empty')
+SCRIPT_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  "$GATEWAY/api/v1/dj/playlists/$PLAYLIST_ID/script" | \
+  jq -r '.id // empty' 2>/dev/null || echo "")
 
 if [ -z "$SCRIPT_ID" ] || [ "$SCRIPT_ID" = "null" ]; then
   echo "  ⚠ Could not retrieve script ID — skipping TTS step"
