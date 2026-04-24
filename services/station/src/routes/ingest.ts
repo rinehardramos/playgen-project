@@ -155,8 +155,8 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
       // ── 4. Resolve default category for song upserts ──────────────────
       // Songs require a category_id. Use the first active category for this company.
       const { rows: catRows } = await pool.query<{ id: string }>(
-        `SELECT id FROM categories WHERE company_id = $1 ORDER BY created_at LIMIT 1`,
-        [company_id],
+        `SELECT id FROM categories WHERE station_id = $1 ORDER BY created_at LIMIT 1`,
+        [station_id],
       );
       if (!catRows[0]) return reply.badRequest('No category found for company — create at least one category before ingesting');
       const category_id = catRows[0].id;
