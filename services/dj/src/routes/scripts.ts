@@ -10,6 +10,7 @@ import type { ReviewScriptRequest, GenerateScriptRequest } from '@playgen/types'
 import { getPool } from '../db.js';
 import { getStorageAdapter } from '../lib/storage/index.js';
 import { generateHls } from '../playout/hlsGenerator.js';
+import { getInfoBrokerClient } from '../lib/infoBroker.js';
 
 export async function scriptRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate);
@@ -576,6 +577,209 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
         [id],
       );
       return updated[0];
+    },
+  );
+
+  // ─── Out-of-band script generation support ───────────────────────────────
+  //
+  // These two routes allow an external agent (e.g. Claude Code) to:
+  //   1. Fetch all the context needed to write a DJ script
+  //   2. Submit the finished script segments back to PlayGen
+  //
+  // The generated script is stored with generation_source = 'external' so it
+  // is distinguishable from scripts produced by the internal BullMQ LLM worker.
+
+  // GET /dj/context/:playlist_id
+  // Returns station, DJ profile, playlist tracks, and live data (weather/news)
+  // so an external agent has everything needed to write a script.
+  app.get<{ Params: { playlist_id: string } }>(
+    '/dj/context/:playlist_id',
+    async (req, reply) => {
+      const pool = getPool();
+      const { playlist_id } = req.params;
+
+      // Resolve station from playlist
+      const { rows: plRows } = await pool.query<{
+        id: string; station_id: string; date: string;
+      }>(
+        `SELECT id, station_id, date FROM playlists WHERE id = $1`,
+        [playlist_id],
+      );
+      const playlist = plRows[0];
+      if (!playlist) return reply.notFound('Playlist not found');
+
+      // Station info
+      const { rows: stRows } = await pool.query<{
+        id: string; name: string; timezone: string; locale_code: string | null;
+        city: string | null; country_code: string | null;
+        latitude: number | null; longitude: number | null;
+        callsign: string | null; tagline: string | null; frequency: string | null;
+        news_scope: string | null; news_topic: string | null;
+      }>(
+        `SELECT id, name, timezone, locale_code, city, country_code,
+                latitude, longitude, callsign, tagline, frequency,
+                news_scope, news_topic
+         FROM stations WHERE id = $1`,
+        [playlist.station_id],
+      );
+      const station = stRows[0];
+      if (!station) return reply.notFound('Station not found');
+
+      // DJ profile (default for station's company)
+      const { rows: compRows } = await pool.query<{ company_id: string }>(
+        `SELECT company_id FROM stations WHERE id = $1`,
+        [playlist.station_id],
+      );
+      const profile = await getDefaultProfile(compRows[0]?.company_id ?? '');
+
+      // Playlist tracks
+      const { rows: tracks } = await pool.query<{
+        id: string; hour: number; position: number;
+        song_title: string; song_artist: string; duration_sec: number | null;
+      }>(
+        `SELECT pe.id, pe.hour, pe.position,
+                s.title AS song_title, s.artist AS song_artist, s.duration_sec
+         FROM playlist_entries pe
+         JOIN songs s ON s.id = pe.song_id
+         WHERE pe.playlist_id = $1
+         ORDER BY pe.hour, pe.position`,
+        [playlist_id],
+      );
+
+      // Weather + news via info-broker (soft-fail)
+      let weather: unknown = null;
+      let news: unknown = null;
+      const broker = getInfoBrokerClient();
+      if (broker) {
+        const [w, n] = await Promise.allSettled([
+          broker.getWeather({
+            city: station.city ?? undefined,
+            country_code: station.country_code ?? undefined,
+            lat: station.latitude ?? undefined,
+            lon: station.longitude ?? undefined,
+          }),
+          broker.getNews({
+            scope: (station.news_scope as 'global' | 'country' | 'local') ?? 'global',
+            topic: station.news_topic ?? 'any',
+            country_code: station.country_code ?? undefined,
+            limit: 10,
+          }),
+        ]);
+        if (w.status === 'fulfilled') weather = w.value;
+        if (n.status === 'fulfilled') news = n.value;
+      }
+
+      return {
+        playlist_id,
+        playlist_date: playlist.date,
+        station: {
+          id: station.id,
+          name: station.name,
+          timezone: station.timezone,
+          locale_code: station.locale_code,
+          city: station.city,
+          country_code: station.country_code,
+          callsign: station.callsign,
+          tagline: station.tagline,
+          frequency: station.frequency,
+        },
+        dj_profile: profile
+          ? {
+              id: profile.id,
+              name: profile.name,
+              personality: profile.personality,
+              voice_style: profile.voice_style,
+              backstory: profile.persona_config?.backstory ?? null,
+              catchphrases: profile.persona_config?.catchphrases ?? [],
+              signature_greeting: profile.persona_config?.signature_greeting ?? null,
+            }
+          : null,
+        tracks,
+        weather,
+        news,
+        current_time_utc: new Date().toISOString(),
+      };
+    },
+  );
+
+  // POST /dj/scripts/submit-external
+  // Accept a script generated by an external agent (Claude Code) and persist it.
+  // Body: { playlist_id, dj_profile_id?, auto_approve?, segments: ExternalSegment[] }
+  interface ExternalSegment {
+    segment_type: string;
+    position: number;
+    script_text: string;
+    playlist_entry_id?: string | null;
+  }
+  interface SubmitExternalBody {
+    playlist_id: string;
+    dj_profile_id?: string;
+    auto_approve?: boolean;
+    segments: ExternalSegment[];
+  }
+
+  app.post<{ Body: SubmitExternalBody }>(
+    '/dj/scripts/submit-external',
+    async (req, reply) => {
+      const pool = getPool();
+      const { playlist_id, dj_profile_id, auto_approve = false, segments } = req.body;
+
+      if (!playlist_id) return reply.badRequest('playlist_id is required');
+      if (!Array.isArray(segments) || segments.length === 0) {
+        return reply.badRequest('segments must be a non-empty array');
+      }
+
+      // Resolve station from playlist
+      const { rows: plRows } = await pool.query<{ station_id: string }>(
+        `SELECT station_id FROM playlists WHERE id = $1`,
+        [playlist_id],
+      );
+      const playlist = plRows[0];
+      if (!playlist) return reply.notFound('Playlist not found');
+
+      // Resolve DJ profile
+      let profileId = dj_profile_id;
+      if (!profileId) {
+        const { rows: compRows } = await pool.query<{ company_id: string }>(
+          `SELECT company_id FROM stations WHERE id = $1`,
+          [playlist.station_id],
+        );
+        const profile = await getDefaultProfile(compRows[0]?.company_id ?? '');
+        profileId = profile?.id;
+      }
+      if (!profileId) return reply.badRequest('No DJ profile found for this station');
+
+      const reviewStatus = auto_approve ? 'auto_approved' : 'pending_review';
+
+      // Insert script record
+      const { rows: scriptRows } = await pool.query<{ id: string }>(
+        `INSERT INTO dj_scripts
+           (playlist_id, station_id, dj_profile_id, review_status, llm_model,
+            total_segments, generation_source)
+         VALUES ($1, $2, $3, $4, $5, $6, 'external')
+         RETURNING id`,
+        [playlist_id, playlist.station_id, profileId, reviewStatus, 'claude-code', segments.length],
+      );
+      const script_id = scriptRows[0].id;
+
+      // Insert segments
+      for (const seg of segments) {
+        await pool.query(
+          `INSERT INTO dj_segments
+             (script_id, playlist_entry_id, segment_type, position, script_text, segment_review_status)
+           VALUES ($1, $2, $3, $4, $5, 'pending')`,
+          [
+            script_id,
+            seg.playlist_entry_id ?? null,
+            seg.segment_type,
+            seg.position,
+            seg.script_text,
+          ],
+        );
+      }
+
+      reply.code(201);
+      return { script_id, segment_count: segments.length, review_status: reviewStatus };
     },
   );
 }
