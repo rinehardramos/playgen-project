@@ -190,7 +190,8 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
     // Skip segments already on CDN
     if (seg.audio_url.startsWith('http')) continue;
 
-    const s3Key = `programs/${stationSlug}/${playlistDate}/${seg.position}_${seg.segment_type}.mp3`;
+    const dateStr = new Date(playlistDate).toISOString().split('T')[0]; // YYYY-MM-DD, no spaces
+    const s3Key = `programs/${stationSlug}/${dateStr}/${seg.position}_${seg.segment_type}.mp3`;
 
     // Check if already uploaded (idempotent resume)
     try {

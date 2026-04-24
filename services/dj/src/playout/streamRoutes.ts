@@ -114,7 +114,7 @@ export async function streamRoutes(app: FastifyInstance) {
         for (const seg of rows) {
           const dur = parseFloat(String(seg.audio_duration_sec ?? 0));
           lines.push(`#EXTINF:${dur.toFixed(3)},`);
-          lines.push(seg.audio_url);
+          lines.push(encodeURI(seg.audio_url));
         }
         lines.push('#EXT-X-ENDLIST');
 
