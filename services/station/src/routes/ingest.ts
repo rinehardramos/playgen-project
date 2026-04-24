@@ -153,12 +153,22 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
       const dj_profile_id = profileRows[0].id;
 
       // ── 4. Resolve default category for song upserts ──────────────────
-      // Songs require a category_id. Use the first active category for this company.
-      const { rows: catRows } = await pool.query<{ id: string }>(
+      // Songs require a category_id. Use the first active category for the station,
+      // creating a default one if this is a freshly-synced station with none yet.
+      let { rows: catRows } = await pool.query<{ id: string }>(
         `SELECT id FROM categories WHERE station_id = $1 ORDER BY created_at LIMIT 1`,
         [station_id],
       );
-      if (!catRows[0]) return reply.badRequest('No category found for company — create at least one category before ingesting');
+      if (!catRows[0]) {
+        const { rows: newCat } = await pool.query<{ id: string }>(
+          `INSERT INTO categories (station_id, code, label, rotation_weight)
+           VALUES ($1, 'GEN', 'General', 1.0)
+           ON CONFLICT (station_id, code) DO UPDATE SET label = EXCLUDED.label
+           RETURNING id`,
+          [station_id],
+        );
+        catRows = newCat;
+      }
       const category_id = catRows[0].id;
 
       // ── 5. Upsert songs + build playlist ─────────────────────────────
