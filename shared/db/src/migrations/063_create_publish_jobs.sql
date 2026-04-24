@@ -4,6 +4,15 @@
 -- One row per publish attempt per script. Stage state is persisted before
 -- advancing so crash recovery can resume from the last completed stage.
 
+-- Ensure the trigger helper exists (idempotent)
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TABLE publish_jobs (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   script_id         UUID NOT NULL REFERENCES dj_scripts(id) ON DELETE CASCADE,
