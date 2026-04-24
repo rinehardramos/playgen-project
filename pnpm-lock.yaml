@@ -373,6 +373,9 @@ importers:
 
   services/station:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1035.0
+        version: 3.1035.0
       '@fastify/rate-limit':
         specifier: ^10.3.0
         version: 10.3.0
@@ -388,6 +391,9 @@ importers:
       bcrypt:
         specifier: ^6.0.0
         version: 6.0.0
+      bullmq:
+        specifier: ^5.73.5
+        version: 5.73.5
       fastify:
         specifier: ^5.8.5
         version: 5.8.5
