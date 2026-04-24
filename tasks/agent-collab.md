@@ -24,18 +24,18 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 ---
 
 ## Active Work
-- [ ] feat(station): Publish to Production pipeline — BullMQ 4-stage worker + publish_jobs migration (feat/publish-pipeline) | @claude-sonnet-4-6 | 2026-04-24 | Migration: 063
+- [ ] feat(playlist+library): info-broker audio sourcing + /internal/songs/audio-sourced callback (feat/audio-sourcing-integration) | @claude-sonnet-4-6 | 2026-04-23
+- [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
+
+## Recently Completed
+- [x] feat(station): Publish to Production pipeline — BullMQ 4-stage worker + publish_jobs migration (feat/publish-pipeline, PRs #439 #441) | @claude-sonnet-4-6 | 2026-04-24 | Migration: 063
 - [x] feat(dj): POST /dj/scripts/:id/tts — generate TTS for all script segments (feat/script-tts-route, PR #438) | @claude-sonnet-4-6 | 2026-04-24
 - [x] fix(dj): CDN-backed HLS playlist + status.json 400 fix (fix/cdn-backed-hls, PR #437) | @claude-sonnet-4-6 | 2026-04-24
 - [x] fix(info-broker): background playlist sourcing tasks produce no log output (#420, fix/info-broker-logging, PR info-broker#6) | @claude-sonnet-4-6 | 2026-04-24
 - [x] chore(auth): increase JWT access token expiry via TOKEN_TTL_MINUTES env var (#421, fix/jwt-expiry, PR #427) | @claude-sonnet-4-6 | 2026-04-24
-- [ ] feat(playlist+library): info-broker audio sourcing + /internal/songs/audio-sourced callback (feat/audio-sourcing-integration) | @claude-sonnet-4-6 | 2026-04-23
 - [x] feat(dj+gateway): OwnRadio HLS streaming integration (feat/ownradio-hls, main) | @claude-sonnet-4-6 | 2026-04-23
-- [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
 - [x] feat(station): Program Import/Export — .playgen ZIP bundle export/import (feat/program-import-export, PR #408) | @claude-sonnet-4-6 | 2026-04-22
 - [x] refactor(shared): extract DJ storage adapters into @playgen/storage package (feat/shared-storage, PR #410) | @claude-sonnet-4-6 | 2026-04-22
-
-## Recently Completed
 - [x] feat(local+scheduler): Metro Manila Mix station, local program generator, R2 sync, Billboard+OPM library seed, song library inheritance (#430, #433, feat/issue-433-local-program-sync, PR #434) | @claude-sonnet-4-6 | 2026-04-24
 - [x] feat(scheduler): dailyProgramJob — program-aware cron for tomorrow's playlists (feat/daily-program-job, PR #407) | @claude-sonnet-4-6 | 2026-04-22
 - [x] feat(db+types): add audio_url/audio_source columns to songs | @claude-sonnet-4-6 | 2026-04-22 | Migration: 057
