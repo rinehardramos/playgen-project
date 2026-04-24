@@ -161,6 +161,8 @@ jobs:
         run: railway up --service ${{ matrix.service }} --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_ENVIRONMENT: ${{ secrets.RAILWAY_ENVIRONMENT }}
 
   # ── Post-deploy smoke tests ────────────────────────────────────
   smoke-test:
