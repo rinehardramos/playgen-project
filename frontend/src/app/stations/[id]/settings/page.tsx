@@ -36,6 +36,9 @@ const SETTING_FIELDS: SettingField[] = [
     options: [
       { value: 'elevenlabs', label: 'ElevenLabs' },
       { value: 'openai', label: 'OpenAI' },
+      { value: 'mistral', label: 'Mistral Voxtral' },
+      { value: 'google', label: 'Google TTS' },
+      { value: 'gemini_tts', label: 'Gemini TTS' },
     ],
   },
   {
@@ -49,10 +52,10 @@ const SETTING_FIELDS: SettingField[] = [
   {
     key: 'tts_voice_id',
     label: 'TTS Voice ID',
-    description: 'ElevenLabs voice ID or OpenAI voice name (e.g. alloy, echo, nova).',
+    description: 'Voice ID for the selected provider. ElevenLabs: voice ID string. OpenAI: alloy, echo, nova, shimmer. Mistral Voxtral: casual_male, casual_female, cheerful_female, neutral_male, neutral_female, energetic_male, energetic_female, calm_male, calm_female.',
     type: 'text',
     is_secret: false,
-    placeholder: 'e.g. EXAVITQu4vr4xnSDxMaL',
+    placeholder: 'e.g. energetic_female (Mistral) · alloy (OpenAI) · EXAVITQu4vr4xnSDxMaL (ElevenLabs)',
   },
   {
     key: 'llm_provider',
@@ -62,17 +65,18 @@ const SETTING_FIELDS: SettingField[] = [
     is_secret: false,
     options: [
       { value: 'openrouter', label: 'OpenRouter (default)' },
-      { value: 'anthropic', label: 'Anthropic (direct)' },
+      { value: 'anthropic', label: 'Anthropic — Claude (recommended)' },
       { value: 'openai', label: 'OpenAI (direct)' },
+      { value: 'gemini', label: 'Google Gemini (direct)' },
     ],
   },
   {
     key: 'llm_model',
     label: 'LLM Model',
-    description: 'Model name for the selected provider. OpenRouter: "anthropic/claude-sonnet-4-5". Anthropic direct: "claude-sonnet-4-5". OpenAI direct: "gpt-4o".',
+    description: 'Model name for the selected provider. Anthropic direct: "claude-sonnet-4-6". OpenRouter: "anthropic/claude-sonnet-4-6". OpenAI direct: "gpt-4o". Gemini: "gemini-2.0-flash".',
     type: 'text',
     is_secret: false,
-    placeholder: 'anthropic/claude-sonnet-4-5',
+    placeholder: 'claude-sonnet-4-6',
   },
   {
     key: 'llm_api_key',
