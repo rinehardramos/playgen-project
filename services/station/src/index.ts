@@ -12,6 +12,8 @@ import { subscriptionRoutes } from './routes/subscriptions';
 import { programRoutes } from './routes/programs';
 import { systemLogRoutes } from './routes/systemLogs';
 import { ingestRoutes } from './routes/ingest';
+import { publishRoutes } from './routes/publish';
+import { startPublishWorker } from './queues/publishPipeline';
 
 const app = Fastify({
   logger: {
@@ -37,6 +39,7 @@ app.register(subscriptionRoutes,   { prefix: '/api/v1' });
 app.register(programRoutes,        { prefix: '/api/v1' });
 app.register(systemLogRoutes,      { prefix: '/api/v1' });
 app.register(ingestRoutes,         { prefix: '/api/v1' });
+app.register(publishRoutes,        { prefix: '/api/v1' });
 
 app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);
@@ -55,5 +58,10 @@ const port = Number(process.env.PORT ?? 3002);
 app.listen({ port, host: '0.0.0.0' }, (err) => {
   if (err) { app.log.error(err); process.exit(1); }
 });
+
+// Start publish pipeline worker (connects to Redis)
+if (process.env.REDIS_URL) {
+  startPublishWorker();
+}
 
 export default app;
