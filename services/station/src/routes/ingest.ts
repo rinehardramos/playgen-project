@@ -190,7 +190,7 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
         `INSERT INTO playlists (station_id, date, status)
          VALUES ($1, $2, 'approved')
          ON CONFLICT (station_id, date)
-         DO UPDATE SET status = 'approved', updated_at = NOW()
+         DO UPDATE SET status = 'approved'
          RETURNING id`,
         [station_id, playlistData.date],
       );
