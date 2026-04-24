@@ -25,7 +25,6 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import fs from 'fs';
-import path from 'path';
 import { getPool } from '../db';
 
 // ── Queue ──────────────────────────────────────────────────────────────────
@@ -77,8 +76,10 @@ async function getProdToken(): Promise<string> {
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) throw new Error(`Prod login failed: ${res.status}`);
-  const data = await res.json() as { access_token: string };
-  return data.access_token;
+  const data = await res.json() as { tokens?: { access_token: string }; access_token?: string };
+  const tok = data.tokens?.access_token ?? data.access_token;
+  if (!tok) throw new Error('Prod login response missing access_token');
+  return tok;
 }
 
 function getS3Client(): S3Client {
@@ -142,19 +143,12 @@ async function stageValidate(scriptId: string): Promise<void> {
   );
   if (segs.length === 0) throw new Error('Script has no segments');
 
-  const localStoragePath = process.env.STORAGE_LOCAL_PATH ?? '/tmp/playgen-dj';
   const missing: number[] = [];
 
   for (const seg of segs) {
     if (!seg.audio_url) { missing.push(seg.position); continue; }
-    // Local path — verify file exists
-    if (!seg.audio_url.startsWith('http')) {
-      const absPath = path.isAbsolute(seg.audio_url)
-        ? seg.audio_url
-        : path.join(localStoragePath, seg.audio_url);
-      if (!fs.existsSync(absPath)) missing.push(seg.position);
-    }
-    // CDN URL — already uploaded, skip
+    // CDN URL or DJ API path — both are considered valid (upload stage will fetch if needed)
+    // Local file path check is skipped: the station service doesn't share storage with the DJ service
   }
 
   if (missing.length > 0) {
@@ -165,12 +159,24 @@ async function stageValidate(scriptId: string): Promise<void> {
   }
 }
 
+async function fetchAudioBuffer(audioUrl: string): Promise<Buffer> {
+  // DJ API path — fetch via DJ service URL (internal Docker network or gateway)
+  if (audioUrl.startsWith('/api/v1/dj/')) {
+    const djBase = process.env.DJ_INTERNAL_URL ?? 'http://dj:3007';
+    const res = await fetch(`${djBase}${audioUrl}`);
+    if (!res.ok) throw new Error(`Failed to fetch audio from DJ service (${res.status}): ${audioUrl}`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+  // Absolute local file path
+  return fs.readFileSync(audioUrl);
+}
+
 async function stageUploadAssets(scriptId: string, stationSlug: string, playlistDate: string): Promise<void> {
   const pool = getPool();
   const s3 = getS3Client();
   const bucket = process.env.S3_BUCKET ?? '';
   const publicBase = (process.env.S3_PUBLIC_URL_BASE ?? '').replace(/\/$/, '');
-  const localStoragePath = process.env.STORAGE_LOCAL_PATH ?? '/tmp/playgen-dj';
+  // NOTE: Audio files are fetched from the DJ service via HTTP, not from local disk.
 
   const { rows: segs } = await pool.query<{
     id: string; position: number; segment_type: string; audio_url: string | null;
@@ -200,11 +206,7 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
       // Not found — proceed with upload
     }
 
-    const absPath = path.isAbsolute(seg.audio_url)
-      ? seg.audio_url
-      : path.join(localStoragePath, seg.audio_url);
-
-    const body = fs.readFileSync(absPath);
+    const body = await fetchAudioBuffer(seg.audio_url);
     await s3.send(new PutObjectCommand({
       Bucket: bucket,
       Key: s3Key,
@@ -220,7 +222,7 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
   }
 }
 
-async function stageIngestProduction(scriptId: string, token: string): Promise<void> {
+async function stageIngestProduction(scriptId: string, token: string): Promise<string> {
   const pool = getPool();
   const gw = process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
 
@@ -332,50 +334,21 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<v
     const body = await res.text();
     throw new Error(`Ingest failed (${res.status}): ${body}`);
   }
+
+  const data = await res.json() as { script_id: string };
+  if (!data.script_id) throw new Error('Ingest response missing script_id');
+  return data.script_id;
 }
 
-async function stageTriggerPlayout(scriptId: string, token: string): Promise<string> {
-  const pool = getPool();
+async function stageTriggerPlayout(prodScriptId: string, token: string): Promise<string> {
   const gw = process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
 
-  // Look up the production script ID by matching slug + playlist date
-  // The ingest route returns the prod script_id but we need to retrieve it.
-  // Strategy: use the prod ingest endpoint's response isn't stored, so we
-  // query prod via gateway using the station slug + date.
-  const { rows } = await pool.query<{ slug: string; playlist_date: string }>(
-    `SELECT st.slug, pl.date AS playlist_date
-     FROM dj_scripts sc
-     JOIN stations st ON st.id = sc.station_id
-     JOIN playlists pl ON pl.id = sc.playlist_id
-     WHERE sc.id = $1`,
-    [scriptId],
-  );
-  const info = rows[0];
-  if (!info) throw new Error('Cannot resolve station slug + date for trigger');
-
-  // Fetch the prod script ID via gateway
-  const lookupRes = await fetch(
-    `${gw}/api/v1/stations/${info.slug}/programs?date=${info.playlist_date}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-
-  let prodScriptId: string;
-  if (lookupRes.ok) {
-    const data = await lookupRes.json() as { script_id?: string; id?: string };
-    prodScriptId = data.script_id ?? data.id ?? '';
-  } else {
-    // Fallback: trigger by station slug directly
-    prodScriptId = '';
-  }
-
-  // Trigger playout — use slug-based endpoint if no prod script ID
-  const playoutUrl = prodScriptId
-    ? `${gw}/api/v1/dj/scripts/${prodScriptId}/trigger-playout`
-    : `${gw}/api/v1/dj/stations/${info.slug}/trigger-playout`;
+  const playoutUrl = `${gw}/api/v1/dj/scripts/${prodScriptId}/trigger-playout`;
 
   const res = await fetch(playoutUrl, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
   });
 
   if (!res.ok) {
@@ -384,7 +357,7 @@ async function stageTriggerPlayout(scriptId: string, token: string): Promise<str
   }
 
   const data = await res.json() as { stream_url?: string };
-  return data.stream_url ?? `${gw}/stream/${info.slug}/playlist.m3u8`;
+  return data.stream_url ?? `${gw}/stream/`;
 }
 
 // ── Worker ────────────────────────────────────────────────────────────────
@@ -434,14 +407,32 @@ export function startPublishWorker(): Worker<PublishJobData> {
       // Stage 3: ingest_production
       if (!done.ingest_production) {
         await setStage(publish_job_id, 'ingest_production');
-        await stageIngestProduction(script_id, token);
-        await completeStage(publish_job_id, 'ingest_production');
+        const prodScriptId = await stageIngestProduction(script_id, token);
+        // Persist prod_script_id alongside the stage completion so trigger_playout can use it
+        await pool.query(
+          `UPDATE publish_jobs
+           SET stages_completed = stages_completed
+               || jsonb_build_object('ingest_production', 'ok')
+               || jsonb_build_object('prod_script_id', $1::text),
+               updated_at = NOW()
+           WHERE id = $2`,
+          [prodScriptId, publish_job_id],
+        );
       }
 
+      // Re-read stages_completed to pick up prod_script_id
+      const { rows: refreshed } = await pool.query<{ stages_completed: Record<string, string> }>(
+        `SELECT stages_completed FROM publish_jobs WHERE id = $1`,
+        [publish_job_id],
+      );
+      const doneRefreshed = refreshed[0]?.stages_completed ?? done;
+      const prodScriptIdForPlayout = doneRefreshed.prod_script_id ?? '';
+
       // Stage 4: trigger_playout
-      if (!done.trigger_playout) {
+      if (!doneRefreshed.trigger_playout) {
+        if (!prodScriptIdForPlayout) throw new Error('prod_script_id missing — cannot trigger playout');
         await setStage(publish_job_id, 'trigger_playout');
-        const streamUrl = await stageTriggerPlayout(script_id, token);
+        const streamUrl = await stageTriggerPlayout(prodScriptIdForPlayout, token);
         await completeStage(publish_job_id, 'trigger_playout');
 
         // Persist stream_url for the status endpoint
