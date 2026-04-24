@@ -33,6 +33,7 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 - [x] refactor(shared): extract DJ storage adapters into @playgen/storage package (feat/shared-storage, PR #410) | @claude-sonnet-4-6 | 2026-04-22
 
 ## Recently Completed
+- [x] feat(local+scheduler): Metro Manila Mix station, local program generator, R2 sync, Billboard+OPM library seed, song library inheritance (#430, #433, feat/issue-433-local-program-sync, PR #434) | @claude-sonnet-4-6 | 2026-04-24
 - [x] feat(scheduler): dailyProgramJob — program-aware cron for tomorrow's playlists (feat/daily-program-job, PR #407) | @claude-sonnet-4-6 | 2026-04-22
 - [x] feat(db+types): add audio_url/audio_source columns to songs | @claude-sonnet-4-6 | 2026-04-22 | Migration: 057
 - [x] feat(station+frontend): DJ profile on Today's Now Playing card (#299, PR #351) | @claude-code | 2026-04-13 | Migration: 056
