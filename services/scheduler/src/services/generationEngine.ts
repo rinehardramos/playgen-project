@@ -292,6 +292,17 @@ export async function generatePlaylist(
   );
 
   try {
+    // ── Step 3b: Resolve parent station (for template + library inheritance) ──
+    const stationMetaRes = await pool.query<{
+      parent_station_id: string | null;
+      inherit_library: boolean;
+    }>(
+      `SELECT parent_station_id, inherit_library FROM stations WHERE id = $1`,
+      [stationId],
+    );
+    const parentStationId = stationMetaRes.rows[0]?.parent_station_id ?? null;
+    const inheritLibrary = stationMetaRes.rows[0]?.inherit_library ?? false;
+
     // ── Step 4: Load template ─────────────────────────────────────────────────
     let resolvedTemplateId: string;
 
@@ -310,9 +321,22 @@ export async function generatePlaylist(
         [stationId],
       );
       if (tplRes.rows.length === 0) {
-        throw new Error(`No default active template found for station ${stationId}`);
+        // Fallback: try parent station's default template
+        if (parentStationId) {
+          const parentTplRes = await pool.query<{ id: string }>(
+            `SELECT id FROM templates WHERE station_id = $1 AND is_default = true AND is_active = true LIMIT 1`,
+            [parentStationId],
+          );
+          if (parentTplRes.rows.length === 0) {
+            throw new Error(`No default active template found for station ${stationId} or its parent ${parentStationId}`);
+          }
+          resolvedTemplateId = parentTplRes.rows[0].id;
+        } else {
+          throw new Error(`No default active template found for station ${stationId}`);
+        }
+      } else {
+        resolvedTemplateId = tplRes.rows[0].id;
       }
-      resolvedTemplateId = tplRes.rows[0].id;
     }
 
     // ── Step 5: Load template slots (fallback source) ────────────────────────
@@ -417,6 +441,9 @@ export async function generatePlaylist(
     );
 
     // ── Step 9a: Batch-load ALL active songs with eligibility (single query) ─
+    // When inherit_library=true and a parent station exists, include its songs too.
+    const stationIds = [stationId];
+    if (inheritLibrary && parentStationId) stationIds.push(parentStationId);
     const allSongsRes = await pool.query<SongWithEligibility>(
       `SELECT s.id, s.artist, s.category_id,
               COALESCE(
@@ -425,9 +452,9 @@ export async function generatePlaylist(
               ) AS eligible_hours
        FROM songs s
        LEFT JOIN song_slots ss ON ss.song_id = s.id
-       WHERE s.station_id = $1 AND s.is_active = true
+       WHERE s.station_id = ANY($1) AND s.is_active = true
        GROUP BY s.id`,
-      [stationId],
+      [stationIds],
     );
     const allSongs = allSongsRes.rows;
 
