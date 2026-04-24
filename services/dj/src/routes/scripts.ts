@@ -232,6 +232,15 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       const user_id: string = (req as any).user.sub;
 
       if (action === 'approve') {
+        // Guard: reject approval if LLM generation hasn't produced segments yet (#419)
+        const { rows: segCheck } = await getPool().query(
+          'SELECT COUNT(*) AS cnt FROM dj_segments WHERE script_id = $1',
+          [id],
+        );
+        if (parseInt(segCheck[0].cnt, 10) === 0) {
+          return reply.badRequest('Script has no segments yet — LLM generation may still be in progress');
+        }
+
         const script = await scriptService.approveScript(id, user_id, review_notes);
         if (!script) return reply.badRequest('Script not found or not in pending_review state');
         return script;
@@ -326,6 +335,16 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       const { id } = req.params;
       const { review_notes } = req.body ?? {};
       const userId: string = (req as any).user.sub;
+
+      // Guard: reject approval if LLM generation hasn't produced segments yet (#419)
+      const { rows: segCheck } = await getPool().query(
+        'SELECT COUNT(*) AS cnt FROM dj_segments WHERE script_id = $1',
+        [id],
+      );
+      if (parseInt(segCheck[0].cnt, 10) === 0) {
+        return reply.badRequest('Script has no segments yet — LLM generation may still be in progress');
+      }
+
       const script = await scriptService.approveScript(id, userId, review_notes);
       if (!script) return reply.badRequest('Script not found or not in pending_review state');
       return script;

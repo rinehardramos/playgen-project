@@ -28,7 +28,9 @@ vi.mock('../../src/queues/djQueue.js', () => ({
 
 const COMPANY_ID = '00000000-2222-0000-0000-000000000001';
 const STATION_ID = '00000000-3333-0000-0000-000000000001';
+const USER_ID    = '00000000-4444-0000-0000-000000000001';
 const TOKEN = makeTestToken({
+  sub: USER_ID,
   company_id: COMPANY_ID,
   station_ids: [STATION_ID],
   role_code: 'company_admin',
@@ -46,6 +48,19 @@ async function seedFixtures(): Promise<{ playlistId: string; profileId: string }
      ON CONFLICT (id) DO NOTHING`,
     [COMPANY_ID],
   );
+
+  // Seed test user so reviewed_by FK constraint is satisfied on approve
+  const { rows: roleRows } = await pool.query<{ id: string }>(
+    `SELECT id FROM roles LIMIT 1`,
+  );
+  if (roleRows[0]) {
+    await pool.query(
+      `INSERT INTO users (id, company_id, role_id, email, display_name, password_hash)
+       VALUES ($1, $2, $3, 'script-test@playgen.local', 'Script Test User', 'x')
+       ON CONFLICT (id) DO NOTHING`,
+      [USER_ID, COMPANY_ID, roleRows[0].id],
+    );
+  }
 
   // Station with DJ enabled
   await pool.query(
@@ -89,6 +104,7 @@ async function teardownFixtures(playlistId: string): Promise<void> {
   await pool.query(`DELETE FROM playlists   WHERE id = $1`,          [playlistId]);
   await pool.query(`DELETE FROM dj_profiles WHERE company_id = $1`,  [COMPANY_ID]);
   await pool.query(`DELETE FROM stations    WHERE id = $1`,          [STATION_ID]);
+  await pool.query(`DELETE FROM users       WHERE id = $1`,          [USER_ID]);
   await pool.query(`DELETE FROM companies   WHERE id = $1`,          [COMPANY_ID]);
 }
 
@@ -173,21 +189,29 @@ describe('DJ Scripts API', () => {
     let scriptId: string;
 
     beforeAll(async () => {
-      // Insert a synthetic script directly in the DB so we can test review actions
-      // without running the full LLM generation pipeline.
+      // Insert a synthetic script with segments so approve succeeds
       const pool = getPool();
       const res = await pool.query<{ id: string }>(
         `INSERT INTO dj_scripts
            (playlist_id, station_id, dj_profile_id, review_status, llm_model, total_segments)
-         VALUES ($1, $2, $3, 'pending_review', 'anthropic/claude-haiku-3', 0)
+         VALUES ($1, $2, $3, 'pending_review', 'anthropic/claude-haiku-3', 1)
          RETURNING id`,
         [playlistId, STATION_ID, profileId],
       );
       scriptId = res.rows[0].id;
+
+      // Insert a segment so the approve guard passes
+      await pool.query(
+        `INSERT INTO dj_segments (script_id, position, segment_type, script_text)
+         VALUES ($1, 0, 'show_intro', 'Hello listeners!')`,
+        [scriptId],
+      );
     });
 
     afterAll(async () => {
-      await getPool().query(`DELETE FROM dj_scripts WHERE id = $1`, [scriptId]);
+      const pool = getPool();
+      await pool.query(`DELETE FROM dj_segments WHERE script_id = $1`, [scriptId]);
+      await pool.query(`DELETE FROM dj_scripts WHERE id = $1`, [scriptId]);
     });
 
     it('POST /api/v1/dj/scripts/:id/review returns 401 without auth', async () => {
@@ -242,6 +266,51 @@ describe('DJ Scripts API', () => {
         payload: { action: 'edit', edited_segments: [] },
       });
       expect(res.statusCode).toBe(400);
+    });
+  });
+
+  // ── Approve guard: reject when no segments exist (#419) ─────────────────────
+
+  describe('approve with zero segments guard (#419)', () => {
+    let emptyScriptId: string;
+
+    beforeAll(async () => {
+      const pool = getPool();
+      const res = await pool.query<{ id: string }>(
+        `INSERT INTO dj_scripts
+           (playlist_id, station_id, dj_profile_id, review_status, llm_model, total_segments)
+         VALUES ($1, $2, $3, 'pending_review', 'anthropic/claude-haiku-3', 0)
+         RETURNING id`,
+        [playlistId, STATION_ID, profileId],
+      );
+      emptyScriptId = res.rows[0].id;
+      // Deliberately NO segments inserted — simulates LLM still generating
+    });
+
+    afterAll(async () => {
+      await getPool().query(`DELETE FROM dj_scripts WHERE id = $1`, [emptyScriptId]);
+    });
+
+    it('POST /dj/scripts/:id/approve returns 400 when script has no segments', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/v1/dj/scripts/${emptyScriptId}/approve`,
+        headers: { authorization: AUTH_HEADER, 'content-type': 'application/json' },
+        payload: {},
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().message).toMatch(/no segments/i);
+    });
+
+    it('POST /review with action=approve returns 400 when script has no segments', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/v1/dj/scripts/${emptyScriptId}/review`,
+        headers: { authorization: AUTH_HEADER, 'content-type': 'application/json' },
+        payload: { action: 'approve' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().message).toMatch(/no segments/i);
     });
   });
 });
