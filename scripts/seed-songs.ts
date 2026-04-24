@@ -253,40 +253,53 @@ async function main() {
   const { id: station_id, company_id } = stationRows[0];
   console.log(`\n[seed-songs] Station: ${station_id} (company: ${company_id})`);
 
-  // ── Resolve default category ───────────────────────────────────────────────
+  // ── Resolve era-based categories ─────────────────────────────────────────
+  // HOT = current hits (2020+), PWR = peak hits (2015-2019),
+  // REC = recurrent (2010-2014), GLD = gold/classics (pre-2010)
   const { rows: catRows } = await pool.query<{ id: string; code: string }>(
-    `SELECT id, code FROM categories WHERE station_id = $1 ORDER BY created_at LIMIT 1`,
+    `SELECT id, code FROM categories WHERE station_id = $1`,
     [station_id],
   );
-  if (!catRows[0]) {
-    console.error('[seed-songs] No category found for this company — create one first.');
+  if (catRows.length === 0) {
+    console.error('[seed-songs] No categories found — create at least one first.');
     await pool.end();
     process.exit(1);
   }
-  const category_id = catRows[0].id;
-  console.log(`[seed-songs] Using category: ${catRows[0].code} (${category_id})\n`);
+  const catMap = new Map(catRows.map(c => [c.code, c.id]));
+  // Fall back to first available category if a code is missing
+  const fallback_id = catRows[0].id;
+  const getCategoryId = (year: number): string => {
+    if (year >= 2020) return catMap.get('HOT') ?? fallback_id;
+    if (year >= 2015) return catMap.get('PWR') ?? fallback_id;
+    if (year >= 2010) return catMap.get('REC') ?? fallback_id;
+    return catMap.get('GLD') ?? fallback_id;
+  };
+  console.log(`[seed-songs] Categories: ${catRows.map(c => c.code).join(', ')}\n`);
 
   // ── Seed songs ─────────────────────────────────────────────────────────────
   let inserted = 0;
-  let skipped = 0;
+  let updated = 0;
 
   for (const song of ALL_SONGS) {
-    const { rows } = await pool.query<{ id: string }>(
+    const category_id = getCategoryId(song.year);
+    const { rows } = await pool.query<{ id: string; inserted: boolean }>(
       `INSERT INTO songs (company_id, station_id, category_id, title, artist, is_active)
        VALUES ($1, $2, $3, $4, $5, true)
-       ON CONFLICT (station_id, title, artist) DO NOTHING
-       RETURNING id`,
+       ON CONFLICT (station_id, title, artist)
+       DO UPDATE SET category_id = EXCLUDED.category_id
+       RETURNING id, (xmax = 0) AS inserted`,
       [company_id, station_id, category_id, song.title, song.artist],
     );
-    if (rows.length > 0) {
+    if (rows[0]?.inserted) {
       inserted++;
-      console.log(`  ✓ [${song.genre.toUpperCase()}] "${song.title}" — ${song.artist}`);
     } else {
-      skipped++;
+      updated++;
     }
+    const era = song.year >= 2020 ? 'HOT' : song.year >= 2015 ? 'PWR' : song.year >= 2010 ? 'REC' : 'GLD';
+    console.log(`  ${rows[0]?.inserted ? '✓' : '↻'} [${era}/${song.genre.toUpperCase()}] "${song.title}" — ${song.artist} (${song.year})`);
   }
 
-  console.log(`\n[seed-songs] Done! Inserted: ${inserted}, Skipped (already exist): ${skipped}`);
+  console.log(`\n[seed-songs] Done! Inserted: ${inserted} new, Updated: ${updated} (category re-assigned by era).`);
   await pool.end();
 }
 

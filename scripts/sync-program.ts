@@ -72,7 +72,16 @@ if (!prodToken && !dryRun) {
 }
 
 // ── DB + Storage setup ────────────────────────────────────────────────────
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const poolConfig = process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL }
+  : {
+      host: process.env.POSTGRES_HOST ?? 'localhost',
+      port: Number(process.env.POSTGRES_PORT ?? 5432),
+      database: process.env.POSTGRES_DB ?? 'playgen',
+      user: process.env.POSTGRES_USER ?? 'playgen',
+      password: process.env.POSTGRES_PASSWORD,
+    };
+const pool = new pg.Pool(poolConfig);
 const localStoragePath = process.env.STORAGE_LOCAL_PATH ?? '/tmp/playgen-dj';
 
 const s3 = new S3Client({
