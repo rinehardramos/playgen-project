@@ -24,6 +24,8 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 ---
 
 ## Active Work
+- [ ] feat(dj): POST /dj/scripts/:id/tts — generate TTS for all script segments (feat/script-tts-route) | @claude-sonnet-4-6 | 2026-04-24
+- [x] fix(dj): CDN-backed HLS playlist + status.json 400 fix (fix/cdn-backed-hls, PR #437) | @claude-sonnet-4-6 | 2026-04-24
 - [x] fix(info-broker): background playlist sourcing tasks produce no log output (#420, fix/info-broker-logging, PR info-broker#6) | @claude-sonnet-4-6 | 2026-04-24
 - [x] chore(auth): increase JWT access token expiry via TOKEN_TTL_MINUTES env var (#421, fix/jwt-expiry, PR #427) | @claude-sonnet-4-6 | 2026-04-24
 - [ ] feat(playlist+library): info-broker audio sourcing + /internal/songs/audio-sourced callback (feat/audio-sourcing-integration) | @claude-sonnet-4-6 | 2026-04-23
