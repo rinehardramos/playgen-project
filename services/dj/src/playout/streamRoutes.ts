@@ -103,7 +103,7 @@ export async function streamRoutes(app: FastifyInstance) {
 
       if (rows.length > 0) {
         const maxDuration = Math.ceil(
-          Math.max(...rows.map((r) => r.audio_duration_sec ?? 0)),
+          Math.max(...rows.map((r) => parseFloat(String(r.audio_duration_sec ?? 0)))),
         );
         const lines = [
           '#EXTM3U',
@@ -112,7 +112,8 @@ export async function streamRoutes(app: FastifyInstance) {
           '#EXT-X-PLAYLIST-TYPE:VOD',
         ];
         for (const seg of rows) {
-          lines.push(`#EXTINF:${(seg.audio_duration_sec ?? 0).toFixed(3)},`);
+          const dur = parseFloat(String(seg.audio_duration_sec ?? 0));
+          lines.push(`#EXTINF:${dur.toFixed(3)},`);
           lines.push(seg.audio_url);
         }
         lines.push('#EXT-X-ENDLIST');
