@@ -24,6 +24,8 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 ---
 
 ## Active Work
+- [ ] fix(info-broker): background playlist sourcing tasks produce no log output (#420, fix/info-broker-logging) | @claude-sonnet-4-6 | 2026-04-24
+- [ ] chore(auth): increase JWT access token expiry via TOKEN_TTL_MINUTES env var (#421, fix/jwt-expiry) | @claude-sonnet-4-6 | 2026-04-24
 - [ ] feat(playlist+library): info-broker audio sourcing + /internal/songs/audio-sourced callback (feat/audio-sourcing-integration) | @claude-sonnet-4-6 | 2026-04-23
 - [x] feat(dj+gateway): OwnRadio HLS streaming integration (feat/ownradio-hls, main) | @claude-sonnet-4-6 | 2026-04-23
 - [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
