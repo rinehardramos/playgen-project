@@ -2,12 +2,14 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@playgen/middleware';
 import * as scriptService from '../services/scriptService.js';
 import * as manifestService from '../services/manifestService.js';
+import type { ProgramManifest, ShowManifest } from '../services/manifestService.js';
 import { getDefaultProfile } from '../services/profileService.js';
 import { enqueueDjGeneration, djQueue } from '../queues/djQueue.js';
 import { generateSegmentTts, loadTtsProviderConfig } from '../services/ttsService.js';
 import type { ReviewScriptRequest, GenerateScriptRequest } from '@playgen/types';
 import { getPool } from '../db.js';
 import { getStorageAdapter } from '../lib/storage/index.js';
+import { generateHls } from '../playout/hlsGenerator.js';
 
 export async function scriptRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate);
@@ -183,6 +185,82 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
         req.log.error({ err }, '[rebuild-manifest] failed');
         return reply.internalServerError(message);
       }
+    },
+  );
+
+  /**
+   * Trigger HLS generation + OwnRadio webhook for a script's existing ShowManifest.
+   * Returns 202 immediately; HLS generation runs in the background (may take minutes).
+   */
+  app.post<{ Params: { id: string } }>(
+    '/dj/scripts/:id/trigger-playout',
+    async (req, reply) => {
+      const { id } = req.params;
+      const manifestRow = await manifestService.getManifestByScript(id);
+      if (!manifestRow) return reply.notFound('No manifest found for this script');
+      if (!manifestRow.manifest_url) return reply.badRequest('Script has no manifest URL yet');
+
+      const GATEWAY_URL = process.env.GATEWAY_URL ?? 'https://api.playgen.site';
+      const streamUrl = `${GATEWAY_URL}/stream/${manifestRow.station_id}/playlist.m3u8`;
+
+      // Fire-and-forget HLS generation + webhook
+      (async () => {
+        try {
+          const res = await fetch(manifestRow.manifest_url);
+          if (!res.ok) throw new Error(`Manifest fetch failed: ${res.status}`);
+          const showManifest = await res.json() as ShowManifest;
+
+          let cumulativeSec = 0;
+          const segments: ProgramManifest['segments'] = showManifest.items.map((item, idx) => {
+            const durationSec = item.duration_ms / 1000;
+            const startSec = cumulativeSec;
+            cumulativeSec += durationSec;
+            return {
+              position: idx,
+              type: item.type,
+              start_sec: startSec,
+              duration_sec: durationSec,
+              audio_url: item.file_path ?? null,
+              metadata: { title: item.title ?? item.type, artist: item.artist ?? 'DJ' },
+            };
+          });
+
+          const programManifest: ProgramManifest = {
+            version: 1,
+            station_id: manifestRow.station_id,
+            episode_id: id,
+            air_date: new Date().toISOString().slice(0, 10),
+            total_duration_sec: cumulativeSec,
+            segments,
+          };
+
+          const hls = await generateHls(manifestRow.station_id, programManifest);
+          req.log.info({ stationId: manifestRow.station_id, segments: hls.totalSegments },
+            '[trigger-playout] HLS ready');
+
+          const OWNRADIO_WEBHOOK_URL = process.env.OWNRADIO_WEBHOOK_URL ?? '';
+          const PLAYGEN_WEBHOOK_SECRET = process.env.PLAYGEN_WEBHOOK_SECRET ?? '';
+          if (OWNRADIO_WEBHOOK_URL) {
+            const { rows } = await getPool().query<{ slug: string }>(
+              'SELECT slug FROM stations WHERE id = $1', [manifestRow.station_id],
+            ).catch(() => ({ rows: [] as { slug: string }[] }));
+            const slug = rows[0]?.slug;
+            if (slug) {
+              const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+              if (PLAYGEN_WEBHOOK_SECRET) headers['X-PlayGen-Secret'] = PLAYGEN_WEBHOOK_SECRET;
+              await fetch(`${OWNRADIO_WEBHOOK_URL}/webhooks/stations/${slug}/stream-control`, {
+                method: 'POST', headers,
+                body: JSON.stringify({ action: 'url_change', streamUrl }),
+              }).catch((err) => req.log.error({ err }, '[trigger-playout] webhook failed'));
+              req.log.info({ slug, streamUrl }, '[trigger-playout] OwnRadio notified');
+            }
+          }
+        } catch (err) {
+          req.log.error({ err }, '[trigger-playout] background HLS failed');
+        }
+      })();
+
+      return reply.code(202).send({ status: 'generating', stream_url: streamUrl });
     },
   );
 
