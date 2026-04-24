@@ -158,11 +158,14 @@ jobs:
         run: npm install -g @railway/cli@latest --prefer-online
 
       - name: Deploy to Railway
-        run: railway up --service ${{ matrix.service }} --detach
+        run: |
+          railway up \
+            --service ${{ matrix.service }} \
+            --project ${{ secrets.RAILWAY_PROJECT_ID }} \
+            --environment ${{ secrets.RAILWAY_ENVIRONMENT }} \
+            --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_ENVIRONMENT: ${{ secrets.RAILWAY_ENVIRONMENT }}
 
   # ── Post-deploy smoke tests ────────────────────────────────────
   smoke-test:
