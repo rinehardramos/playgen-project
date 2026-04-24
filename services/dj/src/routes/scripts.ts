@@ -190,21 +190,79 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
   );
 
   /**
-   * Trigger HLS generation + OwnRadio webhook for a script's existing ShowManifest.
-   * Returns 202 immediately; HLS generation runs in the background (may take minutes).
+   * Trigger playout for a script.
+   *
+   * CDN-backed path (preferred): if dj_segments already have R2 CDN audio_urls,
+   * the playlist is served dynamically from the DB — no ffmpeg, no ephemeral disk.
+   * Returns 200 synchronously with the stream URL and notifies OwnRadio.
+   *
+   * Legacy path: falls back to ffmpeg HLS generation from a ShowManifest.
+   * Returns 202 immediately; generation runs in the background.
    */
   app.post<{ Params: { id: string } }>(
     '/dj/scripts/:id/trigger-playout',
     async (req, reply) => {
       const { id } = req.params;
-      const manifestRow = await manifestService.getManifestByScript(id);
-      if (!manifestRow) return reply.notFound('No manifest found for this script');
-      if (!manifestRow.manifest_url) return reply.badRequest('Script has no manifest URL yet');
-
       const GATEWAY_URL = process.env.GATEWAY_URL ?? 'https://api.playgen.site';
-      const streamUrl = `${GATEWAY_URL}/stream/${manifestRow.station_id}/playlist.m3u8`;
+      const OWNRADIO_WEBHOOK_URL = process.env.OWNRADIO_WEBHOOK_URL ?? '';
+      const PLAYGEN_WEBHOOK_SECRET = process.env.PLAYGEN_WEBHOOK_SECRET ?? '';
 
-      // Fire-and-forget HLS generation + webhook
+      // ── Check for CDN-backed segments ──────────────────────────────────────
+      const { rows: cdnCheck } = await getPool().query<{
+        station_id: string;
+        cdn_count: string;
+        total_count: string;
+      }>(
+        `SELECT sc.station_id,
+                COUNT(*) FILTER (WHERE ds.audio_url LIKE 'http%') AS cdn_count,
+                COUNT(*) AS total_count
+         FROM dj_scripts sc
+         JOIN dj_segments ds ON ds.script_id = sc.id
+         WHERE sc.id = $1
+         GROUP BY sc.station_id`,
+        [id],
+      );
+
+      const row = cdnCheck[0];
+      if (!row) return reply.notFound('Script not found');
+
+      const streamUrl = `${GATEWAY_URL}/stream/${row.station_id}/playlist.m3u8`;
+      const isCdnBacked = parseInt(row.cdn_count) > 0;
+
+      if (isCdnBacked) {
+        // ── CDN path: playlist served dynamically from DB, no ffmpeg ──────
+        req.log.info(
+          { scriptId: id, stationId: row.station_id, cdnSegments: row.cdn_count },
+          '[trigger-playout] CDN-backed — serving from DB, skipping ffmpeg',
+        );
+
+        // Notify OwnRadio (fire-and-forget)
+        if (OWNRADIO_WEBHOOK_URL) {
+          const { rows: slugRows } = await getPool()
+            .query<{ slug: string }>('SELECT slug FROM stations WHERE id = $1', [row.station_id])
+            .catch(() => ({ rows: [] as { slug: string }[] }));
+          const slug = slugRows[0]?.slug;
+          if (slug) {
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (PLAYGEN_WEBHOOK_SECRET) headers['X-PlayGen-Secret'] = PLAYGEN_WEBHOOK_SECRET;
+            fetch(`${OWNRADIO_WEBHOOK_URL}/webhooks/stations/${slug}/stream-control`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ action: 'url_change', streamUrl }),
+            }).catch((err) => req.log.error({ err }, '[trigger-playout] webhook failed'));
+            req.log.info({ slug, streamUrl }, '[trigger-playout] OwnRadio notified');
+          }
+        }
+
+        return reply.code(200).send({ status: 'ready', stream_url: streamUrl, source: 'cdn' });
+      }
+
+      // ── Legacy path: ffmpeg HLS from ShowManifest ──────────────────────────
+      const manifestRow = await manifestService.getManifestByScript(id);
+      if (!manifestRow?.manifest_url) {
+        return reply.badRequest('No CDN audio and no manifest URL — cannot trigger playout');
+      }
+
       (async () => {
         try {
           const res = await fetch(manifestRow.manifest_url);
@@ -228,24 +286,22 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
 
           const programManifest: ProgramManifest = {
             version: 1,
-            station_id: manifestRow.station_id,
+            station_id: row.station_id,
             episode_id: id,
             air_date: new Date().toISOString().slice(0, 10),
             total_duration_sec: cumulativeSec,
             segments,
           };
 
-          const hls = await generateHls(manifestRow.station_id, programManifest);
-          req.log.info({ stationId: manifestRow.station_id, segments: hls.totalSegments },
-            '[trigger-playout] HLS ready');
+          const hls = await generateHls(row.station_id, programManifest);
+          req.log.info({ stationId: row.station_id, segments: hls.totalSegments },
+            '[trigger-playout] legacy HLS ready');
 
-          const OWNRADIO_WEBHOOK_URL = process.env.OWNRADIO_WEBHOOK_URL ?? '';
-          const PLAYGEN_WEBHOOK_SECRET = process.env.PLAYGEN_WEBHOOK_SECRET ?? '';
           if (OWNRADIO_WEBHOOK_URL) {
-            const { rows } = await getPool().query<{ slug: string }>(
-              'SELECT slug FROM stations WHERE id = $1', [manifestRow.station_id],
-            ).catch(() => ({ rows: [] as { slug: string }[] }));
-            const slug = rows[0]?.slug;
+            const { rows: slugRows } = await getPool()
+              .query<{ slug: string }>('SELECT slug FROM stations WHERE id = $1', [row.station_id])
+              .catch(() => ({ rows: [] as { slug: string }[] }));
+            const slug = slugRows[0]?.slug;
             if (slug) {
               const headers: Record<string, string> = { 'Content-Type': 'application/json' };
               if (PLAYGEN_WEBHOOK_SECRET) headers['X-PlayGen-Secret'] = PLAYGEN_WEBHOOK_SECRET;
@@ -253,7 +309,6 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
                 method: 'POST', headers,
                 body: JSON.stringify({ action: 'url_change', streamUrl }),
               }).catch((err) => req.log.error({ err }, '[trigger-playout] webhook failed'));
-              req.log.info({ slug, streamUrl }, '[trigger-playout] OwnRadio notified');
             }
           }
         } catch (err) {
@@ -261,7 +316,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
         }
       })();
 
-      return reply.code(202).send({ status: 'generating', stream_url: streamUrl });
+      return reply.code(202).send({ status: 'generating', stream_url: streamUrl, source: 'ffmpeg' });
     },
   );
 
