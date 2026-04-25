@@ -115,6 +115,76 @@ async function uploadToR2(localRelPath: string): Promise<string> {
   return publicUrl;
 }
 
+/**
+ * Post-publish stream diagnostics.
+ * Validates the HLS playlist is well-formed and segments are accessible.
+ * Returns true if all checks pass, false otherwise.
+ */
+async function validateStream(streamUrl: string): Promise<boolean> {
+  try {
+    const res = await fetch(streamUrl);
+    if (!res.ok) {
+      console.error(`  ✗ M3U8 fetch failed: HTTP ${res.status}`);
+      return false;
+    }
+
+    const text = await res.text();
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+
+    if (!lines[0]?.startsWith('#EXTM3U')) {
+      console.error('  ✗ Invalid M3U8: missing #EXTM3U header');
+      return false;
+    }
+
+    // Count segment types
+    const mp3 = lines.filter(l => l.includes('.mp3')).length;
+    const m4a = lines.filter(l => l.includes('.m4a')).length;
+    const m4s = lines.filter(l => l.includes('.m4s')).length;
+    const disc = lines.filter(l => l.includes('#EXT-X-DISCONTINUITY') && !l.includes('SEQUENCE')).length;
+    const maps = lines.filter(l => l.includes('#EXT-X-MAP')).length;
+    const total = mp3 + m4a + m4s;
+
+    console.log(`  Segments: MP3=${mp3} M4A=${m4a} M4S=${m4s} DISC=${disc} MAP=${maps}`);
+
+    if (total === 0) {
+      console.error('  ✗ No audio segments found');
+      return false;
+    }
+
+    // Check codec consistency: MP3 + fMP4 without discontinuity = broken
+    if (mp3 > 0 && (m4s > 0 || maps > 0) && disc === 0) {
+      console.error('  ✗ Mixed MP3 + fMP4 segments without DISCONTINUITY markers');
+      return false;
+    }
+
+    // Spot-check: verify first audio URL is accessible
+    const firstAudioUrl = lines.find(l => !l.startsWith('#') && (l.includes('.mp3') || l.includes('.m4a') || l.includes('.m4s')));
+    if (firstAudioUrl) {
+      const check = await fetch(firstAudioUrl, { method: 'HEAD' });
+      if (!check.ok) {
+        console.error(`  ✗ First segment not accessible: ${check.status} ${firstAudioUrl.substring(0, 60)}`);
+        return false;
+      }
+    }
+
+    // Check total duration
+    const durations = lines.filter(l => l.startsWith('#EXTINF:')).map(l => parseFloat(l.replace('#EXTINF:', '').replace(',', '')));
+    const totalDur = durations.reduce((a, b) => a + b, 0);
+    console.log(`  Duration: ${Math.floor(totalDur / 60)}m ${Math.floor(totalDur % 60)}s (${total} segments)`);
+
+    if (totalDur < 10) {
+      console.error('  ✗ Total duration too short (<10s)');
+      return false;
+    }
+
+    console.log('  ✓ Stream diagnostics PASSED');
+    return true;
+  } catch (err) {
+    console.error(`  ✗ Diagnostics error: ${err instanceof Error ? err.message : err}`);
+    return false;
+  }
+}
+
 async function main() {
   // ── 1. Fetch script + station + profile from local DB ──────────────
   console.log(`\n[sync-program] Fetching script ${script_id} from local DB…`);
@@ -292,6 +362,16 @@ async function main() {
   console.log(`  segments:     ${body.segment_count}`);
   console.log(`  slug:         ${body.slug}`);
   console.log(`  stream:       ${streamUrl}`);
+
+  // ── Stream diagnostics — validate before notifying OwnRadio ────────
+  console.log('\n[sync-program] Running stream diagnostics…');
+  const diagOk = await validateStream(streamUrl);
+  if (!diagOk) {
+    console.error('[sync-program] ⚠ Stream diagnostics FAILED — skipping OwnRadio notification');
+    console.error('[sync-program] The previous stream remains active. Fix the issue and re-sync.');
+    await pool.end();
+    process.exit(1);
+  }
 
   // Notify OwnRadio of the new stream URL (so connected clients get it via Socket.io)
   const ownradioWebhookUrl = process.env.OWNRADIO_WEBHOOK_URL;

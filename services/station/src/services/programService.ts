@@ -38,7 +38,14 @@ export async function createProgram(data: {
       data.station_id,
       data.name,
       data.description ?? null,
-      data.active_days ?? [],
+      // Normalize to lowercase full names to match getDayOfWeek() in generationEngine
+      (data.active_days ?? []).map(d => {
+        const map: Record<string, string> = {
+          MON: 'monday', TUE: 'tuesday', WED: 'wednesday', THU: 'thursday',
+          FRI: 'friday', SAT: 'saturday', SUN: 'sunday',
+        };
+        return map[d.toUpperCase()] ?? d.toLowerCase();
+      }),
       data.start_hour ?? 0,
       data.end_hour ?? 24,
       data.template_id ?? null,

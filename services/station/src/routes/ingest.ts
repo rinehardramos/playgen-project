@@ -276,9 +276,32 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
         );
       }
 
-      // ── 8. Notify OwnRadio if stream_url provided ─────────────────────
-      if (stream_url) {
-        notifyStreamUrlChange(stationData.slug, stream_url).catch((err: unknown) =>
+      // ── 8. Auto-register station in OwnRadio + notify stream URL ──────
+      const ownradioUrl = process.env.OWNRADIO_WEBHOOK_URL;
+      const webhookSecret = process.env.PLAYGEN_WEBHOOK_SECRET;
+      if (ownradioUrl && stationData.slug) {
+        // Upsert station in OwnRadio (creates if not exists, updates if exists)
+        const gatewayUrl = process.env.GATEWAY_URL ?? process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
+        const stationStreamUrl = stream_url ?? `${gatewayUrl}/stream/${station_id}/playlist.m3u8`;
+        fetch(`${ownradioUrl}/stations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(webhookSecret ? { 'X-PlayGen-Secret': webhookSecret } : {}),
+          },
+          body: JSON.stringify({
+            slug: stationData.slug,
+            name: stationData.name,
+            streamUrl: stationStreamUrl,
+            genre: 'OPM',
+            isLive: true,
+          }),
+        }).catch((err: unknown) =>
+          req.log.warn({ err }, 'OwnRadio station upsert failed'),
+        );
+
+        // Notify stream URL change
+        notifyStreamUrlChange(stationData.slug, stationStreamUrl).catch((err: unknown) =>
           req.log.warn({ err }, 'OwnRadio notify failed after ingest'),
         );
       }
