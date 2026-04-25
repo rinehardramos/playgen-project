@@ -363,8 +363,12 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<s
     throw new Error(`Ingest failed (${res.status}): ${body}`);
   }
 
-  const data = await res.json() as { script_id: string };
+  const data = await res.json() as { script_id: string; station_id: string; slug: string };
   if (!data.script_id) throw new Error('Ingest response missing script_id');
+  // Log for traceability: confirms which production station row was resolved (#449)
+  console.info(
+    `[stageIngestProduction] prod station_id=${data.station_id} (slug=${data.slug}) → script_id=${data.script_id}`,
+  );
   return data.script_id;
 }
 
