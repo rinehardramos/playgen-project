@@ -46,6 +46,7 @@ export async function generateDayRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: StationParams; Body: GenerateDayBody }>(
     '/stations/:stationId/generate-day',
     {
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
       schema: {
         params: {
           type: 'object',
