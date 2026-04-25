@@ -135,19 +135,70 @@ export async function streamRoutes(app: FastifyInstance) {
       );
 
       if (rows.length > 0) {
+        // Resolve .m3u8 song sub-playlists: fetch and inline their segments
+        const resolvedSegments: Array<{ dur: number; url: string }> = [];
+        for (const seg of rows) {
+          const dur = parseFloat(String(seg.audio_duration_sec ?? 0));
+          if (seg.audio_url.endsWith('.m3u8')) {
+            // Fetch sub-playlist and inline its segments
+            try {
+              const subRes = await fetch(seg.audio_url);
+              if (subRes.ok) {
+                const subText = await subRes.text();
+                const subLines = subText.split('\n');
+                const baseUrl = seg.audio_url.replace(/\/[^/]+$/, '');
+                let hasMap = false;
+                for (let li = 0; li < subLines.length; li++) {
+                  const line = subLines[li].trim();
+                  if (line.startsWith('#EXT-X-MAP:')) {
+                    // Init segment — make URL absolute
+                    const uriMatch = line.match(/URI="([^"]+)"/);
+                    if (uriMatch) {
+                      resolvedSegments.push({ dur: 0, url: `#EXT-X-MAP:URI="${baseUrl}/${uriMatch[1]}"` });
+                      hasMap = true;
+                    }
+                  } else if (line.startsWith('#EXTINF:')) {
+                    const segDur = parseFloat(line.replace('#EXTINF:', '').replace(',', ''));
+                    const segUrl = subLines[li + 1]?.trim();
+                    if (segUrl && !segUrl.startsWith('#')) {
+                      const absUrl = segUrl.startsWith('http') ? segUrl : `${baseUrl}/${segUrl}`;
+                      resolvedSegments.push({ dur: segDur, url: absUrl });
+                    }
+                    li++; // skip URL line
+                  }
+                }
+                if (!hasMap) {
+                  // Fallback: couldn't parse sub-playlist, use original URL with full duration
+                  resolvedSegments.push({ dur, url: seg.audio_url });
+                }
+              } else {
+                resolvedSegments.push({ dur, url: seg.audio_url });
+              }
+            } catch {
+              // Fetch failed — include as-is
+              resolvedSegments.push({ dur, url: seg.audio_url });
+            }
+          } else {
+            resolvedSegments.push({ dur, url: encodeURI(seg.audio_url) });
+          }
+        }
+
         const maxDuration = Math.ceil(
-          Math.max(...rows.map((r) => parseFloat(String(r.audio_duration_sec ?? 0)))),
+          Math.max(...resolvedSegments.filter(s => s.dur > 0).map(s => s.dur), 10),
         );
         const lines = [
           '#EXTM3U',
-          '#EXT-X-VERSION:3',
-          `#EXT-X-TARGETDURATION:${maxDuration || 300}`,
+          '#EXT-X-VERSION:7',
+          `#EXT-X-TARGETDURATION:${maxDuration || 10}`,
           '#EXT-X-PLAYLIST-TYPE:VOD',
         ];
-        for (const seg of rows) {
-          const dur = parseFloat(String(seg.audio_duration_sec ?? 0));
-          lines.push(`#EXTINF:${dur.toFixed(3)},`);
-          lines.push(encodeURI(seg.audio_url));
+        for (const seg of resolvedSegments) {
+          if (seg.url.startsWith('#EXT-X-MAP:')) {
+            lines.push(seg.url);
+          } else {
+            lines.push(`#EXTINF:${seg.dur.toFixed(3)},`);
+            lines.push(seg.url);
+          }
         }
         lines.push('#EXT-X-ENDLIST');
 
