@@ -255,6 +255,7 @@ async function main() {
       review_status: script.review_status,
       segments: segmentPayload,
     },
+    // stream_url is set after ingest returns the production station_id
     stream_url: null as string | null,
   };
 
@@ -283,13 +284,36 @@ async function main() {
     process.exit(1);
   }
 
+  const streamUrl = `${prodGateway}/stream/${body.station_id}/playlist.m3u8`;
+
   console.log('\n[sync-program] ✅ Sync complete!');
   console.log(`  station_id:   ${body.station_id}`);
   console.log(`  script_id:    ${body.script_id}`);
   console.log(`  segments:     ${body.segment_count}`);
   console.log(`  slug:         ${body.slug}`);
-  console.log(`  OwnRadio:     ${body.ownradio_notified ? 'notified ✓' : 'skipped (no stream_url)'}`);
-  console.log(`\n  🔗 playgen.site → Station: ${prodGateway.replace('/api', '')}/stations/${body.station_id}`);
+  console.log(`  stream:       ${streamUrl}`);
+
+  // Notify OwnRadio of the new stream URL (so connected clients get it via Socket.io)
+  const ownradioWebhookUrl = process.env.OWNRADIO_WEBHOOK_URL;
+  const webhookSecret = process.env.PLAYGEN_WEBHOOK_SECRET;
+  if (ownradioWebhookUrl && slug) {
+    console.log(`\n[sync-program] Notifying OwnRadio (${slug})…`);
+    try {
+      const whRes = await fetch(`${ownradioWebhookUrl}/webhooks/stations/${slug}/stream-control`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(webhookSecret ? { 'X-PlayGen-Secret': webhookSecret } : {}),
+        },
+        body: JSON.stringify({ action: 'url_change', streamUrl }),
+      });
+      console.log(`  OwnRadio:     ${whRes.ok ? 'notified ✓' : `failed (${whRes.status})`}`);
+    } catch (err) {
+      console.warn(`  OwnRadio:     webhook failed — ${err instanceof Error ? err.message : err}`);
+    }
+  } else {
+    console.log(`  OwnRadio:     skipped (OWNRADIO_WEBHOOK_URL not set)`);
+  }
 
   await pool.end();
 }
