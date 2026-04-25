@@ -210,8 +210,10 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
       );
       const playlist_id = playlistRows[0].id;
 
-      // Delete existing script first (cascades to dj_segments, removing FK refs on playlist_entries)
-      await pool.query(`DELETE FROM dj_scripts WHERE playlist_id = $1`, [playlist_id]);
+      // Delete ALL existing scripts for this station (cascades to dj_segments).
+      // This ensures old scripts with stale audio formats (e.g., MP3 before AAC migration)
+      // don't persist and get picked by the stream query over the new ones.
+      await pool.query(`DELETE FROM dj_scripts WHERE station_id = $1`, [station_id]);
 
       // Replace playlist entries with the synced set
       await pool.query(`DELETE FROM playlist_entries WHERE playlist_id = $1`, [playlist_id]);
