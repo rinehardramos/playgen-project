@@ -61,6 +61,7 @@ export class MistralTtsAdapter implements TtsAdapter {
     if (!apiKey) throw new Error('Mistral API key is required for TTS');
 
     const voice = resolveVoiceUuid(opts.voice_id || 'en_paul_neutral');
+    console.log(`[mistral-tts] voice_id=${opts.voice_id} → uuid=${voice}`);
 
     const res = await fetch(MISTRAL_TTS_URL, {
       method: 'POST',

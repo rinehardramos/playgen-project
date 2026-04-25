@@ -69,9 +69,11 @@ export async function generateSegmentTts(
 
   // Use CDN URL when storage is S3 (required for HLS streaming);
   // fall back to relative API path for local storage.
+  // Append cache-bust param so CDN serves the fresh file after re-generation.
   const publicUrl = storage.getPublicUrl(storagePath);
+  const cacheBust = `v=${Date.now()}`;
   const audioUrl = publicUrl.startsWith('http')
-    ? publicUrl
+    ? `${publicUrl}?${cacheBust}`
     : `/api/v1/dj/audio/${storagePath}`;
 
   await getPool().query(
