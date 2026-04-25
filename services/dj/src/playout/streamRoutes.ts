@@ -131,7 +131,10 @@ export async function streamRoutes(app: FastifyInstance) {
     // ── 2. Local fallback (dev / legacy) ────────────────────────────────────
     const playlistPath = path.join(HLS_OUTPUT_DIR, stationId, 'playlist.m3u8');
     if (!fs.existsSync(playlistPath)) {
-      return reply.code(404).send({ error: 'Stream not available' });
+      return reply
+        .header('Access-Control-Allow-Origin', '*')
+        .code(404)
+        .send({ error: 'Stream not available' });
     }
     const content = await fs.promises.readFile(playlistPath, 'utf-8');
     return reply
