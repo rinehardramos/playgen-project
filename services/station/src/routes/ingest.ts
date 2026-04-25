@@ -23,6 +23,10 @@ export interface ExternalSegment {
   /** R2 / CDN audio URL; null if TTS not generated */
   audio_url: string | null;
   audio_duration_sec: number | null;
+  /** Speaker tag for dual-DJ scripts: 'dj1', 'dj2', or null */
+  speaker?: string | null;
+  /** Voice ID used for TTS (per-segment override for dual-DJ) */
+  tts_voice_id?: string | null;
 }
 
 export interface ExternalProgramPayload {
@@ -253,8 +257,9 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
         await pool.query(
           `INSERT INTO dj_segments
              (script_id, playlist_entry_id, segment_type, position,
-              script_text, audio_url, audio_duration_sec, segment_review_status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'approved')`,
+              script_text, audio_url, audio_duration_sec, speaker, tts_voice_id,
+              segment_review_status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'approved')`,
           [
             script_id,
             playlist_entry_id,
@@ -263,6 +268,8 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
             seg.script_text,
             seg.audio_url ?? null,
             seg.audio_duration_sec ?? null,
+            seg.speaker ?? null,
+            seg.tts_voice_id ?? null,
           ],
         );
       }

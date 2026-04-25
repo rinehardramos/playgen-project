@@ -4,6 +4,13 @@ import { config } from '../config.js';
 import { getPool } from '../db.js';
 import { logTtsUsage } from '../lib/usageLogger.js';
 import { checkTtsRateLimit } from '../lib/rateLimiter.js';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+const execFileAsync = promisify(execFile);
 
 /** Estimate MP3 duration from buffer size (assumes 128 kbps bitrate). */
 export function estimateMp3Duration(buffer: Buffer): number {
@@ -96,6 +103,138 @@ export async function generateSegmentTts(
   }
 
   return { audio_url: audioUrl, audio_duration_sec: duration };
+}
+
+// ── Dialogue TTS (multi-speaker) ─────────────────────────────────────────────
+
+interface DialogueLine {
+  speaker: string;
+  text: string;
+}
+
+/** Parse [Speaker] tagged dialogue into ordered lines. */
+export function parseDialogueLines(scriptText: string): DialogueLine[] {
+  const lines: DialogueLine[] = [];
+  const regex = /\[([^\]]+)\]\s*/g;
+  let lastIndex = 0;
+  let lastSpeaker = '';
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(scriptText)) !== null) {
+    // Text before this tag belongs to the previous speaker
+    if (lastSpeaker && lastIndex < match.index) {
+      const text = scriptText.slice(lastIndex, match.index).trim();
+      if (text) lines.push({ speaker: lastSpeaker, text });
+    }
+    lastSpeaker = match[1];
+    lastIndex = match.index + match[0].length;
+  }
+  // Remaining text after last tag
+  if (lastSpeaker && lastIndex < scriptText.length) {
+    const text = scriptText.slice(lastIndex).trim();
+    if (text) lines.push({ speaker: lastSpeaker, text });
+  }
+
+  return lines;
+}
+
+/** Check if script text contains [Speaker] dialogue tags. */
+export function isDialogueText(text: string): boolean {
+  return /\[[A-Z][a-zA-Z]*\]\s/.test(text);
+}
+
+/**
+ * Generate TTS for a multi-speaker dialogue segment.
+ * Parses [Speaker] tags, generates TTS per speaker with different voices,
+ * concatenates with short silence gaps via ffmpeg.
+ */
+export async function generateDialogueTts(
+  segment: TtsSegmentInput,
+  providerCfg: TtsProviderConfig,
+  voiceMap: Record<string, string>,
+): Promise<{ audio_url: string; audio_duration_sec: number | null }> {
+  const lines = parseDialogueLines(segment.text);
+  if (lines.length === 0) {
+    // Fallback to single-voice if no tags found
+    return generateSegmentTts(segment, providerCfg);
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dialogue-'));
+  const clipPaths: string[] = [];
+
+  try {
+    // Generate TTS for each speaker's line
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const voiceId = voiceMap[line.speaker] ?? providerCfg.voiceId;
+
+      const ttsAdapter = getTtsAdapter({
+        provider: providerCfg.provider,
+        apiKey: providerCfg.apiKey,
+      });
+
+      const result = await ttsAdapter.generate({
+        voice_id: voiceId,
+        text: line.text,
+      });
+
+      const clipPath = path.join(tmpDir, `clip-${String(i).padStart(3, '0')}.mp3`);
+      fs.writeFileSync(clipPath, result.audio_data);
+      clipPaths.push(clipPath);
+    }
+
+    // Generate 200ms silence gap
+    const silencePath = path.join(tmpDir, 'silence.mp3');
+    await execFileAsync('ffmpeg', [
+      '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono',
+      '-t', '0.2', '-c:a', 'libmp3lame', '-b:a', '128k',
+      '-y', silencePath,
+    ], { timeout: 10000 });
+
+    // Build ffmpeg concat list (clip, silence, clip, silence, ...)
+    const concatListPath = path.join(tmpDir, 'concat.txt');
+    const concatEntries: string[] = [];
+    for (let i = 0; i < clipPaths.length; i++) {
+      concatEntries.push(`file '${clipPaths[i]}'`);
+      if (i < clipPaths.length - 1) {
+        concatEntries.push(`file '${silencePath}'`);
+      }
+    }
+    fs.writeFileSync(concatListPath, concatEntries.join('\n'));
+
+    // Concatenate
+    const outputPath = path.join(tmpDir, 'output.mp3');
+    await execFileAsync('ffmpeg', [
+      '-f', 'concat', '-safe', '0', '-i', concatListPath,
+      '-c:a', 'copy', '-y', outputPath,
+    ], { timeout: 30000 });
+
+    // Read concatenated file and write to storage
+    const audioData = fs.readFileSync(outputPath);
+    const duration = estimateMp3Duration(audioData);
+
+    const storagePath = `${segment.script_id}/${segment.position}.mp3`;
+    const storage = getStorageAdapter();
+    await storage.write(storagePath, audioData);
+
+    const publicUrl = storage.getPublicUrl(storagePath);
+    const cacheBust = `v=${Date.now()}`;
+    const audioUrl = publicUrl.startsWith('http')
+      ? `${publicUrl}?${cacheBust}`
+      : `/api/v1/dj/audio/${storagePath}`;
+
+    await getPool().query(
+      `UPDATE dj_segments
+       SET audio_url = $1, audio_duration_sec = $2, updated_at = NOW()
+       WHERE id = $3`,
+      [audioUrl, duration, segment.id],
+    );
+
+    return { audio_url: audioUrl, audio_duration_sec: duration };
+  } finally {
+    // Cleanup temp dir
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 }
 
 /**

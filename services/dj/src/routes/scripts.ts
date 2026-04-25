@@ -5,7 +5,7 @@ import * as manifestService from '../services/manifestService.js';
 import type { ProgramManifest, ShowManifest } from '../services/manifestService.js';
 import { getDefaultProfile } from '../services/profileService.js';
 import { enqueueDjGeneration, djQueue } from '../queues/djQueue.js';
-import { generateSegmentTts, loadTtsProviderConfig } from '../services/ttsService.js';
+import { generateSegmentTts, generateDialogueTts, isDialogueText, loadTtsProviderConfig } from '../services/ttsService.js';
 import type { ReviewScriptRequest, GenerateScriptRequest } from '@playgen/types';
 import { getPool } from '../db.js';
 import { getStorageAdapter } from '../lib/storage/index.js';
@@ -481,8 +481,9 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       // Verify script exists and is approved
       const { rows: scriptRows } = await pool.query<{
         id: string; station_id: string; review_status: string; dj_profile_id: string;
+        voice_map: Record<string, string> | null;
       }>(
-        `SELECT id, station_id, review_status, dj_profile_id FROM dj_scripts WHERE id = $1`,
+        `SELECT id, station_id, review_status, dj_profile_id, voice_map FROM dj_scripts WHERE id = $1`,
         [id],
       );
       const script = scriptRows[0];
@@ -506,8 +507,9 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       const { rows: segments } = await pool.query<{
         id: string; position: number; script_text: string;
         edited_text: string | null; audio_url: string | null;
+        tts_voice_id: string | null;
       }>(
-        `SELECT id, position, script_text, edited_text, audio_url
+        `SELECT id, position, script_text, edited_text, audio_url, tts_voice_id
          FROM dj_segments WHERE script_id = $1 ORDER BY position`,
         [id],
       );
@@ -532,17 +534,25 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
         for (let i = 0; i < pending.length; i += concurrency) {
           const batch = pending.slice(i, i + concurrency);
           const results = await Promise.allSettled(
-            batch.map((seg) =>
-              generateSegmentTts(
-                {
-                  id: seg.id,
-                  position: seg.position,
-                  text: seg.edited_text ?? seg.script_text,
-                  script_id: id,
-                  station_id: script.station_id,
-                },
-                providerCfg,
-              ),
+            batch.map((seg) => {
+              const text = seg.edited_text ?? seg.script_text;
+              const segInput = {
+                id: seg.id,
+                position: seg.position,
+                text,
+                script_id: id,
+                station_id: script.station_id,
+              };
+              // Dialogue segments: multi-voice TTS with ffmpeg concat
+              if (script.voice_map && isDialogueText(text)) {
+                return generateDialogueTts(segInput, providerCfg, script.voice_map);
+              }
+              // Per-segment voice override (single-speaker dual-DJ)
+              const segCfg = seg.tts_voice_id
+                ? { ...providerCfg, voiceId: seg.tts_voice_id }
+                : providerCfg;
+              return generateSegmentTts(segInput, segCfg);
+            },
             ),
           );
           for (const result of results) {
@@ -868,11 +878,15 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     position: number;
     script_text: string;
     playlist_entry_id?: string | null;
+    speaker?: string | null;
+    tts_voice_id?: string | null;
   }
   interface SubmitExternalBody {
     playlist_id: string;
     dj_profile_id?: string;
+    secondary_dj_profile_id?: string;
     auto_approve?: boolean;
+    voice_map?: Record<string, string>;
     segments: ExternalSegment[];
   }
 
@@ -880,7 +894,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     '/dj/scripts/submit-external',
     async (req, reply) => {
       const pool = getPool();
-      const { playlist_id, dj_profile_id, auto_approve = false, segments } = req.body;
+      const { playlist_id, dj_profile_id, secondary_dj_profile_id, auto_approve = false, voice_map, segments } = req.body;
 
       if (!playlist_id) return reply.badRequest('playlist_id is required');
       if (!Array.isArray(segments) || segments.length === 0) {
@@ -912,11 +926,12 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       // Insert script record
       const { rows: scriptRows } = await pool.query<{ id: string }>(
         `INSERT INTO dj_scripts
-           (playlist_id, station_id, dj_profile_id, review_status, llm_model,
-            total_segments, generation_source)
-         VALUES ($1, $2, $3, $4, $5, $6, 'external')
+           (playlist_id, station_id, dj_profile_id, secondary_dj_profile_id,
+            review_status, llm_model, total_segments, generation_source, voice_map)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'external', $8)
          RETURNING id`,
-        [playlist_id, playlist.station_id, profileId, reviewStatus, 'claude-code', segments.length],
+        [playlist_id, playlist.station_id, profileId, secondary_dj_profile_id ?? null,
+         reviewStatus, 'claude-code', segments.length, voice_map ? JSON.stringify(voice_map) : null],
       );
       const script_id = scriptRows[0].id;
 
@@ -924,14 +939,17 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       for (const seg of segments) {
         await pool.query(
           `INSERT INTO dj_segments
-             (script_id, playlist_entry_id, segment_type, position, script_text, segment_review_status)
-           VALUES ($1, $2, $3, $4, $5, 'pending')`,
+             (script_id, playlist_entry_id, segment_type, position, script_text,
+              speaker, tts_voice_id, segment_review_status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')`,
           [
             script_id,
             seg.playlist_entry_id ?? null,
             seg.segment_type,
             seg.position,
             seg.script_text,
+            seg.speaker ?? null,
+            seg.tts_voice_id ?? null,
           ],
         );
       }
