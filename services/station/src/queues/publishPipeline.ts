@@ -122,6 +122,30 @@ async function failJob(publishJobId: string, message: string): Promise<void> {
 
 // ── Stage implementations ──────────────────────────────────────────────────
 
+/**
+ * Fire-and-forget: ask info-broker to source audio for songs that have no audio_url.
+ * Never throws — silent if env vars missing or network fails.
+ */
+function triggerSongSourcing(
+  stationId: string,
+  songs: Array<{ song_id: string; title: string; artist: string }>,
+): void {
+  const infoBrokerUrl = process.env.INFO_BROKER_URL;
+  const apiKey = process.env.INFO_BROKER_API_KEY;
+  const callbackBase = process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
+  if (!infoBrokerUrl || !apiKey || songs.length === 0) return;
+
+  fetch(`${infoBrokerUrl}/v1/playlists/source-audio`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+    body: JSON.stringify({
+      station_id: stationId,
+      songs,
+      callback_url: `${callbackBase}/api/v1/internal/songs/audio-sourced`,
+    }),
+  }).catch(() => {});
+}
+
 async function stageValidate(scriptId: string): Promise<void> {
   const pool = getPool();
 
@@ -259,8 +283,10 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<s
   if (!playlist) throw new Error('Playlist not found');
 
   const { rows: entries } = await pool.query<{
-    hour: number; position: number; song_title: string; song_artist: string; duration_sec: number | null;
-  }>(`SELECT pe.hour, pe.position, s.title AS song_title, s.artist AS song_artist, s.duration_sec
+    hour: number; position: number; song_title: string; song_artist: string;
+    duration_sec: number | null; song_audio_url: string | null;
+  }>(`SELECT pe.hour, pe.position, s.title AS song_title, s.artist AS song_artist,
+            s.duration_sec, s.audio_url AS song_audio_url
       FROM playlist_entries pe JOIN songs s ON s.id = pe.song_id
       WHERE pe.playlist_id = $1 ORDER BY pe.hour, pe.position`, [script.playlist_id]);
 
@@ -306,6 +332,7 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<s
         song_title: e.song_title,
         song_artist: e.song_artist,
         duration_sec: e.duration_sec,
+        audio_url: e.song_audio_url ?? undefined,
       })),
     },
     script: {
@@ -376,6 +403,19 @@ export function startPublishWorker(): Worker<PublishJobData> {
         [publish_job_id],
       );
       const done = rows[0]?.stages_completed ?? {};
+
+      // Fire-and-forget: trigger audio sourcing for songs that have no audio_url
+      const { rows: songsToSource } = await pool.query<{
+        song_id: string; title: string; artist: string;
+      }>(
+        `SELECT DISTINCT s.id AS song_id, s.title, s.artist
+         FROM playlist_entries pe
+         JOIN songs s ON s.id = pe.song_id
+         JOIN dj_scripts sc ON sc.playlist_id = pe.playlist_id
+         WHERE sc.id = $1 AND (s.audio_url IS NULL OR s.audio_url = '')`,
+        [script_id],
+      );
+      triggerSongSourcing(job.data.station_id, songsToSource);
 
       // Stage 1: validate
       if (!done.validate) {

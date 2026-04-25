@@ -54,6 +54,7 @@ export interface ExternalProgramPayload {
       song_title: string;
       song_artist: string;
       duration_sec?: number | null;
+      audio_url?: string | null;
     }>;
   };
   script: {
@@ -175,12 +176,21 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
       const songIds: string[] = [];
       for (const entry of playlistData.entries) {
         const { rows: songRows } = await pool.query<{ id: string }>(
-          `INSERT INTO songs (company_id, station_id, category_id, title, artist, duration_sec)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO songs (company_id, station_id, category_id, title, artist, duration_sec, audio_url, audio_source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            ON CONFLICT (station_id, title, artist)
-           DO UPDATE SET duration_sec = COALESCE(EXCLUDED.duration_sec, songs.duration_sec)
+           DO UPDATE SET
+             duration_sec = COALESCE(EXCLUDED.duration_sec, songs.duration_sec),
+             audio_url    = COALESCE(EXCLUDED.audio_url, songs.audio_url),
+             audio_source = COALESCE(EXCLUDED.audio_source, songs.audio_source),
+             updated_at   = NOW()
            RETURNING id`,
-          [company_id, station_id, category_id, entry.song_title, entry.song_artist, entry.duration_sec ?? null],
+          [
+            company_id, station_id, category_id,
+            entry.song_title, entry.song_artist, entry.duration_sec ?? null,
+            entry.audio_url ?? null,
+            entry.audio_url ? 'upload' : null,
+          ],
         );
         songIds.push(songRows[0].id);
       }

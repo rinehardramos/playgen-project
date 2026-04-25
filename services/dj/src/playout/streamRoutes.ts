@@ -78,11 +78,8 @@ export async function streamRoutes(app: FastifyInstance) {
       const { rows } = await pool.query<{
         audio_url: string;
         audio_duration_sec: number | null;
-        position: number;
       }>(
-        `SELECT ds.audio_url, ds.audio_duration_sec, ds.position
-         FROM dj_segments ds
-         WHERE ds.script_id = (
+        `WITH latest_script AS (
            SELECT sc.id
            FROM dj_scripts sc
            JOIN playlists pl ON pl.id = sc.playlist_id
@@ -96,8 +93,31 @@ export async function streamRoutes(app: FastifyInstance) {
            ORDER BY pl.date DESC
            LIMIT 1
          )
-         AND ds.audio_url LIKE 'http%'
-         ORDER BY ds.position`,
+         SELECT sort_order, audio_url, audio_duration_sec
+         FROM (
+           SELECT
+             ds.position::float       AS sort_order,
+             ds.audio_url             AS audio_url,
+             ds.audio_duration_sec    AS audio_duration_sec
+           FROM dj_segments ds
+           JOIN latest_script ls ON ls.id = ds.script_id
+           WHERE ds.audio_url LIKE 'http%'
+
+           UNION ALL
+
+           SELECT
+             ds.position::float + 0.5  AS sort_order,
+             s.audio_url               AS audio_url,
+             s.duration_sec            AS audio_duration_sec
+           FROM dj_segments ds
+           JOIN latest_script ls ON ls.id = ds.script_id
+           JOIN playlist_entries pe ON pe.id = ds.playlist_entry_id
+           JOIN songs s ON s.id = pe.song_id
+           WHERE ds.segment_type IN ('song_intro', 'song_transition')
+             AND s.audio_url IS NOT NULL
+             AND s.audio_url LIKE 'http%'
+         ) combined
+         ORDER BY sort_order`,
         [stationId],
       );
 
