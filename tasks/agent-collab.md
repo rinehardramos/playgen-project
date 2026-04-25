@@ -24,6 +24,7 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 ---
 
 ## Active Work
+- [ ] fix(dj): segment pruning — skip orphaned DJ speech when song has no audio (#448-AC1, fix/issue-448-pruning) | @claude-sonnet-4-6 | 2026-04-25
 - [ ] feat(dj+station+publish): full program audio in HLS stream — song audio in M3U8 + sourcing trigger in publish pipeline (feat/full-program-audio) | @claude-sonnet-4-6 | 2026-04-25
 - [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
 

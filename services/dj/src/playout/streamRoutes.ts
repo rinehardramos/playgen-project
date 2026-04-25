@@ -102,6 +102,19 @@ export async function streamRoutes(app: FastifyInstance) {
            FROM dj_segments ds
            JOIN latest_script ls ON ls.id = ds.script_id
            WHERE ds.audio_url LIKE 'http%'
+             AND (
+               -- Non-song segments (show_intro, show_outro, time_check, weather_tease, etc.): always include
+               ds.segment_type NOT IN ('song_intro', 'song_transition')
+               OR ds.playlist_entry_id IS NULL
+               -- Song-paired segments: only include if the associated song has CDN audio
+               OR EXISTS (
+                 SELECT 1 FROM playlist_entries pe
+                 JOIN songs s ON s.id = pe.song_id
+                 WHERE pe.id = ds.playlist_entry_id
+                   AND s.audio_url IS NOT NULL
+                   AND s.audio_url LIKE 'http%'
+               )
+             )
 
            UNION ALL
 
