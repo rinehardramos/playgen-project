@@ -154,7 +154,6 @@ export async function streamRoutes(app: FastifyInstance) {
         return reply
           .header('Content-Type', 'application/vnd.apple.mpegurl')
           .header('Cache-Control', 'no-cache, no-store')
-          .header('Access-Control-Allow-Origin', '*')
           .send(lines.join('\n'));
       }
     } catch (err) {
@@ -165,7 +164,6 @@ export async function streamRoutes(app: FastifyInstance) {
     const playlistPath = path.join(HLS_OUTPUT_DIR, stationId, 'playlist.m3u8');
     if (!fs.existsSync(playlistPath)) {
       return reply
-        .header('Access-Control-Allow-Origin', '*')
         .code(404)
         .send({ error: 'Stream not available' });
     }
@@ -173,7 +171,6 @@ export async function streamRoutes(app: FastifyInstance) {
     return reply
       .header('Content-Type', 'application/vnd.apple.mpegurl')
       .header('Cache-Control', 'no-cache, no-store')
-      .header('Access-Control-Allow-Origin', '*')
       .send(content);
   });
 
@@ -191,7 +188,6 @@ export async function streamRoutes(app: FastifyInstance) {
     if (nowPlaying) {
       return reply
         .header('Content-Type', 'application/json')
-        .header('Access-Control-Allow-Origin', '*')
         .send({
           title: `${nowPlaying.segment.metadata.artist} - ${nowPlaying.segment.metadata.title}`,
           artist: nowPlaying.segment.metadata.artist,
@@ -223,7 +219,6 @@ export async function streamRoutes(app: FastifyInstance) {
       const track = rows[0];
       return reply
         .header('Content-Type', 'application/json')
-        .header('Access-Control-Allow-Origin', '*')
         .send({
           title: track ? `${track.song_artist} - ${track.song_title}` : 'PlayGen Radio',
           artist: track?.song_artist ?? '',
@@ -232,7 +227,6 @@ export async function streamRoutes(app: FastifyInstance) {
     } catch {
       return reply
         .header('Content-Type', 'application/json')
-        .header('Access-Control-Allow-Origin', '*')
         .send({ title: 'PlayGen Radio', artist: '', song: '' });
     }
   });
@@ -254,7 +248,6 @@ export async function streamRoutes(app: FastifyInstance) {
     return reply
       .header('Content-Type', 'video/mp2t')
       .header('Cache-Control', 'public, max-age=3600')
-      .header('Access-Control-Allow-Origin', '*')
       .send(stream);
   });
 
@@ -267,9 +260,7 @@ export async function streamRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: 'Station not playing' });
     }
 
-    return reply
-      .header('Access-Control-Allow-Origin', '*')
-      .send({
+    return reply.send({
         icestats: {
           source: {
             title: `${nowPlaying.segment.metadata.artist} - ${nowPlaying.segment.metadata.title}`,
