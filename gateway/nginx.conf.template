@@ -213,7 +213,7 @@ server {
     }
 
     # ─── Library: internal callback (from info-broker) ───────────
-    location = /internal/songs/audio-sourced {
+    location = /api/v1/internal/songs/audio-sourced {
         set $svc http://${LIBRARY_HOST}:3003;
         proxy_pass $svc;
         proxy_set_header Host $host;
