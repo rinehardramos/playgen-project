@@ -97,7 +97,7 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
            (company_id, name, slug, timezone, locale_code, city, country_code,
             callsign, tagline, frequency, is_active)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
-         ON CONFLICT (slug) WHERE slug IS NOT NULL
+         ON CONFLICT (company_id, slug) WHERE slug IS NOT NULL
          DO UPDATE SET
            name         = EXCLUDED.name,
            timezone     = EXCLUDED.timezone,
