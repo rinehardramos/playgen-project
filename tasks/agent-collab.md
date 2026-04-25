@@ -29,6 +29,7 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 
 ## Recently Completed
 - [x] feat(dj): parallel TTS generation — concurrency-limited batching with TTS_WORKER_CONCURRENCY (#424, feat/issue-424-parallel-tts, PR #454) | @claude-sonnet-4-6 | 2026-04-25
+- [x] feat(playlist+frontend): SSE now-playing channel for /today (#294, feat/issue-294-sse-now-playing) | @claude-sonnet-4-6 | 2026-04-25
 - [x] fix(dj+station): stationId scoping — per-company slug uniqueness + ingest ON CONFLICT + logging (#449, fix/issue-449-station-scoping, PR #453) | @claude-sonnet-4-6 | 2026-04-25 | Migration: 064
 - [x] feat(station+scheduler): POST /stations/:stationId/generate-day orchestration route (#293, feat/issue-293-generate-day, PR #452) | @claude-sonnet-4-6 | 2026-04-25
 - [x] fix(dj): segment pruning — skip orphaned DJ speech when song has no audio (#448-AC1, fix/issue-448-pruning, PR #451) | @claude-sonnet-4-6 | 2026-04-25
