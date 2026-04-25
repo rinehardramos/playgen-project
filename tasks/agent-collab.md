@@ -24,10 +24,12 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 ---
 
 ## Active Work
-- [ ] feat(playlist+library): info-broker audio sourcing + /internal/songs/audio-sourced callback (feat/audio-sourcing-integration) | @claude-sonnet-4-6 | 2026-04-23
+- [ ] feat(dj+station+publish): full program audio in HLS stream — song audio in M3U8 + sourcing trigger in publish pipeline (feat/full-program-audio) | @claude-sonnet-4-6 | 2026-04-25
 - [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
 
 ## Recently Completed
+- [x] feat(playlist+library): info-broker audio sourcing + /internal/songs/audio-sourced callback (feat/audio-sourcing-integration) | @claude-sonnet-4-6 | 2026-04-25
+- [x] feat(dj+gateway): OwnRadio HLS streaming integration (feat/ownradio-hls, main) | @claude-sonnet-4-6 | 2026-04-23
 - [x] fix(dj+station): URL-encode HLS M3U8 audio URLs + fix R2 key date format (fix/hls-url-encoding, PR #446) | @claude-sonnet-4-6 | 2026-04-25
 - [x] fix(dj): parse audio_duration_sec as float in CDN HLS playlist builder (fix/cdn-playlist-toFixed, PR #445) | @claude-sonnet-4-6 | 2026-04-24
 - [x] feat(station): Publish to Production pipeline — BullMQ 4-stage worker + publish_jobs migration (feat/publish-pipeline, PRs #439 #441) | @claude-sonnet-4-6 | 2026-04-24 | Migration: 063
