@@ -524,29 +524,37 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      // Fire-and-forget: run TTS sequentially for all pending segments
+      // Fire-and-forget: run TTS in parallel batches (configurable concurrency)
+      const concurrency = Math.max(1, parseInt(process.env.TTS_WORKER_CONCURRENCY ?? '3', 10));
       (async () => {
         let generated = 0;
         let failed = 0;
-        for (const seg of pending) {
-          try {
-            await generateSegmentTts(
-              {
-                id: seg.id,
-                position: seg.position,
-                text: seg.edited_text ?? seg.script_text,
-                script_id: id,
-                station_id: script.station_id,
-              },
-              providerCfg,
-            );
-            generated++;
-          } catch (err) {
-            failed++;
-            req.log.warn({ segmentId: seg.id, err }, '[script-tts] segment TTS failed');
+        for (let i = 0; i < pending.length; i += concurrency) {
+          const batch = pending.slice(i, i + concurrency);
+          const results = await Promise.allSettled(
+            batch.map((seg) =>
+              generateSegmentTts(
+                {
+                  id: seg.id,
+                  position: seg.position,
+                  text: seg.edited_text ?? seg.script_text,
+                  script_id: id,
+                  station_id: script.station_id,
+                },
+                providerCfg,
+              ),
+            ),
+          );
+          for (const result of results) {
+            if (result.status === 'fulfilled') {
+              generated++;
+            } else {
+              failed++;
+              req.log.warn({ err: result.reason }, '[script-tts] segment TTS failed');
+            }
           }
         }
-        req.log.info({ scriptId: id, generated, failed }, '[script-tts] TTS run complete');
+        req.log.info({ scriptId: id, generated, failed, concurrency }, '[script-tts] TTS run complete');
       })();
 
       return reply.code(202).send({

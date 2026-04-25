@@ -3,6 +3,7 @@ import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import { registerSecurity } from '@playgen/middleware';
 import { playlistRoutes } from './routes/playlists';
+import { nowPlayingStreamRoutes } from './routes/nowPlayingStream';
 
 const app = Fastify({
   logger: {
@@ -19,6 +20,7 @@ app.register(sensible);
 app.get('/health', async () => ({ status: 'ok', service: 'playlist-service' }));
 
 app.register(playlistRoutes, { prefix: '/api/v1' });
+app.register(nowPlayingStreamRoutes, { prefix: '/api/v1' });
 
 app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);

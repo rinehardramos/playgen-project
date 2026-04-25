@@ -126,11 +126,60 @@ export default function TodayPage() {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => new Date());
 
-  // Tick every 60s to refresh the Now Playing card cheaply.
+  // Subscribe to SSE now-playing stream; fall back to 60 s polling if unavailable.
   useEffect(() => {
-    const i = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(i);
-  }, []);
+    if (!selectedStation) return;
+
+    let es: EventSource | null = null;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    function startPolling() {
+      if (pollInterval) return; // already polling
+      pollInterval = setInterval(() => setNow(new Date()), 60_000);
+    }
+
+    function stopPolling() {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    }
+
+    if (typeof window !== 'undefined' && typeof EventSource !== 'undefined') {
+      const url = `/api/v1/playlists/now-playing/stream?stationId=${encodeURIComponent(selectedStation)}`;
+
+      try {
+        es = new EventSource(url, { withCredentials: true });
+
+        es.onmessage = () => {
+          setNow(new Date());
+        };
+
+        es.onerror = () => {
+          // SSE connection failed or dropped — degrade to polling
+          es?.close();
+          es = null;
+          startPolling();
+        };
+
+        es.addEventListener('close', () => {
+          es?.close();
+          es = null;
+          startPolling();
+        });
+      } catch {
+        startPolling();
+      }
+    } else {
+      // SSE not supported (e.g. Node environment / SSR) — fall back immediately
+      startPolling();
+    }
+
+    return () => {
+      es?.close();
+      stopPolling();
+    };
+  }, [selectedStation]);
 
   useEffect(() => {
     const user = getCurrentUser();
