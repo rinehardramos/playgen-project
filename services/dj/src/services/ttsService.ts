@@ -64,15 +64,40 @@ export async function generateSegmentTts(
     text: segment.text,
   });
 
+  // Transcode MP3 → AAC for codec consistency with HLS song segments
+  let audioData = result.audio_data;
   let duration = result.duration_sec;
-  if (duration === null) {
-    duration = estimateMp3Duration(result.audio_data);
+  const storagePath = `${segment.script_id}/${segment.position}.m4a`;
+
+  try {
+    const tmpIn = path.join(os.tmpdir(), `tts-${segment.id}.mp3`);
+    const tmpOut = path.join(os.tmpdir(), `tts-${segment.id}.m4a`);
+    fs.writeFileSync(tmpIn, result.audio_data);
+    await execFileAsync('ffmpeg', [
+      '-i', tmpIn, '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '1',
+      '-y', tmpOut,
+    ], { timeout: 15000 });
+    audioData = fs.readFileSync(tmpOut);
+    // Get precise duration from ffprobe
+    try {
+      const { stdout } = await execFileAsync('ffprobe', [
+        '-v', 'quiet', '-print_format', 'json', '-show_format', tmpOut,
+      ], { timeout: 5000 });
+      const info = JSON.parse(stdout);
+      duration = parseFloat(info.format.duration);
+    } catch { /* keep estimate */ }
+    fs.unlinkSync(tmpIn);
+    fs.unlinkSync(tmpOut);
+  } catch (err) {
+    // Fallback: use original MP3 if ffmpeg unavailable
+    console.warn('[tts] AAC transcode failed, using MP3:', err);
+    if (duration === null) duration = estimateMp3Duration(result.audio_data);
   }
 
-  // Write via storage adapter (local disk or S3/R2)
-  const storagePath = `${segment.script_id}/${segment.position}.mp3`;
+  if (duration === null) duration = estimateMp3Duration(result.audio_data);
+
   const storage = getStorageAdapter();
-  await storage.write(storagePath, result.audio_data);
+  await storage.write(storagePath, audioData);
 
   // Use CDN URL when storage is S3 (required for HLS streaming);
   // fall back to relative API path for local storage.
@@ -183,11 +208,11 @@ export async function generateDialogueTts(
       clipPaths.push(clipPath);
     }
 
-    // Generate 200ms silence gap
-    const silencePath = path.join(tmpDir, 'silence.mp3');
+    // Generate 200ms silence gap (AAC for codec consistency)
+    const silencePath = path.join(tmpDir, 'silence.m4a');
     await execFileAsync('ffmpeg', [
       '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono',
-      '-t', '0.2', '-c:a', 'libmp3lame', '-b:a', '128k',
+      '-t', '0.2', '-c:a', 'aac', '-b:a', '128k',
       '-y', silencePath,
     ], { timeout: 10000 });
 
@@ -203,7 +228,7 @@ export async function generateDialogueTts(
     fs.writeFileSync(concatListPath, concatEntries.join('\n'));
 
     // Concatenate
-    const outputPath = path.join(tmpDir, 'output.mp3');
+    const outputPath = path.join(tmpDir, 'output.m4a');
     await execFileAsync('ffmpeg', [
       '-f', 'concat', '-safe', '0', '-i', concatListPath,
       '-c:a', 'copy', '-y', outputPath,
@@ -213,9 +238,27 @@ export async function generateDialogueTts(
     const audioData = fs.readFileSync(outputPath);
     const duration = estimateMp3Duration(audioData);
 
-    const storagePath = `${segment.script_id}/${segment.position}.mp3`;
+    // Transcode concatenated dialogue to AAC
+    const aacPath = path.join(tmpDir, 'final.m4a');
+    await execFileAsync('ffmpeg', [
+      '-i', outputPath, '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '1',
+      '-y', aacPath,
+    ], { timeout: 30000 });
+
+    const dialogueAudio = fs.readFileSync(aacPath);
+    let finalDuration: number | null = null;
+    try {
+      const { stdout } = await execFileAsync('ffprobe', [
+        '-v', 'quiet', '-print_format', 'json', '-show_format', aacPath,
+      ], { timeout: 5000 });
+      finalDuration = parseFloat(JSON.parse(stdout).format.duration);
+    } catch {
+      finalDuration = estimateMp3Duration(dialogueAudio);
+    }
+
+    const storagePath = `${segment.script_id}/${segment.position}.m4a`;
     const storage = getStorageAdapter();
-    await storage.write(storagePath, audioData);
+    await storage.write(storagePath, dialogueAudio);
 
     const publicUrl = storage.getPublicUrl(storagePath);
     const cacheBust = `v=${Date.now()}`;
@@ -227,12 +270,11 @@ export async function generateDialogueTts(
       `UPDATE dj_segments
        SET audio_url = $1, audio_duration_sec = $2, updated_at = NOW()
        WHERE id = $3`,
-      [audioUrl, duration, segment.id],
+      [audioUrl, finalDuration, segment.id],
     );
 
-    return { audio_url: audioUrl, audio_duration_sec: duration };
+    return { audio_url: audioUrl, audio_duration_sec: finalDuration };
   } finally {
-    // Cleanup temp dir
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
