@@ -147,15 +147,16 @@ export async function streamRoutes(app: FastifyInstance) {
                 const subText = await subRes.text();
                 const subLines = subText.split('\n');
                 const baseUrl = seg.audio_url.replace(/\/[^/]+$/, '');
-                let hasMap = false;
+                let hasSeg = false;
+                // Add discontinuity before song segments (different codec/container)
+                resolvedSegments.push({ dur: 0, url: '#EXT-X-DISCONTINUITY' });
                 for (let li = 0; li < subLines.length; li++) {
                   const line = subLines[li].trim();
                   if (line.startsWith('#EXT-X-MAP:')) {
-                    // Init segment — make URL absolute
+                    // Include init segment for fMP4 songs
                     const uriMatch = line.match(/URI="([^"]+)"/);
                     if (uriMatch) {
                       resolvedSegments.push({ dur: 0, url: `#EXT-X-MAP:URI="${baseUrl}/${uriMatch[1]}"` });
-                      hasMap = true;
                     }
                   } else if (line.startsWith('#EXTINF:')) {
                     const segDur = parseFloat(line.replace('#EXTINF:', '').replace(',', ''));
@@ -163,14 +164,16 @@ export async function streamRoutes(app: FastifyInstance) {
                     if (segUrl && !segUrl.startsWith('#')) {
                       const absUrl = segUrl.startsWith('http') ? segUrl : `${baseUrl}/${segUrl}`;
                       resolvedSegments.push({ dur: segDur, url: absUrl });
+                      hasSeg = true;
                     }
                     li++; // skip URL line
                   }
                 }
-                if (!hasMap) {
-                  // Fallback: couldn't parse sub-playlist, use original URL with full duration
+                if (!hasSeg) {
                   resolvedSegments.push({ dur, url: seg.audio_url });
                 }
+                // Add discontinuity after song segments (back to plain audio)
+                resolvedSegments.push({ dur: 0, url: '#EXT-X-DISCONTINUITY' });
               } else {
                 resolvedSegments.push({ dur, url: seg.audio_url });
               }
@@ -193,7 +196,7 @@ export async function streamRoutes(app: FastifyInstance) {
           '#EXT-X-PLAYLIST-TYPE:VOD',
         ];
         for (const seg of resolvedSegments) {
-          if (seg.url.startsWith('#EXT-X-MAP:')) {
+          if (seg.url.startsWith('#EXT-X-MAP:') || seg.url.startsWith('#EXT-X-DISCONTINUITY')) {
             lines.push(seg.url);
           } else {
             lines.push(`#EXTINF:${seg.dur.toFixed(3)},`);
