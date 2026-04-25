@@ -288,10 +288,28 @@ export async function loadTtsProviderConfig(
   const pool = getPool();
 
   // Load per-station key-value settings (tts_provider, tts_voice_id, tts_api_key override)
-  const { rows: settingRows } = await pool.query<{ key: string; value: string }>(
+  let { rows: settingRows } = await pool.query<{ key: string; value: string }>(
     `SELECT key, value FROM station_settings WHERE station_id = $1`,
     [stationId],
   );
+
+  // Company-level inheritance: if this station has no TTS settings,
+  // look for any sibling station in the same company that does (#455)
+  if (!settingRows.some(r => r.key === 'tts_provider')) {
+    const { rows: inherited } = await pool.query<{ key: string; value: string }>(
+      `SELECT ss.key, ss.value FROM station_settings ss
+       JOIN stations s ON s.id = ss.station_id
+       WHERE s.company_id = (SELECT company_id FROM stations WHERE id = $1)
+         AND ss.station_id != $1
+         AND ss.key IN ('tts_provider', 'tts_voice_id', 'tts_api_key')
+       ORDER BY ss.station_id LIMIT 3`,
+      [stationId],
+    );
+    if (inherited.length > 0) {
+      settingRows = [...settingRows, ...inherited];
+    }
+  }
+
   const settings = Object.fromEntries(settingRows.map((r) => [r.key, r.value]));
 
   // Load station-level API key columns (saved via the Settings page)
