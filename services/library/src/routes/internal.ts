@@ -5,7 +5,7 @@ interface AudioSourcedBody {
   station_id: string;
   status: 'completed' | 'partial' | 'failed';
   sourced: number;
-  songs?: Array<{ song_id: string; r2_key: string }>;
+  songs?: Array<{ song_id: string; r2_key: string; audio_url?: string }>;
   errors?: Array<{ song_id: string; error: string }>;
 }
 
@@ -50,14 +50,14 @@ export async function internalRoutes(app: FastifyInstance) {
       const pool = getPool();
 
       try {
-        for (const { song_id, r2_key } of body.songs) {
-          // Build the public URL from the R2 key.
-          // If S3_PUBLIC_URL_BASE is set, use it; otherwise store the key as-is.
-          const audioUrl = s3PublicUrlBase ? `${s3PublicUrlBase}/${r2_key}` : r2_key;
+        for (const song of body.songs) {
+          // Prefer audio_url (full CDN URL from info-broker) over constructing from r2_key.
+          const audioUrl = song.audio_url
+            ?? (s3PublicUrlBase ? `${s3PublicUrlBase}/${song.r2_key}` : song.r2_key);
 
           await pool.query(
             `UPDATE songs SET audio_url = $1, audio_source = 'youtube', updated_at = NOW() WHERE id = $2`,
-            [audioUrl, song_id],
+            [audioUrl, song.song_id],
           );
         }
       } catch (err) {
