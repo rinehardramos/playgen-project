@@ -41,3 +41,13 @@ uuid < 14.0.0 — CVSS 6.3 MEDIUM. Multiple transitive versions (8.3.2, 10.0.0,
 11.1.0) pulled in by various deps. Major version bump required (14.0.0).
 Pre-existing on main; scheduled for resolution in a dedicated deps-update PR.
 """
+
+[[IgnoredVulns]]
+id = "GHSA-qx2v-qp2m-jg93"
+ignoreUntil = 2026-06-01
+reason = """
+postcss < 8.5.10 — CVSS 6.1 MEDIUM. Two transitive versions (8.4.31 via
+postcss-import, 8.5.9 via tailwindcss) require coordinated consumer bumps.
+Build-time CSS tooling; not reachable at runtime. Resolve in a dedicated
+deps-update PR before 2026-06-01.
+"""
