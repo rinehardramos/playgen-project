@@ -43,9 +43,13 @@ export async function createStation(data: {
   );
 
   // Seed default DJ profile and daypart assignments for the new station
-  // This is fire-and-forget — a failure here should not block station creation
   seedDefaultDjProfileForStation(data.company_id, rows[0].id).catch((err) => {
     console.error('[station] Failed to seed default DJ profile:', err);
+  });
+
+  // Auto-provision defaults: category, template with slots, program
+  seedDefaultStationDefaults(rows[0].id, data.name, data.broadcast_start_hour ?? 4, data.broadcast_end_hour ?? 3).catch((err) => {
+    console.error('[station] Failed to seed defaults:', err);
   });
 
   return rows[0];
@@ -123,4 +127,76 @@ export async function updateStation(id: string, data: Partial<{
 export async function deleteStation(id: string): Promise<boolean> {
   const { rowCount } = await getPool().query('DELETE FROM stations WHERE id = $1', [id]);
   return (rowCount ?? 0) > 0;
+}
+
+/**
+ * Auto-provision defaults for a new station:
+ * 1. Default category (GEN / General)
+ * 2. Default template (1_day) with hourly slots
+ * 3. Default program linked to the template, active all days
+ *
+ * Fire-and-forget — failures logged but don't block station creation.
+ */
+async function seedDefaultStationDefaults(
+  stationId: string,
+  stationName: string,
+  broadcastStartHour: number,
+  broadcastEndHour: number,
+): Promise<void> {
+  const pool = getPool();
+
+  // 1. Default category
+  const { rows: catRows } = await pool.query<{ id: string }>(
+    `INSERT INTO categories (station_id, code, label, rotation_weight)
+     VALUES ($1, 'GEN', 'General', 1.0)
+     ON CONFLICT (station_id, code) DO UPDATE SET label = EXCLUDED.label
+     RETURNING id`,
+    [stationId],
+  );
+  const categoryId = catRows[0]?.id;
+  if (!categoryId) return;
+
+  // 2. Default template
+  const { rows: tplRows } = await pool.query<{ id: string }>(
+    `INSERT INTO templates (station_id, name, type, is_active, is_default)
+     VALUES ($1, $2, '1_day', true, true)
+     ON CONFLICT DO NOTHING
+     RETURNING id`,
+    [stationId, `${stationName} Default`],
+  );
+  const templateId = tplRows[0]?.id;
+  if (!templateId) return;
+
+  // 3. Template slots: 3 songs per hour for the broadcast window
+  // Handle wrap-around (e.g., start=22, end=6 means 22,23,0,1,2,3,4,5)
+  const hours: number[] = [];
+  if (broadcastStartHour < broadcastEndHour) {
+    for (let h = broadcastStartHour; h < broadcastEndHour; h++) hours.push(h);
+  } else {
+    for (let h = broadcastStartHour; h < 24; h++) hours.push(h);
+    for (let h = 0; h < broadcastEndHour; h++) hours.push(h);
+  }
+
+  for (const hour of hours) {
+    for (let pos = 1; pos <= 3; pos++) {
+      await pool.query(
+        `INSERT INTO template_slots (template_id, hour, position, required_category_id)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (template_id, hour, position) DO NOTHING`,
+        [templateId, hour, pos, categoryId],
+      );
+    }
+  }
+
+  // 4. Default program — active all days, linked to the template
+  // Use lowercase day names to match getDayOfWeek() in generationEngine
+  const allDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  await pool.query(
+    `INSERT INTO programs (station_id, name, active_days, start_hour, end_hour, is_active, template_id)
+     VALUES ($1, $2, $3, $4, $5, true, $6)
+     ON CONFLICT DO NOTHING`,
+    [stationId, `${stationName} Show`, allDays, broadcastStartHour, broadcastEndHour, templateId],
+  );
+
+  console.info(`[station] Auto-provisioned defaults for station ${stationId}: category=${categoryId} template=${templateId}`);
 }
