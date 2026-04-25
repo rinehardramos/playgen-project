@@ -208,11 +208,11 @@ export async function generateDialogueTts(
       clipPaths.push(clipPath);
     }
 
-    // Generate 200ms silence gap (AAC for codec consistency)
-    const silencePath = path.join(tmpDir, 'silence.m4a');
+    // Generate 200ms silence gap (MP3 to match TTS clips for concat copy)
+    const silencePath = path.join(tmpDir, 'silence.mp3');
     await execFileAsync('ffmpeg', [
-      '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono',
-      '-t', '0.2', '-c:a', 'aac', '-b:a', '128k',
+      '-f', 'lavfi', '-i', 'anullsrc=r=22050:cl=mono',
+      '-t', '0.2', '-c:a', 'libmp3lame', '-b:a', '64k',
       '-y', silencePath,
     ], { timeout: 10000 });
 
@@ -227,21 +227,17 @@ export async function generateDialogueTts(
     }
     fs.writeFileSync(concatListPath, concatEntries.join('\n'));
 
-    // Concatenate
-    const outputPath = path.join(tmpDir, 'output.m4a');
+    // Concatenate (keep as MP3 — same codec as TTS clips)
+    const concatPath = path.join(tmpDir, 'concat.mp3');
     await execFileAsync('ffmpeg', [
       '-f', 'concat', '-safe', '0', '-i', concatListPath,
-      '-c:a', 'copy', '-y', outputPath,
+      '-c:a', 'copy', '-y', concatPath,
     ], { timeout: 30000 });
 
-    // Read concatenated file and write to storage
-    const audioData = fs.readFileSync(outputPath);
-    const duration = estimateMp3Duration(audioData);
-
-    // Transcode concatenated dialogue to AAC
+    // Transcode concatenated MP3 → AAC for codec consistency
     const aacPath = path.join(tmpDir, 'final.m4a');
     await execFileAsync('ffmpeg', [
-      '-i', outputPath, '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '1',
+      '-i', concatPath, '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '1',
       '-y', aacPath,
     ], { timeout: 30000 });
 
