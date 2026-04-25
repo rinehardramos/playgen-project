@@ -157,6 +157,13 @@ services:
     environment:
       NODE_ENV: production
       PORT: ${SCHEDULER_SERVICE_PORT:-3004}
+      # Auto-pipeline: internal service-to-service auth for DJ + info-broker triggers
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DJ_INTERNAL_URL: http://dj:3007
+      AUTH_INTERNAL_URL: http://auth:3001
+      INFO_BROKER_URL: ${INFO_BROKER_BASE_URL}
+      INFO_BROKER_API_KEY: ${INFO_BROKER_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -238,6 +245,30 @@ services:
       NODE_ENV: production
       PORT: ${DJ_SERVICE_PORT:-3007}
       STORAGE_LOCAL_PATH: /app/data/audio
+      # LLM for DJ script generation
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      # TTS storage (S3/R2 for CDN-backed HLS)
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION:-auto}
+      S3_PREFIX: ${S3_PREFIX}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_PUBLIC_URL_BASE: ${S3_PUBLIC_URL_BASE}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # Info-broker for weather/news/jokes
+      INFO_BROKER_BASE_URL: ${INFO_BROKER_BASE_URL}
+      INFO_BROKER_API_KEY: ${INFO_BROKER_API_KEY}
+      # Auto-pipeline: publish trigger after TTS
+      STATION_INTERNAL_URL: http://station:3002
+      AUTH_INTERNAL_URL: http://auth:3001
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      PROD_GATEWAY_URL: ${PROD_GATEWAY_URL}
+      # OwnRadio webhook
+      OWNRADIO_WEBHOOK_URL: ${OWNRADIO_WEBHOOK_URL}
+      PLAYGEN_WEBHOOK_SECRET: ${PLAYGEN_WEBHOOK_SECRET}
     volumes:
       - dj_audio_data:/app/data/audio
     depends_on:
