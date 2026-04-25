@@ -62,13 +62,17 @@ export async function generateSegmentTts(
     duration = estimateMp3Duration(result.audio_data);
   }
 
-  // Write via storage adapter so reads (served via GET /dj/segments/:id/audio)
-  // always resolve against the same base path regardless of provider (local / S3).
+  // Write via storage adapter (local disk or S3/R2)
   const storagePath = `${segment.script_id}/${segment.position}.mp3`;
   const storage = getStorageAdapter();
   await storage.write(storagePath, result.audio_data);
 
-  const audioUrl = `/api/v1/dj/audio/${storagePath}`;
+  // Use CDN URL when storage is S3 (required for HLS streaming);
+  // fall back to relative API path for local storage.
+  const publicUrl = storage.getPublicUrl(storagePath);
+  const audioUrl = publicUrl.startsWith('http')
+    ? publicUrl
+    : `/api/v1/dj/audio/${storagePath}`;
 
   await getPool().query(
     `UPDATE dj_segments
