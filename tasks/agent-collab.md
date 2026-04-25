@@ -24,11 +24,12 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 ---
 
 ## Active Work
-- [ ] fix(dj): segment pruning — skip orphaned DJ speech when song has no audio (#448-AC1, fix/issue-448-pruning) | @claude-sonnet-4-6 | 2026-04-25
+- [ ] fix(dj): stationId scoping in M3U8 builder and ingest (#449, fix/issue-449-station-scoping) | @claude-sonnet-4-6 | 2026-04-25 | Migration: 064
 - [ ] feat(dj+station+publish): full program audio in HLS stream — song audio in M3U8 + sourcing trigger in publish pipeline (feat/full-program-audio) | @claude-sonnet-4-6 | 2026-04-25
 - [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
 
 ## Recently Completed
+- [x] fix(dj): segment pruning — skip orphaned DJ speech when song has no audio (#448-AC1, fix/issue-448-pruning, PR #451) | @claude-sonnet-4-6 | 2026-04-25
 - [x] feat(playlist+library): info-broker audio sourcing + /internal/songs/audio-sourced callback (feat/audio-sourcing-integration) | @claude-sonnet-4-6 | 2026-04-25
 - [x] feat(dj+gateway): OwnRadio HLS streaming integration (feat/ownradio-hls, main) | @claude-sonnet-4-6 | 2026-04-23
 - [x] fix(dj+station): URL-encode HLS M3U8 audio URLs + fix R2 key date format (fix/hls-url-encoding, PR #446) | @claude-sonnet-4-6 | 2026-04-25
