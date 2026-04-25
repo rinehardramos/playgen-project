@@ -8,6 +8,7 @@ import { configRoutes } from './routes/config';
 import { startCron, stopCron } from './services/cronService';
 import { closeQueue } from './services/queueService';
 import { dailyProgramRoutes } from './routes/dailyProgram';
+import { generateDayRoutes } from './routes/generateDay';
 
 const app = Fastify({
   logger: {
@@ -31,6 +32,7 @@ app.get('/health', async () => ({ status: 'ok', service: 'scheduler-service' }))
 app.register(schedulerRoutes, { prefix: '/api/v1' });
 app.register(configRoutes, { prefix: '/api/v1' });
 app.register(dailyProgramRoutes, { prefix: '/api/v1' });
+app.register(generateDayRoutes, { prefix: '/api/v1' });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 
