@@ -1,5 +1,6 @@
 import { Queue, Worker, Job } from 'bullmq';
-import { generatePlaylist, GeneratePlaylistParams } from './generationEngine';
+import { generatePlaylist, GeneratePlaylistParams, GeneratePlaylistResult } from './generationEngine';
+import { getPool } from '../db';
 
 // ─── Redis connection config ──────────────────────────────────────────────────
 // REDIS_URL takes precedence (Railway Redis, Upstash, etc.)
@@ -43,9 +44,16 @@ const generationWorker = new Worker<GeneratePlaylistParams>(
 );
 
 generationWorker.on('completed', (job) => {
+  const result = job.returnvalue as GeneratePlaylistResult | undefined;
   console.info(
-    `[queueService] Job ${job.id} completed — station=${job.data.stationId} date=${job.data.date}`,
+    `[queueService] Job ${job.id} completed — station=${job.data.stationId} date=${job.data.date} playlist=${result?.playlistId}`,
   );
+
+  if (result?.playlistId) {
+    triggerDjPipeline(job.data.stationId, result.playlistId).catch((err) =>
+      console.error(`[queueService] DJ auto-trigger failed for playlist ${result.playlistId}`, err),
+    );
+  }
 });
 
 generationWorker.on('failed', (job, err) => {
@@ -54,6 +62,109 @@ generationWorker.on('failed', (job, err) => {
     err,
   );
 });
+
+// ─── Auto-trigger DJ pipeline ─────────────────────────────────────────────────
+
+/**
+ * Get a JWT token for internal service-to-service calls.
+ * Uses ADMIN_EMAIL + ADMIN_PASSWORD env vars.
+ */
+async function getServiceToken(): Promise<string> {
+  const authBase = process.env.AUTH_INTERNAL_URL ?? 'http://auth:3001';
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email || !password) {
+    throw new Error('ADMIN_EMAIL and ADMIN_PASSWORD env vars required for auto-pipeline');
+  }
+
+  const res = await fetch(`${authBase}/api/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) throw new Error(`Service login failed: ${res.status}`);
+  const data = await res.json() as { tokens?: { access_token: string }; access_token?: string };
+  const token = data.tokens?.access_token ?? data.access_token;
+  if (!token) throw new Error('Service login response missing access_token');
+  return token;
+}
+
+/**
+ * After playlist generation succeeds, check if the station has DJ enabled
+ * and auto-trigger DJ script generation + song audio sourcing.
+ */
+async function triggerDjPipeline(stationId: string, playlistId: string): Promise<void> {
+  const pool = getPool();
+
+  const { rows } = await pool.query<{
+    dj_enabled: boolean;
+    dj_auto_approve: boolean;
+  }>(`SELECT dj_enabled, dj_auto_approve FROM stations WHERE id = $1`, [stationId]);
+
+  const station = rows[0];
+  if (!station?.dj_enabled) return;
+
+  const djBase = process.env.DJ_INTERNAL_URL ?? 'http://dj:3007';
+  const token = await getServiceToken();
+
+  // Trigger DJ script generation
+  console.info(`[auto-pipeline] Triggering DJ script generation for playlist ${playlistId}`);
+  const res = await fetch(`${djBase}/api/v1/dj/playlists/${playlistId}/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ auto_approve: station.dj_auto_approve }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`[auto-pipeline] DJ generate failed (${res.status}): ${body}`);
+    return;
+  }
+
+  const data = await res.json() as { job_id?: string };
+  console.info(`[auto-pipeline] DJ generation enqueued — job=${data.job_id}`);
+
+  // Fire-and-forget: trigger song audio sourcing via info-broker
+  triggerSongSourcing(stationId, playlistId).catch((err) =>
+    console.warn('[auto-pipeline] Song sourcing trigger failed (non-fatal)', err),
+  );
+}
+
+/**
+ * Ask info-broker to source audio for songs in this playlist that lack audio_url.
+ * Fire-and-forget — never blocks the pipeline.
+ */
+async function triggerSongSourcing(stationId: string, playlistId: string): Promise<void> {
+  const infoBrokerUrl = process.env.INFO_BROKER_URL ?? process.env.INFO_BROKER_BASE_URL;
+  const apiKey = process.env.INFO_BROKER_API_KEY;
+  if (!infoBrokerUrl || !apiKey) return;
+
+  const pool = getPool();
+  const { rows: songs } = await pool.query<{ song_id: string; title: string; artist: string }>(
+    `SELECT s.id AS song_id, s.title, s.artist
+     FROM playlist_entries pe JOIN songs s ON s.id = pe.song_id
+     WHERE pe.playlist_id = $1 AND (s.audio_url IS NULL OR s.audio_url = '')`,
+    [playlistId],
+  );
+
+  if (songs.length === 0) return;
+
+  const callbackBase = process.env.PROD_GATEWAY_URL ?? process.env.GATEWAY_URL ?? 'http://gateway:80';
+  console.info(`[auto-pipeline] Sourcing audio for ${songs.length} songs via info-broker`);
+
+  await fetch(`${infoBrokerUrl}/v1/playlists/source-audio`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+    body: JSON.stringify({
+      station_id: stationId,
+      songs,
+      callback_url: `${callbackBase}/api/v1/internal/songs/audio-sourced`,
+    }),
+  });
+}
 
 // ─── Exported functions ───────────────────────────────────────────────────────
 

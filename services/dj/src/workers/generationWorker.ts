@@ -10,6 +10,7 @@ import { sanitizeUntrusted } from '../lib/promptGuard.js';
 import type { WeatherResponse, NewsResponse, JokeResponse } from '@playgen/info-broker-client';
 import { config } from '../config.js';
 import { buildManifest } from '../services/manifestService.js';
+// ttsService imported lazily in autoTriggerTts() to avoid module-level storage init in tests
 import type { DjGenerationJobData, Job } from '../queues/djQueue.js';
 import type { DjProfile, DjSegmentType, DjScriptTemplate } from '@playgen/types';
 
@@ -823,4 +824,148 @@ export async function runGenerationJob(
   );
 
   await reportProgress(100, 'Done');
+
+  // 10. Auto-trigger TTS if script is auto-approved (pipeline automation)
+  if (data.auto_approve) {
+    autoTriggerTts(script_id, data.station_id).catch((err) =>
+      console.error('[auto-pipeline] Auto-TTS failed:', err),
+    );
+  }
+}
+
+/**
+ * Auto-trigger TTS for all segments after generation completes (auto-approve only).
+ * Runs in background — does not block the generation worker response.
+ */
+async function autoTriggerTts(scriptId: string, stationId: string): Promise<void> {
+  // Lazy import to avoid module-level storage initialization (breaks unit tests)
+  const { generateSegmentTts, loadTtsProviderConfig } = await import('../services/ttsService.js');
+  const pool = getPool();
+  console.info(`[auto-pipeline] Auto-triggering TTS for script ${scriptId}`);
+
+  // Load TTS config
+  const { rows: profileRows } = await pool.query<{ tts_voice_id: string }>(
+    `SELECT dp.tts_voice_id
+     FROM dj_scripts ds JOIN dj_profiles dp ON dp.id = ds.dj_profile_id
+     WHERE ds.id = $1`,
+    [scriptId],
+  );
+  const fallbackVoiceId = profileRows[0]?.tts_voice_id ?? 'alloy';
+  const providerCfg = await loadTtsProviderConfig(stationId, fallbackVoiceId);
+  if (!providerCfg) {
+    console.warn('[auto-pipeline] TTS not configured for station, skipping auto-TTS');
+    return;
+  }
+
+  // Load pending segments
+  const { rows: segments } = await pool.query<{
+    id: string; position: number; script_text: string; edited_text: string | null;
+  }>(
+    `SELECT id, position, script_text, edited_text
+     FROM dj_segments WHERE script_id = $1 AND audio_url IS NULL
+     ORDER BY position`,
+    [scriptId],
+  );
+
+  if (segments.length === 0) {
+    console.info('[auto-pipeline] No segments need TTS');
+    return;
+  }
+
+  const concurrency = Math.max(1, parseInt(process.env.TTS_WORKER_CONCURRENCY ?? '3', 10));
+  let generated = 0;
+  let failed = 0;
+
+  for (let i = 0; i < segments.length; i += concurrency) {
+    const batch = segments.slice(i, i + concurrency);
+    const results = await Promise.allSettled(
+      batch.map((seg) =>
+        generateSegmentTts(
+          {
+            id: seg.id,
+            position: seg.position,
+            text: seg.edited_text ?? seg.script_text,
+            script_id: scriptId,
+            station_id: stationId,
+          },
+          providerCfg,
+        ),
+      ),
+    );
+    for (const result of results) {
+      if (result.status === 'fulfilled') generated++;
+      else {
+        failed++;
+        console.warn('[auto-pipeline] Segment TTS failed:', result.reason);
+      }
+    }
+  }
+
+  console.info(`[auto-pipeline] TTS complete — generated=${generated} failed=${failed}`);
+
+  // Auto-trigger publish if all TTS succeeded
+  if (failed === 0) {
+    autoTriggerPublish(scriptId, stationId).catch((err) =>
+      console.error('[auto-pipeline] Auto-publish trigger failed:', err),
+    );
+  } else {
+    console.warn(`[auto-pipeline] ${failed} TTS failures — skipping auto-publish`);
+  }
+}
+
+/**
+ * Auto-trigger the publish pipeline after TTS completes successfully.
+ * Calls the station service's publish endpoint via internal HTTP.
+ */
+async function autoTriggerPublish(scriptId: string, stationId: string): Promise<void> {
+  const stationBase = process.env.STATION_INTERNAL_URL ?? 'http://station:3002';
+  const prodGateway = process.env.PROD_GATEWAY_URL;
+  if (!prodGateway) {
+    console.info('[auto-pipeline] PROD_GATEWAY_URL not set — skipping auto-publish');
+    return;
+  }
+
+  console.info(`[auto-pipeline] Triggering publish for script ${scriptId}`);
+
+  // Get a service token for the station service
+  const authBase = process.env.AUTH_INTERNAL_URL ?? 'http://auth:3001';
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email || !password) {
+    console.warn('[auto-pipeline] ADMIN_EMAIL/ADMIN_PASSWORD not set — skipping auto-publish');
+    return;
+  }
+
+  const loginRes = await fetch(`${authBase}/api/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!loginRes.ok) {
+    console.error(`[auto-pipeline] Service login failed: ${loginRes.status}`);
+    return;
+  }
+  const loginData = await loginRes.json() as { tokens?: { access_token: string }; access_token?: string };
+  const token = loginData.tokens?.access_token ?? loginData.access_token;
+  if (!token) {
+    console.error('[auto-pipeline] Service login response missing access_token');
+    return;
+  }
+
+  const res = await fetch(`${stationBase}/api/v1/stations/${stationId}/programs/${scriptId}/publish`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`[auto-pipeline] Publish failed (${res.status}): ${body}`);
+    return;
+  }
+
+  const data = await res.json() as { publish_job_id?: string };
+  console.info(`[auto-pipeline] Publish enqueued — job=${data.publish_job_id}`);
 }

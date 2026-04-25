@@ -189,16 +189,21 @@ async function main() {
     let audioUrl = seg.audio_url;
 
     if (!dryRun && seg.audio_url) {
-      // Extract relative path from /api/v1/dj/audio/<rel>
-      const prefix = '/api/v1/dj/audio/';
-      const relPath = seg.audio_url.startsWith(prefix)
-        ? seg.audio_url.substring(prefix.length)
-        : seg.audio_url;
-      try {
-        audioUrl = await uploadToR2(relPath);
-      } catch (err) {
-        console.warn(`  ⚠ Could not upload ${relPath}: ${err instanceof Error ? err.message : err}`);
-        audioUrl = null;
+      if (seg.audio_url.startsWith('http')) {
+        // Already a CDN URL — skip re-upload
+        console.log(`  ✓ already on CDN: ${seg.audio_url.substring(0, 80)}…`);
+      } else {
+        // Extract relative path from /api/v1/dj/audio/<rel>
+        const prefix = '/api/v1/dj/audio/';
+        const relPath = seg.audio_url.startsWith(prefix)
+          ? seg.audio_url.substring(prefix.length)
+          : seg.audio_url;
+        try {
+          audioUrl = await uploadToR2(relPath);
+        } catch (err) {
+          console.warn(`  ⚠ Could not upload ${relPath}: ${err instanceof Error ? err.message : err}`);
+          audioUrl = null;
+        }
       }
     }
 
