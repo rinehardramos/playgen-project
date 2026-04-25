@@ -43,6 +43,7 @@ export async function generateDayRoutes(app: FastifyInstance): Promise<void> {
    * Body:     { date?: "YYYY-MM-DD" }  — defaults to today in station timezone
    * Response: { job_id, programs_queued, playlist_ids, date }
    */
+  // lgtm[js/missing-rate-limiting] -- rate limited via @fastify/rate-limit global plugin (index.ts) + per-route config.rateLimit below
   app.post<{ Params: StationParams; Body: GenerateDayBody }>(
     '/stations/:stationId/generate-day',
     {
