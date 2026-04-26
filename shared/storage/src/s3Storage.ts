@@ -42,13 +42,27 @@ export class S3StorageAdapter implements StorageAdapter {
     return this.prefix ? `${this.prefix}/${filePath}` : filePath;
   }
 
+  /** Infer content type from file extension. */
+  private contentType(filePath: string): string {
+    const ext = filePath.split('.').pop()?.toLowerCase();
+    const types: Record<string, string> = {
+      mp3: 'audio/mpeg',
+      m4a: 'audio/mp4',
+      mp4: 'video/mp4',
+      m4s: 'video/iso.segment',
+      m3u8: 'application/vnd.apple.mpegurl',
+      json: 'application/json',
+    };
+    return types[ext ?? ''] ?? 'application/octet-stream';
+  }
+
   async write(filePath: string, data: Buffer | Uint8Array): Promise<void> {
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: this.key(filePath),
         Body: data,
-        ContentType: 'audio/mpeg',
+        ContentType: this.contentType(filePath),
       }),
     );
   }
