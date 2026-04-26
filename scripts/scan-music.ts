@@ -52,10 +52,11 @@ const scanDir = getArg('dir') ?? process.env.MUSIC_SCAN_DIR ?? '';
 const stationArg = getArg('station') ?? '';
 const dryRun = hasFlag('dry-run');
 const doTranscode = hasFlag('transcode');
+const recursive = !hasFlag('no-recursive'); // recursive by default, --no-recursive to disable
 const extensions = (getArg('ext') ?? process.env.MUSIC_SCAN_EXTENSIONS ?? 'mp3,flac,wav,m4a,ogg,aac,wma').split(',');
 
 if (!scanDir) {
-  console.error('Usage: pnpm tsx scripts/scan-music.ts --dir <path> --station <id-or-slug> [--transcode] [--dry-run]');
+  console.error('Usage: pnpm tsx scripts/scan-music.ts --dir <path> --station <id-or-slug> [--transcode] [--no-recursive] [--dry-run]');
   process.exit(1);
 }
 
@@ -75,13 +76,13 @@ interface AudioFile {
   ext: string;
 }
 
-function walkDir(dir: string): AudioFile[] {
+function walkDir(dir: string, recurse = true): AudioFile[] {
   const files: AudioFile[] = [];
   try {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        files.push(...walkDir(fullPath));
+      if (entry.isDirectory() && recurse) {
+        files.push(...walkDir(fullPath, true));
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name).slice(1).toLowerCase();
         if (extensions.includes(ext)) {
@@ -161,8 +162,8 @@ async function extractMetadata(filePath: string): Promise<SongMeta> {
 
 // ── Main ──────────────────────────────────────────────────────────────────
 async function main() {
-  console.log(`\n[scan] Scanning ${scanDir}…`);
-  const files = walkDir(scanDir);
+  console.log(`\n[scan] Scanning ${scanDir}${recursive ? ' (recursive)' : ' (top-level only)'}…`);
+  const files = walkDir(scanDir, recursive);
   console.log(`[scan] Found ${files.length} audio files`);
 
   if (files.length === 0) {
