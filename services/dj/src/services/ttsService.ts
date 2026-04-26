@@ -67,14 +67,17 @@ export async function generateSegmentTts(
   // Transcode MP3 → AAC for codec consistency with HLS song segments
   let audioData = result.audio_data;
   let duration = result.duration_sec;
-  const storagePath = `${segment.script_id}/${segment.position}.m4a`;
+  // Use .aac (ADTS) — the raw AAC format that HLS natively supports.
+  // NOT .m4a (non-fragmented MP4 container) which HLS.js can't demux as a segment.
+  const storagePath = `${segment.script_id}/${segment.position}.aac`;
 
   try {
     const tmpIn = path.join(os.tmpdir(), `tts-${segment.id}.mp3`);
-    const tmpOut = path.join(os.tmpdir(), `tts-${segment.id}.m4a`);
+    const tmpOut = path.join(os.tmpdir(), `tts-${segment.id}.aac`);
     fs.writeFileSync(tmpIn, result.audio_data);
     await execFileAsync('ffmpeg', [
       '-i', tmpIn, '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '1',
+      '-f', 'adts',  // ADTS = raw AAC elementary stream (valid HLS segment)
       '-y', tmpOut,
     ], { timeout: 15000 });
     audioData = fs.readFileSync(tmpOut);
@@ -234,10 +237,11 @@ export async function generateDialogueTts(
       '-c:a', 'copy', '-y', concatPath,
     ], { timeout: 30000 });
 
-    // Transcode concatenated MP3 → AAC for codec consistency
-    const aacPath = path.join(tmpDir, 'final.m4a');
+    // Transcode concatenated MP3 → AAC ADTS (valid HLS segment format)
+    const aacPath = path.join(tmpDir, 'final.aac');
     await execFileAsync('ffmpeg', [
       '-i', concatPath, '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '1',
+      '-f', 'adts',
       '-y', aacPath,
     ], { timeout: 30000 });
 
@@ -252,7 +256,7 @@ export async function generateDialogueTts(
       finalDuration = estimateMp3Duration(dialogueAudio);
     }
 
-    const storagePath = `${segment.script_id}/${segment.position}.m4a`;
+    const storagePath = `${segment.script_id}/${segment.position}.aac`;
     const storage = getStorageAdapter();
     await storage.write(storagePath, dialogueAudio);
 

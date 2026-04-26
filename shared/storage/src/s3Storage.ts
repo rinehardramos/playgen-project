@@ -47,6 +47,7 @@ export class S3StorageAdapter implements StorageAdapter {
     const ext = filePath.split('.').pop()?.toLowerCase();
     const types: Record<string, string> = {
       mp3: 'audio/mpeg',
+      aac: 'audio/aac',
       m4a: 'audio/mp4',
       mp4: 'video/mp4',
       m4s: 'video/iso.segment',
