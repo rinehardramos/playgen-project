@@ -4,7 +4,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc && cp src/migrations/*.sql dist/migrations/",
+    "build": "tsc && mkdir -p dist/migrations && cp src/migrations/*.sql dist/migrations/",
     "typecheck": "tsc --noEmit",
     "migrate": "node dist/migrate.js",
     "seed": "node dist/seeds/index.js",
