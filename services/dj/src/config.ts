@@ -37,6 +37,7 @@ export const config = {
     googleApiKey: process.env.GOOGLE_TTS_API_KEY ?? '',
     geminiApiKey: process.env.GEMINI_API_KEY ?? '',
     mistralApiKey: process.env.MISTRAL_API_KEY ?? '',
+    narakeetApiKey: process.env.NARAKEET_API_KEY ?? '',
     defaultVoice: process.env.TTS_DEFAULT_VOICE ?? 'alloy',
   },
 

@@ -340,6 +340,8 @@ export async function loadTtsProviderConfig(
       ? (stationKeys.gemini_api_key ?? config.tts.geminiApiKey)
       : provider === 'mistral'
       ? (stationKeys.mistral_api_key ?? config.tts.mistralApiKey)
+      : provider === 'narakeet'
+      ? config.tts.narakeetApiKey
       : (stationKeys.openai_api_key ?? config.tts.openaiApiKey));
 
   const voiceId = settings['tts_voice_id'] ?? fallbackVoiceId;
