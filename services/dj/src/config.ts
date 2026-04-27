@@ -17,6 +17,11 @@ export const config = {
     openaiApiKey: process.env.OPENAI_API_KEY ?? '',
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
     geminiApiKey: process.env.GEMINI_API_KEY ?? '',
+    /**
+     * 'claude-code' — spawn local `claude -p` CLI (uses subscription auth, local dev only)
+     * 'openrouter'  — call OpenRouter with automatic Gemini Flash fallback on 402/429
+     */
+    backend: (process.env.LLM_BACKEND ?? 'claude-code') as 'claude-code' | 'openrouter',
   },
 
   // OpenRouter (LLM via OpenRouter gateway)
