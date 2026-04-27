@@ -6,6 +6,14 @@ import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth';
 import { api } from '@/lib/api';
 
+interface ProgramTheme {
+  id: string;
+  type: string;
+  priority: number;
+  active: boolean;
+  config: Record<string, unknown>;
+}
+
 interface Program {
   id: string;
   station_id: string;
@@ -15,6 +23,7 @@ interface Program {
   start_hour: number;
   end_hour: number;
   color_tag: string | null;
+  themes: ProgramTheme[];
   is_active: boolean;
   is_default: boolean;
 }
@@ -50,7 +59,7 @@ interface PlaylistWithEpisode {
   episode?: ProgramEpisode;
 }
 
-type Tab = 'overview' | 'episodes' | 'settings';
+type Tab = 'overview' | 'episodes' | 'themes' | 'settings';
 
 const DAY_LABELS: Record<string, string> = {
   monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu',
@@ -237,7 +246,7 @@ export default function ProgramDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-[#12121f] rounded-lg p-1 mb-6 w-fit">
-        {(['overview', 'episodes', 'settings'] as Tab[]).map(t => (
+        {(['overview', 'episodes', 'themes', 'settings'] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -439,6 +448,15 @@ export default function ProgramDetailPage() {
       )}
 
       {/* Settings Tab */}
+      {/* Themes Tab */}
+      {tab === 'themes' && (
+        <ProgramThemesEditor
+          programId={program.id}
+          themes={program.themes ?? []}
+          onUpdate={(themes) => setProgram({ ...program, themes })}
+        />
+      )}
+
       {tab === 'settings' && !program.is_default && (
         <div className="max-w-lg space-y-5">
           <div>
@@ -494,7 +512,7 @@ export default function ProgramDetailPage() {
         <p className="text-gray-500 text-sm">The default program cannot be edited or deleted.</p>
       )}
 
-      {/* Delete confirmation modal */}
+      {/* Delete confirmation modal (settings tab) */}
       {showDeleteConfirm && program && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60" onClick={() => setShowDeleteConfirm(false)} />
@@ -523,5 +541,307 @@ export default function ProgramDetailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Program Themes Editor ──────────────────────────────────────────────────
+
+const THEME_TYPES = [
+  { value: 'weather_reactive', label: 'Weather Reactive', description: 'Auto-adapt mood to current weather' },
+  { value: 'news_reactive', label: 'News Reactive', description: 'Weave trending news into DJ segments' },
+  { value: 'sponsored', label: 'Sponsored', description: 'Natural brand mentions in DJ dialogue' },
+  { value: 'social_driven', label: 'Social Driven', description: 'Listener comments/chat drive content' },
+  { value: 'custom', label: 'Custom Theme', description: 'User-defined theme (throwback, love songs, etc.)' },
+  { value: 'event', label: 'Event', description: 'Calendar-linked theme (holiday, concert, sports)' },
+  { value: 'mood', label: 'Mood Override', description: 'Set explicit mood/energy for the program' },
+] as const;
+
+const MOOD_OPTIONS = ['chill', 'relax', 'balanced', 'focused', 'energize', 'motivate', 'hype', 'party'];
+
+function ProgramThemesEditor({
+  programId,
+  themes,
+  onUpdate,
+}: {
+  programId: string;
+  themes: ProgramTheme[];
+  onUpdate: (themes: ProgramTheme[]) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [newType, setNewType] = useState('custom');
+
+  async function saveThemes(updated: ProgramTheme[]) {
+    setSaving(true);
+    setError('');
+    try {
+      const result = await api.put<Program>(`/api/v1/programs/${programId}`, { themes: updated });
+      onUpdate(result.themes ?? updated);
+    } catch (err: unknown) {
+      setError((err as { message?: string }).message ?? 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addTheme() {
+    const id = `t_${Date.now()}`;
+    const base: ProgramTheme = { id, type: newType, priority: 5, active: true, config: {} };
+
+    if (newType === 'custom') {
+      base.config = { theme_name: '', dj_directive: '', playlist_filter: {} };
+    } else if (newType === 'sponsored') {
+      base.config = { brand_name: '', brand_voice: '', tagline: '', mentions_per_hour: 2, cta: '' };
+    } else if (newType === 'mood') {
+      base.config = { mood: 'balanced', description: '' };
+    } else if (newType === 'weather_reactive') {
+      base.config = { sensitivity: 'high' };
+    } else if (newType === 'news_reactive') {
+      base.config = { max_mentions_per_hour: 3, categories: ['local', 'entertainment'] };
+    }
+
+    const updated = [...themes, base];
+    saveThemes(updated);
+    setShowAdd(false);
+  }
+
+  function removeTheme(id: string) {
+    saveThemes(themes.filter(t => t.id !== id));
+  }
+
+  function toggleTheme(id: string) {
+    saveThemes(themes.map(t => t.id === id ? { ...t, active: !t.active } : t));
+  }
+
+  function updateThemeConfig(id: string, config: Record<string, unknown>) {
+    saveThemes(themes.map(t => t.id === id ? { ...t, config } : t));
+  }
+
+  function updatePriority(id: string, priority: number) {
+    saveThemes(themes.map(t => t.id === id ? { ...t, priority } : t));
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-white font-semibold">Program Themes</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Themes shape playlist selection and DJ dialogue. Stack multiple with priority weights.</p>
+        </div>
+        <button
+          onClick={() => setShowAdd(!showAdd)}
+          className="btn-primary text-xs px-3 py-1.5"
+        >
+          + Add Theme
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      {saving && <p className="text-xs text-violet-400">Saving...</p>}
+
+      {/* Add theme panel */}
+      {showAdd && (
+        <div className="bg-[#1a1a2e] border border-[#2a2a40] rounded-xl p-4">
+          <p className="text-sm text-gray-300 mb-2">Select theme type:</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+            {THEME_TYPES.map(tt => (
+              <label key={tt.value} className={`flex items-start gap-2 p-2 rounded-lg cursor-pointer border transition-colors ${newType === tt.value ? 'border-violet-500 bg-violet-900/20' : 'border-[#2a2a40] hover:border-gray-600'}`}>
+                <input type="radio" name="theme_type" value={tt.value} checked={newType === tt.value} onChange={() => setNewType(tt.value)} className="mt-0.5" />
+                <div>
+                  <p className="text-sm text-white">{tt.label}</p>
+                  <p className="text-xs text-gray-500">{tt.description}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={addTheme} className="btn-primary text-xs px-4 py-1.5">Add</button>
+            <button onClick={() => setShowAdd(false)} className="btn-secondary text-xs px-4 py-1.5">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Theme list */}
+      {themes.length === 0 && !showAdd && (
+        <div className="bg-[#1a1a2e] border border-[#2a2a40] rounded-xl p-8 text-center">
+          <p className="text-gray-500 text-sm">No themes configured. Add a theme to shape this program&apos;s content.</p>
+        </div>
+      )}
+
+      {themes.map(theme => (
+        <ThemeCard
+          key={theme.id}
+          theme={theme}
+          onToggle={() => toggleTheme(theme.id)}
+          onRemove={() => removeTheme(theme.id)}
+          onUpdateConfig={(cfg) => updateThemeConfig(theme.id, cfg)}
+          onUpdatePriority={(p) => updatePriority(theme.id, p)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ThemeCard({
+  theme,
+  onToggle,
+  onRemove,
+  onUpdateConfig,
+  onUpdatePriority,
+}: {
+  theme: ProgramTheme;
+  onToggle: () => void;
+  onRemove: () => void;
+  onUpdateConfig: (config: Record<string, unknown>) => void;
+  onUpdatePriority: (p: number) => void;
+}) {
+  const typeInfo = THEME_TYPES.find(t => t.value === theme.type);
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className={`bg-[#1a1a2e] border rounded-xl p-4 transition-colors ${theme.active ? 'border-violet-500/50' : 'border-[#2a2a40] opacity-60'}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={onToggle} title={theme.active ? 'Disable' : 'Enable'} className={`w-8 h-5 rounded-full relative transition-colors ${theme.active ? 'bg-violet-600' : 'bg-gray-700'}`}>
+            <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${theme.active ? 'left-3.5' : 'left-0.5'}`} />
+          </button>
+          <div>
+            <p className="text-sm text-white font-medium">{typeInfo?.label ?? theme.type}</p>
+            <p className="text-xs text-gray-500">{getThemeSummary(theme)}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-500">
+            Priority:
+            <input
+              type="number" min={1} max={10}
+              value={theme.priority}
+              onChange={(e) => onUpdatePriority(Math.max(1, Math.min(10, Number(e.target.value))))}
+              className="ml-1 w-10 bg-[#0f0f1a] border border-[#2a2a40] rounded px-1 py-0.5 text-white text-xs text-center"
+            />
+          </label>
+          <button onClick={() => setExpanded(!expanded)} className="text-gray-500 hover:text-gray-300 text-xs px-2 py-1">
+            {expanded ? 'Collapse' : 'Edit'}
+          </button>
+          <button onClick={onRemove} className="text-red-500 hover:text-red-400 text-xs px-2 py-1">Remove</button>
+        </div>
+      </div>
+
+      {/* Expanded config editor */}
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-[#2a2a40] space-y-3">
+          {theme.type === 'custom' && (
+            <CustomThemeConfig config={theme.config} onChange={onUpdateConfig} />
+          )}
+          {theme.type === 'sponsored' && (
+            <SponsoredThemeConfig config={theme.config} onChange={onUpdateConfig} />
+          )}
+          {theme.type === 'mood' && (
+            <MoodThemeConfig config={theme.config} onChange={onUpdateConfig} />
+          )}
+          {theme.type === 'news_reactive' && (
+            <NewsThemeConfig config={theme.config} onChange={onUpdateConfig} />
+          )}
+          {(theme.type === 'weather_reactive' || theme.type === 'event' || theme.type === 'social_driven') && (
+            <p className="text-xs text-gray-500">This theme auto-configures based on external data. No additional settings needed.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getThemeSummary(theme: ProgramTheme): string {
+  const cfg = theme.config;
+  switch (theme.type) {
+    case 'custom': return (cfg.theme_name as string) || 'Custom theme';
+    case 'sponsored': return (cfg.brand_name as string) || 'Sponsor';
+    case 'mood': return `Mood: ${(cfg.mood as string) || 'balanced'}`;
+    case 'weather_reactive': return 'Adapts to current weather';
+    case 'news_reactive': return `Max ${cfg.max_mentions_per_hour ?? 3} mentions/hour`;
+    case 'social_driven': return 'Pulls from listener comments';
+    case 'event': return (cfg.event_name as string) || 'Calendar event';
+    default: return theme.type;
+  }
+}
+
+function CustomThemeConfig({ config, onChange }: { config: Record<string, unknown>; onChange: (c: Record<string, unknown>) => void }) {
+  return (
+    <>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Theme Name</label>
+        <input type="text" value={(config.theme_name as string) ?? ''} onChange={e => onChange({ ...config, theme_name: e.target.value })} placeholder="e.g. Throwback Friday" className="input w-full text-sm" />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">DJ Directive</label>
+        <textarea value={(config.dj_directive as string) ?? ''} onChange={e => onChange({ ...config, dj_directive: e.target.value })} placeholder="How should the DJ adapt? e.g. 'Be nostalgic, reference years/eras, say remember when...'" rows={3} className="input w-full text-sm resize-none" />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Era Filter (comma-separated, e.g. 2000s,2010s)</label>
+        <input type="text" value={((config.playlist_filter as Record<string, unknown>)?.era as string[] ?? []).join(', ')} onChange={e => onChange({ ...config, playlist_filter: { ...((config.playlist_filter as Record<string, unknown>) ?? {}), era: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } })} placeholder="2000s, 2010s" className="input w-full text-sm" />
+      </div>
+    </>
+  );
+}
+
+function SponsoredThemeConfig({ config, onChange }: { config: Record<string, unknown>; onChange: (c: Record<string, unknown>) => void }) {
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Brand Name</label>
+          <input type="text" value={(config.brand_name as string) ?? ''} onChange={e => onChange({ ...config, brand_name: e.target.value })} placeholder="Globe Telecom" className="input w-full text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Mentions/Hour</label>
+          <input type="number" min={1} max={5} value={(config.mentions_per_hour as number) ?? 2} onChange={e => onChange({ ...config, mentions_per_hour: Number(e.target.value) })} className="input w-full text-sm" />
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Brand Voice</label>
+        <input type="text" value={(config.brand_voice as string) ?? ''} onChange={e => onChange({ ...config, brand_voice: e.target.value })} placeholder="energetic, adventurous, bold" className="input w-full text-sm" />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Tagline</label>
+        <input type="text" value={(config.tagline as string) ?? ''} onChange={e => onChange({ ...config, tagline: e.target.value })} placeholder="Brand gives you wings" className="input w-full text-sm" />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Call to Action</label>
+        <input type="text" value={(config.cta as string) ?? ''} onChange={e => onChange({ ...config, cta: e.target.value })} placeholder="Visit brand.com" className="input w-full text-sm" />
+      </div>
+    </>
+  );
+}
+
+function MoodThemeConfig({ config, onChange }: { config: Record<string, unknown>; onChange: (c: Record<string, unknown>) => void }) {
+  return (
+    <>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Mood</label>
+        <select value={(config.mood as string) ?? 'balanced'} onChange={e => onChange({ ...config, mood: e.target.value })} className="input w-full text-sm">
+          {MOOD_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Description (optional)</label>
+        <input type="text" value={(config.description as string) ?? ''} onChange={e => onChange({ ...config, description: e.target.value })} placeholder="Additional mood guidance for DJ" className="input w-full text-sm" />
+      </div>
+    </>
+  );
+}
+
+function NewsThemeConfig({ config, onChange }: { config: Record<string, unknown>; onChange: (c: Record<string, unknown>) => void }) {
+  return (
+    <>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Max Mentions/Hour</label>
+        <input type="number" min={1} max={5} value={(config.max_mentions_per_hour as number) ?? 3} onChange={e => onChange({ ...config, max_mentions_per_hour: Number(e.target.value) })} className="input w-full text-sm" />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Categories (comma-separated)</label>
+        <input type="text" value={((config.categories as string[]) ?? []).join(', ')} onChange={e => onChange({ ...config, categories: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="local, entertainment, sports" className="input w-full text-sm" />
+      </div>
+    </>
   );
 }
