@@ -146,23 +146,28 @@ function sleep(ms: number): Promise<void> {
  * Returns the extracted value on success; throws on timeout.
  */
 async function pollUntil<T>(
-  url: string,
+  urlOrNull: string | null,
   token: string,
-  predicate: (body: unknown) => T | null,
+  predicate: ((body: unknown) => T | null) | (() => Promise<T | null>),
   intervalMs: number,
   timeoutMs: number,
   label: string,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) throw new Error(`${label}: poll GET ${url} returned ${res.status}`);
-    const body = await res.json();
-    const result = predicate(body);
+    let result: T | null;
+    if (urlOrNull) {
+      const res = await fetch(urlOrNull, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`${label}: poll GET ${urlOrNull} returned ${res.status}`);
+      const body = await res.json();
+      result = (predicate as (body: unknown) => T | null)(body);
+    } else {
+      result = await (predicate as () => Promise<T | null>)();
+    }
     if (result !== null) return result;
     await sleep(intervalMs);
   }
-  throw new Error(`${label}: timed out after ${timeoutMs / 1000}s polling ${url}`);
+  throw new Error(`${label}: timed out after ${timeoutMs / 1000}s`);
 }
 
 // ── Stage implementations ─────────────────────────────────────────────────────
@@ -190,19 +195,22 @@ async function stageGeneratePlaylist(
   const jobId = triggerData.job_id;
   if (!jobId) throw new Error('generate_playlist: scheduler did not return job_id');
 
-  // Poll until completed or failed (max 120s, every 3s)
+  // Poll the playlists table directly (shared DB) instead of the scheduler's
+  // job status API which requires UUID-format job IDs and auth.
+  const pool = getPool();
   const playlistId = await pollUntil<string>(
-    `${SCHEDULER_URL()}/api/v1/jobs/${jobId}`,
+    null, // no URL — we poll the DB
     token,
-    (body) => {
-      const b = body as { state?: string; returnvalue?: { playlistId?: string }; failedReason?: string };
-      if (b.state === 'failed') {
-        throw new Error(`generate_playlist: scheduler job failed — ${b.failedReason ?? 'unknown'}`);
-      }
-      if (b.state === 'completed' && b.returnvalue?.playlistId) {
-        return b.returnvalue.playlistId;
-      }
-      return null;
+    async () => {
+      const { rows } = await pool.query<{ id: string; status: string }>(
+        `SELECT id, status FROM playlists WHERE station_id = $1 AND date = $2 ORDER BY generated_at DESC NULLS LAST LIMIT 1`,
+        [stationId, date],
+      );
+      const pl = rows[0];
+      if (!pl) return null;
+      if (pl.status === 'failed') throw new Error('generate_playlist: playlist generation failed');
+      if (pl.status === 'ready' || pl.status === 'approved') return pl.id;
+      return null; // still generating
     },
     3000,
     120_000,

@@ -94,9 +94,9 @@ server {
         proxy_set_header X-Request-ID $request_id;
     }
 
-    # ─── Scheduler: pipeline runs ───────────────────────────────
+    # ─── Station: pipeline runs (Radio Program Factory) ─────────
     location ~ ^/api/v1/stations/[^/]+/pipeline/ {
-        set $svc http://${SCHEDULER_HOST}:3004;
+        set $svc http://${STATION_HOST}:3002;
         proxy_pass $svc;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

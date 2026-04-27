@@ -14,6 +14,30 @@ function webhookHeaders(): Record<string, string> {
   return headers;
 }
 
+/**
+ * Ensure a station exists in OwnRadio's DB before sending stream control events.
+ * Calls POST /stations which upserts by slug (creates if missing, updates if exists).
+ */
+export async function ensureStationOnOwnRadio(station: {
+  slug: string;
+  name: string;
+  streamUrl?: string;
+  genre?: string;
+  isLive?: boolean;
+  dj?: { name: string; bio?: string };
+}): Promise<void> {
+  if (!OWNRADIO_WEBHOOK_URL) return;
+  const res = await fetch(`${OWNRADIO_WEBHOOK_URL}/stations`, {
+    method: 'POST',
+    headers: webhookHeaders(),
+    body: JSON.stringify(station),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`OwnRadio station upsert failed (${res.status}): ${body}`);
+  }
+}
+
 export async function notifyStreamUrlChange(slug: string, streamUrl: string): Promise<void> {
   if (!OWNRADIO_WEBHOOK_URL) return;
   await fetch(`${OWNRADIO_WEBHOOK_URL}/webhooks/stations/${slug}/stream-control`, {
