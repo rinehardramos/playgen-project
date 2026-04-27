@@ -276,6 +276,16 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<s
       FROM dj_profiles WHERE id = $1`, [script.dj_profile_id]);
   const profile = profRows[0];
 
+  // For dual-DJ scripts, combine both names (e.g., "Kuya Jun & Ate Joy")
+  const secondaryId = (script as Record<string, unknown>).secondary_dj_profile_id as string | null;
+  if (profile && secondaryId) {
+    const { rows: secRows } = await pool.query<{ name: string }>(
+      `SELECT name FROM dj_profiles WHERE id = $1`, [secondaryId]);
+    if (secRows[0]) {
+      profile.name = `${profile.name} & ${secRows[0].name}`;
+    }
+  }
+
   const { rows: plRows } = await pool.query<{ date: string }>(
     `SELECT date FROM playlists WHERE id = $1`, [script.playlist_id],
   );
