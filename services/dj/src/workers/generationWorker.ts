@@ -1,7 +1,7 @@
 import { getPool } from '../db.js';
 import { getSocialProviders } from '../adapters/social/index.js';
 import { llmComplete } from '../adapters/llm/index.js';
-import { buildSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
+import { buildSystemPrompt, buildDualDjSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import type { StationIdentity } from '../lib/promptBuilder.js';
 import { logLlmUsage } from '../lib/usageLogger.js';
 import { checkLlmRateLimit } from '../lib/rateLimiter.js';
@@ -164,7 +164,7 @@ export async function runGenerationJob(
   // 1b. Load per-station settings (API key overrides, model, TTS provider, etc.)
   const stationSettings = await loadStationSettings(data.station_id);
 
-  // 2. Load DJ profile
+  // 2. Load DJ profile(s)
   let profile: DjProfile | null = null;
   if (data.dj_profile_id) {
     const { rows } = await pool.query<DjProfile>(
@@ -178,6 +178,17 @@ export async function runGenerationJob(
     profile = await getDefaultProfile(station.company_id);
   }
   if (!profile) throw new Error('No DJ profile found for station');
+
+  // 2a. Load secondary DJ profile for dual-DJ dialogue
+  let secondaryProfile: DjProfile | null = null;
+  if (data.secondary_dj_profile_id) {
+    const { rows } = await pool.query<DjProfile>(
+      `SELECT * FROM dj_profiles WHERE id = $1`,
+      [data.secondary_dj_profile_id],
+    );
+    secondaryProfile = rows[0] ?? null;
+  }
+  const isDualDj = !!secondaryProfile;
 
   // 2b. Pre-flight: fail fast if no LLM API key is available before creating any DB records.
   //     Both per-station keys (from station columns / station_settings) and env var defaults
@@ -336,18 +347,25 @@ export async function runGenerationJob(
       .map((s) => ({ id: '', listener_name: s.listener_name, message: s.message })),
   ].slice(0, 3);
 
-  // 5. Create the script record
+  // 5. Create the script record (with dual-DJ fields when applicable)
+  const voiceMap = isDualDj
+    ? (data.voice_map ?? { [profile.name]: profile.tts_voice_id, [secondaryProfile!.name]: secondaryProfile!.tts_voice_id })
+    : null;
+
   const { rows: scriptRows } = await pool.query(
     `INSERT INTO dj_scripts
-       (playlist_id, station_id, dj_profile_id, review_status, llm_model, total_segments)
-     VALUES ($1, $2, $3, $4, $5, 0)
+       (playlist_id, station_id, dj_profile_id, secondary_dj_profile_id,
+        review_status, llm_model, total_segments, voice_map)
+     VALUES ($1, $2, $3, $4, $5, $6, 0, $7)
      RETURNING id`,
     [
       data.playlist_id,
       data.station_id,
       profile.id,
+      secondaryProfile?.id ?? null,
       data.auto_approve ? 'auto_approved' : 'pending_review',
       profile.llm_model,
+      voiceMap ? JSON.stringify(voiceMap) : null,
     ],
   );
   const script_id: string = scriptRows[0].id;
@@ -438,7 +456,9 @@ export async function runGenerationJob(
       previousSegmentTexts: generatedTexts.slice(-4),
       segmentIndex: position,
     };
-    const systemPrompt = buildSystemPrompt(profile!);
+    const systemPrompt = isDualDj
+      ? buildDualDjSystemPrompt(profile!, secondaryProfile!, station.locale_code)
+      : buildSystemPrompt(profile!, station.locale_code);
     const userPrompt = buildUserPrompt(ctx) + rejectionContext;
 
     // Soft rate limit check — skip segment rather than abort the whole script
@@ -483,13 +503,16 @@ export async function runGenerationJob(
       );
       throw llmErr;
     }
+    const nonSongSpeaker = isDualDj
+      ? (script_text.match(/^\[([^\]]+)\]/)?.[1] ?? profile!.name)
+      : null;
     const pos = position++;
     const segResult = await pool.query(
       `INSERT INTO dj_segments
-         (script_id, playlist_entry_id, segment_type, position, script_text)
-       VALUES ($1, $2, $3, $4, $5)
+         (script_id, playlist_entry_id, segment_type, position, script_text, speaker)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [script_id, null, segment_type, pos, script_text],
+      [script_id, null, segment_type, pos, script_text, nonSongSpeaker],
     );
     generatedSegments.push({ id: segResult.rows[0].id, script_text, position: pos });
     generatedTexts.push(script_text);
@@ -639,7 +662,9 @@ export async function runGenerationJob(
         segmentIndex: position,
       };
 
-      const systemPrompt = buildSystemPrompt(profile);
+      const systemPrompt = isDualDj
+        ? buildDualDjSystemPrompt(profile, secondaryProfile!, station.locale_code)
+        : buildSystemPrompt(profile, station.locale_code);
       const userPrompt = buildUserPrompt(ctx) + rejectionContext;
 
       console.info(
@@ -691,13 +716,18 @@ export async function runGenerationJob(
         throw llmErr;
       }
 
+      // For dual-DJ, detect the primary speaker from [Name] tags
+      const speakerTag = isDualDj
+        ? (script_text.match(/^\[([^\]]+)\]/)?.[1] ?? profile.name)
+        : null;
+
       const pos = position++;
       const segResult = await pool.query(
         `INSERT INTO dj_segments
-           (script_id, playlist_entry_id, segment_type, position, script_text)
-         VALUES ($1, $2, $3, $4, $5)
+           (script_id, playlist_entry_id, segment_type, position, script_text, speaker)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id`,
-        [script_id, entry.id, segment_type, pos, script_text],
+        [script_id, entry.id, segment_type, pos, script_text, speakerTag],
       );
 
       generatedSegments.push({ id: segResult.rows[0].id, script_text, position: pos });
@@ -728,7 +758,9 @@ export async function runGenerationJob(
             segmentIndex: position,
           };
 
-          const shoutoutSystemPrompt = buildSystemPrompt(profile);
+          const shoutoutSystemPrompt = isDualDj
+            ? buildDualDjSystemPrompt(profile, secondaryProfile!, station.locale_code)
+            : buildSystemPrompt(profile, station.locale_code);
           const shoutoutUserPrompt = buildUserPrompt(shoutoutCtx) + (data.rejection_notes
             ? `\n\nIMPORTANT: The previous script was rejected by the reviewer. Their feedback: "${data.rejection_notes}". Please rewrite accordingly.`
             : '');

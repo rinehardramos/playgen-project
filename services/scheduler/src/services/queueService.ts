@@ -67,9 +67,31 @@ generationWorker.on('failed', (job, err) => {
 
 /**
  * Get a JWT token for internal service-to-service calls.
- * Uses ADMIN_EMAIL + ADMIN_PASSWORD env vars.
+ * Cached for 10 minutes to prevent concurrent auth race conditions (#496).
  */
+let _cachedToken: string | null = null;
+let _cachedTokenExpiry = 0;
+const TOKEN_CACHE_MS = 10 * 60 * 1000;
+let _tokenFetchPromise: Promise<string> | null = null;
+
 async function getServiceToken(): Promise<string> {
+  if (_cachedToken && Date.now() < _cachedTokenExpiry) return _cachedToken;
+
+  // Deduplicate concurrent requests — share a single in-flight fetch
+  if (_tokenFetchPromise) return _tokenFetchPromise;
+
+  _tokenFetchPromise = fetchServiceToken();
+  try {
+    const token = await _tokenFetchPromise;
+    _cachedToken = token;
+    _cachedTokenExpiry = Date.now() + TOKEN_CACHE_MS;
+    return token;
+  } finally {
+    _tokenFetchPromise = null;
+  }
+}
+
+async function fetchServiceToken(): Promise<string> {
   const authBase = process.env.AUTH_INTERNAL_URL ?? 'http://auth:3001';
   const email = process.env.ADMIN_EMAIL;
   const password = process.env.ADMIN_PASSWORD;
