@@ -304,7 +304,7 @@ services:
     environment:
       PORT: 3099
     volumes:
-      - claude_auth:/root/.claude   # persists login across restarts
+      - claude_auth:/home/claude/.claude   # persists login across restarts
     restart: unless-stopped
 
 volumes:
