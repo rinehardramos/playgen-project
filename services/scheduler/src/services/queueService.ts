@@ -45,12 +45,22 @@ const generationWorker = new Worker<GeneratePlaylistParams>(
 
 generationWorker.on('completed', (job) => {
   const result = job.returnvalue as GeneratePlaylistResult | undefined;
+  const runId = job.data.pipelineRunId;
   console.info(
     `[queueService] Job ${job.id} completed — station=${job.data.stationId} date=${job.data.date} playlist=${result?.playlistId}`,
   );
 
+  // Update pipeline run if tracked
+  if (runId && result?.playlistId) {
+    import('./pipelineTracker.js').then(({ completeStage, linkResource, startStage }) => {
+      completeStage(runId, 'playlist', { metadata: { playlist_id: result.playlistId } }).catch(() => {});
+      linkResource(runId, 'playlist_id', result.playlistId).catch(() => {});
+      startStage(runId, 'dj_script').catch(() => {});
+    }).catch(() => {});
+  }
+
   if (result?.playlistId) {
-    triggerDjPipeline(job.data.stationId, result.playlistId).catch((err) =>
+    triggerDjPipeline(job.data.stationId, result.playlistId, runId).catch((err) =>
       console.error(`[queueService] DJ auto-trigger failed for playlist ${result.playlistId}`, err),
     );
   }
@@ -61,6 +71,14 @@ generationWorker.on('failed', (job, err) => {
     `[queueService] Job ${job?.id} failed — station=${job?.data.stationId} date=${job?.data.date}`,
     err,
   );
+
+  // Update pipeline run if tracked
+  const runId = job?.data.pipelineRunId;
+  if (runId) {
+    import('./pipelineTracker.js').then(({ failStage }) => {
+      failStage(runId, 'playlist', String(err)).catch(() => {});
+    }).catch(() => {});
+  }
 });
 
 // ─── Auto-trigger DJ pipeline ─────────────────────────────────────────────────
@@ -93,7 +111,7 @@ async function getServiceToken(): Promise<string> {
  * After playlist generation succeeds, check if the station has DJ enabled
  * and auto-trigger DJ script generation + song audio sourcing.
  */
-async function triggerDjPipeline(stationId: string, playlistId: string): Promise<void> {
+async function triggerDjPipeline(stationId: string, playlistId: string, pipelineRunId?: string): Promise<void> {
   const pool = getPool();
 
   const { rows } = await pool.query<{
@@ -115,7 +133,7 @@ async function triggerDjPipeline(stationId: string, playlistId: string): Promise
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({ auto_approve: station.dj_auto_approve }),
+    body: JSON.stringify({ auto_approve: station.dj_auto_approve, pipeline_run_id: pipelineRunId }),
   });
 
   if (!res.ok) {

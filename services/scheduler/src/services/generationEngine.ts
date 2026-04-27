@@ -71,6 +71,7 @@ export interface GeneratePlaylistParams {
   templateId?: string;
   triggeredBy: 'manual' | 'cron';
   userId?: string;
+  pipelineRunId?: string;
 }
 
 export interface GeneratePlaylistResult {

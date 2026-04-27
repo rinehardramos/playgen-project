@@ -9,6 +9,7 @@ import { startCron, stopCron } from './services/cronService';
 import { closeQueue } from './services/queueService';
 import { dailyProgramRoutes } from './routes/dailyProgram';
 import { generateDayRoutes } from './routes/generateDay';
+import { pipelineRoutes } from './routes/pipeline';
 
 const app = Fastify({
   logger: {
@@ -33,6 +34,7 @@ app.register(schedulerRoutes, { prefix: '/api/v1' });
 app.register(configRoutes, { prefix: '/api/v1' });
 app.register(dailyProgramRoutes, { prefix: '/api/v1' });
 app.register(generateDayRoutes, { prefix: '/api/v1' });
+app.register(pipelineRoutes, { prefix: '/api/v1' });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 
