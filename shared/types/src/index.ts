@@ -541,6 +541,10 @@ export interface DjShowManifest {
 export interface GenerateScriptRequest {
   playlist_id: string;
   dj_profile_id?: string;   // falls back to station default
+  secondary_dj_profile_id?: string;
+  tertiary_dj_profile_id?: string;
+  voice_map?: Record<string, string>;
+  auto_approve?: boolean;
 }
 
 export interface ReviewScriptRequest {

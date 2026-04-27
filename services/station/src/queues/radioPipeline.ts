@@ -38,6 +38,7 @@ export interface RadioPipelineJobData {
 // ── Config shape (stored in pipeline_runs.config) ────────────────────────────
 
 interface PipelineConfig {
+  tertiary_dj_profile_id?: string;
   dj_profile_id?: string;
   secondary_dj_profile_id?: string;
   voice_map?: Record<string, string>;
@@ -158,6 +159,7 @@ async function pollUntil<T>(
     let result: T | null;
     if (urlOrNull) {
       const res = await fetch(urlOrNull, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.status === 404) { result = null; await sleep(intervalMs); continue; }
       if (!res.ok) throw new Error(`${label}: poll GET ${urlOrNull} returned ${res.status}`);
       const body = await res.json();
       result = (predicate as (body: unknown) => T | null)(body);
@@ -232,14 +234,14 @@ async function stageGenerateScript(
   config: PipelineConfig,
   token: string,
 ): Promise<string> {
-  const { dj_profile_id, secondary_dj_profile_id, voice_map, auto_approve } = config;
+  const { dj_profile_id, secondary_dj_profile_id, tertiary_dj_profile_id, voice_map, auto_approve } = config;
 
   const triggerRes = await fetch(
     `${DJ_URL()}/api/v1/dj/playlists/${playlistId}/generate`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ dj_profile_id, secondary_dj_profile_id, voice_map, auto_approve }),
+      body: JSON.stringify({ dj_profile_id, secondary_dj_profile_id, tertiary_dj_profile_id, voice_map, auto_approve }),
     },
   );
   if (!triggerRes.ok) {
@@ -259,7 +261,7 @@ async function stageGenerateScript(
       return null;
     },
     5000,
-    300_000,
+    600_000,
     'generate_script',
   );
 
@@ -285,7 +287,7 @@ async function stageGenerateTts(scriptId: string, token: string): Promise<void> 
       return allDone ? true : null;
     },
     5000,
-    300_000,
+    600_000,
     'generate_tts',
   );
 }

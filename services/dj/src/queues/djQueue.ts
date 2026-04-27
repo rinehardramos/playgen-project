@@ -11,6 +11,7 @@ export interface DjGenerationJobData {
   auto_approve: boolean;
   rejection_notes?: string;
   secondary_dj_profile_id?: string;
+  tertiary_dj_profile_id?: string;
   voice_map?: Record<string, string>;
 }
 

@@ -353,6 +353,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
         dj_profile_id,
         auto_approve: body?.auto_approve ?? station.dj_auto_approve,
         secondary_dj_profile_id: body?.secondary_dj_profile_id ?? undefined,
+        tertiary_dj_profile_id: body?.tertiary_dj_profile_id ?? undefined,
         voice_map: body?.voice_map ?? undefined,
       });
 

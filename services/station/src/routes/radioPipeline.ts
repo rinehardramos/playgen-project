@@ -15,6 +15,7 @@ interface TriggerBody {
   date?: string;
   dj_profile_id?: string;
   secondary_dj_profile_id?: string;
+  tertiary_dj_profile_id?: string;
   voice_map?: Record<string, string>;
   auto_approve?: boolean;
   publish?: boolean;
@@ -32,6 +33,7 @@ export default async function radioPipelineRoutes(app: FastifyInstance): Promise
       const {
         dj_profile_id,
         secondary_dj_profile_id,
+        tertiary_dj_profile_id,
         voice_map,
         auto_approve,
         publish,
@@ -64,6 +66,7 @@ export default async function radioPipelineRoutes(app: FastifyInstance): Promise
       const config = JSON.stringify({
         dj_profile_id,
         secondary_dj_profile_id,
+        tertiary_dj_profile_id,
         voice_map,
         auto_approve,
         publish,
