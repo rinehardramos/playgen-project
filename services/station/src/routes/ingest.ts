@@ -289,10 +289,17 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
       // ── 8. Auto-register station in OwnRadio + notify stream URL ──────
       const ownradioUrl = process.env.OWNRADIO_WEBHOOK_URL;
       const webhookSecret = process.env.PLAYGEN_WEBHOOK_SECRET;
+      const gatewayUrl = process.env.GATEWAY_URL ?? process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
+      const stationStreamUrl = stream_url ?? `${gatewayUrl}/stream/${station_id}/playlist.m3u8`;
+
+      // Persist stream_url on the station record so public API can return it
+      await pool.query(
+        `UPDATE stations SET stream_url = $1, updated_at = NOW() WHERE id = $2`,
+        [stationStreamUrl, station_id],
+      );
+
       if (ownradioUrl && stationData.slug) {
         // Upsert station in OwnRadio (creates if not exists, updates if exists)
-        const gatewayUrl = process.env.GATEWAY_URL ?? process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
-        const stationStreamUrl = stream_url ?? `${gatewayUrl}/stream/${station_id}/playlist.m3u8`;
         fetch(`${ownradioUrl}/stations`, {
           method: 'POST',
           headers: {

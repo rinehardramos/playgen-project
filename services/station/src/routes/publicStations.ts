@@ -26,6 +26,12 @@ function formatDj(d: DjRow) {
   };
 }
 
+const GATEWAY_URL = process.env.GATEWAY_URL ?? process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
+
+function resolveStreamUrl(stationId: string, stored: string | null): string {
+  return stored ?? `${GATEWAY_URL}/stream/${stationId}/playlist.m3u8`;
+}
+
 export async function publicStationRoutes(app: FastifyInstance) {
   // GET /public/stations — list all active stations with all assigned DJs
   app.get('/public/stations', async () => {
@@ -34,7 +40,7 @@ export async function publicStationRoutes(app: FastifyInstance) {
     const { rows: stations } = await pool.query(`
       SELECT id, name, slug, timezone, locale_code, city, country_code,
         callsign, tagline, frequency, is_active, dj_enabled,
-        logo_url, primary_color, secondary_color
+        logo_url, primary_color, secondary_color, stream_url
       FROM stations
       WHERE is_active = true AND slug IS NOT NULL
       ORDER BY name ASC
@@ -70,7 +76,7 @@ export async function publicStationRoutes(app: FastifyInstance) {
         name: s.name,
         slug: s.slug,
         description: s.tagline ?? '',
-        streamUrl: '',
+        streamUrl: resolveStreamUrl(s.id, s.stream_url),
         metadataUrl: '',
         genre: '',
         artworkUrl: s.logo_url ?? null,
@@ -90,7 +96,7 @@ export async function publicStationRoutes(app: FastifyInstance) {
     const { rows } = await pool.query(`
       SELECT id, name, slug, timezone, locale_code, city, country_code,
         callsign, tagline, frequency, is_active, dj_enabled,
-        logo_url, primary_color, secondary_color
+        logo_url, primary_color, secondary_color, stream_url
       FROM stations
       WHERE slug = $1 AND is_active = true
     `, [req.params.slug]);
@@ -114,7 +120,7 @@ export async function publicStationRoutes(app: FastifyInstance) {
       name: st.name,
       slug: st.slug,
       description: st.tagline ?? '',
-      streamUrl: '',
+      streamUrl: resolveStreamUrl(st.id, st.stream_url),
       metadataUrl: '',
       genre: '',
       artworkUrl: st.logo_url ?? null,

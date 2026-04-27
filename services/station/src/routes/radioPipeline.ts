@@ -71,9 +71,9 @@ export default async function radioPipelineRoutes(app: FastifyInstance): Promise
       });
 
       const { rows: runRows } = await pool.query<{ id: string }>(
-        `INSERT INTO pipeline_runs (station_id, status, config)
-         VALUES ($1, 'queued', $2) RETURNING id`,
-        [station_id, config],
+        `INSERT INTO pipeline_runs (station_id, date, status, config)
+         VALUES ($1, $2, 'queued', $3) RETURNING id`,
+        [station_id, date, config],
       );
       const pipeline_run_id = runRows[0].id;
 
