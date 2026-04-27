@@ -99,8 +99,8 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
       const { rows: stationRows } = await pool.query<{ id: string }>(
         `INSERT INTO stations
            (company_id, name, slug, timezone, locale_code, city, country_code,
-            callsign, tagline, frequency, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+            callsign, tagline, frequency, is_active, dj_enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, true)
          ON CONFLICT (company_id, slug) WHERE slug IS NOT NULL
          DO UPDATE SET
            name         = EXCLUDED.name,
@@ -111,6 +111,7 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
            callsign     = EXCLUDED.callsign,
            tagline      = EXCLUDED.tagline,
            frequency    = EXCLUDED.frequency,
+           dj_enabled   = true,
            updated_at   = NOW()
          RETURNING id`,
         [
@@ -156,6 +157,15 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
         ],
       );
       const dj_profile_id = profileRows[0].id;
+
+      // ── 3b. Assign DJ to station dayparts (idempotent) ───────────────
+      // Creates a 'morning' daypart if no assignment exists for this station+DJ
+      await pool.query(
+        `INSERT INTO dj_daypart_assignments (station_id, dj_profile_id, daypart, start_hour, end_hour)
+         VALUES ($1, $2, 'morning', 6, 12)
+         ON CONFLICT (station_id, daypart) DO UPDATE SET dj_profile_id = EXCLUDED.dj_profile_id`,
+        [station_id, dj_profile_id],
+      );
 
       // ── 4. Resolve default category for song upserts ──────────────────
       // Songs require a category_id. Use the first active category for the station,
