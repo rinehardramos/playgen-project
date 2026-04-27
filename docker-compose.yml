@@ -305,8 +305,6 @@ services:
       PORT: 3099
     volumes:
       - claude_auth:/root/.claude   # persists login across restarts
-    networks:
-      - playgen
     restart: unless-stopped
 
 volumes:
