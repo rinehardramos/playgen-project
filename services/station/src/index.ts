@@ -13,6 +13,7 @@ import { programRoutes } from './routes/programs';
 import { systemLogRoutes } from './routes/systemLogs';
 import { ingestRoutes } from './routes/ingest';
 import { publishRoutes } from './routes/publish';
+import { publicStationRoutes } from './routes/publicStations';
 import { startPublishWorker } from './queues/publishPipeline';
 
 const app = Fastify({
@@ -40,6 +41,7 @@ app.register(programRoutes,        { prefix: '/api/v1' });
 app.register(systemLogRoutes,      { prefix: '/api/v1' });
 app.register(ingestRoutes,         { prefix: '/api/v1' });
 app.register(publishRoutes,        { prefix: '/api/v1' });
+app.register(publicStationRoutes,  { prefix: '/api/v1' });
 
 app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);

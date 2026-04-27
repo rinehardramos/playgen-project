@@ -49,6 +49,15 @@ server {
         proxy_set_header X-Request-ID $request_id;
     }
 
+    # ─── Public: no-auth stations for OwnRadio frontend ─────────
+    location ~ ^/api/v1/public/ {
+        set $svc http://${STATION_HOST}:3002;
+        proxy_pass $svc;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Request-ID $request_id;
+    }
+
     # ─── Company & User & Role routes ────────────────────────────
     location ~ ^/api/v1/(companies|users|roles) {
         set $svc http://${STATION_HOST}:3002;
