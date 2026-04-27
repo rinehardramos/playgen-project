@@ -144,11 +144,12 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Poll a URL with GET until predicate returns a non-null value or timeout.
+ * Accepts a token factory so long-running polls refresh the JWT automatically.
  * Returns the extracted value on success; throws on timeout.
  */
 async function pollUntil<T>(
   urlOrNull: string | null,
-  token: string,
+  getToken: () => Promise<string>,
   predicate: ((body: unknown) => T | null) | (() => Promise<T | null>),
   intervalMs: number,
   timeoutMs: number,
@@ -158,6 +159,7 @@ async function pollUntil<T>(
   while (Date.now() < deadline) {
     let result: T | null;
     if (urlOrNull) {
+      const token = await getToken();
       const res = await fetch(urlOrNull, { headers: { Authorization: `Bearer ${token}` } });
       if (res.status === 404) { result = null; await sleep(intervalMs); continue; }
       if (!res.ok) throw new Error(`${label}: poll GET ${urlOrNull} returned ${res.status}`);
@@ -178,8 +180,9 @@ async function stageGeneratePlaylist(
   runId: string,
   stationId: string,
   date: string,
-  token: string,
+  getToken: () => Promise<string>,
 ): Promise<string> {
+  const token = await getToken();
   // Trigger generation
   const triggerRes = await fetch(
     `${SCHEDULER_URL()}/api/v1/stations/${stationId}/playlists/generate`,
@@ -202,7 +205,7 @@ async function stageGeneratePlaylist(
   const pool = getPool();
   const playlistId = await pollUntil<string>(
     null, // no URL — we poll the DB
-    token,
+    getToken,
     async () => {
       const { rows } = await pool.query<{ id: string; status: string }>(
         `SELECT id, status FROM playlists WHERE station_id = $1 AND date = $2 ORDER BY generated_at DESC NULLS LAST LIMIT 1`,
@@ -232,10 +235,11 @@ async function stageGenerateScript(
   runId: string,
   playlistId: string,
   config: PipelineConfig,
-  token: string,
+  getToken: () => Promise<string>,
 ): Promise<string> {
   const { dj_profile_id, secondary_dj_profile_id, tertiary_dj_profile_id, voice_map, auto_approve } = config;
 
+  const token = await getToken();
   const triggerRes = await fetch(
     `${DJ_URL()}/api/v1/dj/playlists/${playlistId}/generate`,
     {
@@ -251,17 +255,17 @@ async function stageGenerateScript(
   const triggerData = await triggerRes.json() as { job_id?: string };
   if (!triggerData.job_id) throw new Error('generate_script: DJ service did not return job_id');
 
-  // Poll until script exists AND generation_ms is set (max 300s, every 5s)
+  // Poll until script exists AND generation_ms is set (30min — 96 tracks × LLM calls)
   const scriptId = await pollUntil<string>(
     `${DJ_URL()}/api/v1/dj/playlists/${playlistId}/script`,
-    token,
+    getToken,
     (body) => {
       const b = body as { id?: string; generation_ms?: number | null } | null;
       if (b?.id && b.generation_ms != null) return b.id;
       return null;
     },
     5000,
-    600_000,
+    1_800_000,
     'generate_script',
   );
 
@@ -274,12 +278,12 @@ async function stageGenerateScript(
   return scriptId;
 }
 
-async function stageGenerateTts(scriptId: string, token: string): Promise<void> {
+async function stageGenerateTts(scriptId: string, getToken: () => Promise<string>): Promise<void> {
   // TTS is auto-triggered by the DJ worker when auto_approve=true.
   // We simply poll until all segments have a non-empty audio_url (max 300s, every 5s).
   await pollUntil<true>(
     `${DJ_URL()}/api/v1/dj/scripts/${scriptId}`,
-    token,
+    getToken,
     (body) => {
       const b = body as { segments?: Array<{ audio_url?: string | null }> } | null;
       if (!b?.segments || b.segments.length === 0) return null;
@@ -295,7 +299,6 @@ async function stageGenerateTts(scriptId: string, token: string): Promise<void> 
 async function stagePublish(
   stationId: string,
   scriptId: string,
-  token: string,
 ): Promise<void> {
   const pool = getPool();
 
@@ -362,14 +365,12 @@ export function startRadioPipelineWorker(): Worker<RadioPipelineJobData> {
       const { config, stages_completed: done } = run;
       const date = config.date ?? new Date().toISOString().split('T')[0];
 
-      const token = await getServiceToken();
-
       // ── Stage 1: generate_playlist ──────────────────────────────────────────
       let playlistId = run.playlist_id ?? '';
       if (!done.generate_playlist) {
         await setStage(pipeline_run_id, 'generate_playlist');
         const start = Date.now();
-        playlistId = await stageGeneratePlaylist(pipeline_run_id, station_id, date, token);
+        playlistId = await stageGeneratePlaylist(pipeline_run_id, station_id, date, getServiceToken);
         await completeStage(pipeline_run_id, 'generate_playlist', {
           playlist_id: playlistId,
           duration_ms: Date.now() - start,
@@ -381,7 +382,7 @@ export function startRadioPipelineWorker(): Worker<RadioPipelineJobData> {
       if (!done.generate_script) {
         await setStage(pipeline_run_id, 'generate_script');
         const start = Date.now();
-        scriptId = await stageGenerateScript(pipeline_run_id, playlistId, config, token);
+        scriptId = await stageGenerateScript(pipeline_run_id, playlistId, config, getServiceToken);
         await completeStage(pipeline_run_id, 'generate_script', {
           script_id: scriptId,
           duration_ms: Date.now() - start,
@@ -393,7 +394,7 @@ export function startRadioPipelineWorker(): Worker<RadioPipelineJobData> {
         if (config.auto_approve) {
           await setStage(pipeline_run_id, 'generate_tts');
           const start = Date.now();
-          await stageGenerateTts(scriptId, token);
+          await stageGenerateTts(scriptId, getServiceToken);
           await completeStage(pipeline_run_id, 'generate_tts', { duration_ms: Date.now() - start });
         } else {
           await completeStage(pipeline_run_id, 'generate_tts', { skipped: true });
@@ -405,7 +406,7 @@ export function startRadioPipelineWorker(): Worker<RadioPipelineJobData> {
         if (config.publish) {
           await setStage(pipeline_run_id, 'publish');
           const start = Date.now();
-          await stagePublish(station_id, scriptId, token);
+          await stagePublish(station_id, scriptId);
           await completeStage(pipeline_run_id, 'publish', { duration_ms: Date.now() - start });
         } else {
           await completeStage(pipeline_run_id, 'publish', { skipped: true });
