@@ -159,10 +159,9 @@ function buildLocaleInstructions(localeCode?: string | null): string | null {
   const lc = localeCode.toLowerCase();
 
   if (lc.startsWith('fil') || lc === 'tl' || lc === 'tl-ph') {
-    return `LANGUAGE: Write entirely in Tagalog/Filipino. Song titles and artist names stay in their original language.
-TTS PRONUNCIATION: After each Tagalog phrase or word, add a phonetic English respelling in parentheses so an English TTS engine can pronounce it naturally.
-Example: "Magandang umaga (mah-gahn-dahng oo-mah-gah) sa inyong lahat (sah een-yohng lah-haht)!"
-Keep parenthetical respellings brief — only the sounds, no explanations. Every Tagalog sentence needs them.`;
+    return `LANGUAGE: Write in Taglish — English-dominant with natural Tagalog words woven in (e.g. "talaga", "naman", "diba", "grabe", "sige", "kaya", "ano").
+Song titles and artist names stay in their original language.
+No phonetic respellings needed — the TTS engine handles Filipino pronunciation natively.`;
   }
 
   // Add more locales as needed
@@ -276,6 +275,63 @@ VARIETY IS ESSENTIAL — every segment must feel distinct:
 - NEVER open two segments the same way
 - Alternate who leads each segment
 - Mix dynamics: sometimes playful banter, sometimes one host geeking out while the other teases`);
+
+  return lines.join('\n').trim();
+}
+
+/**
+ * System prompt for multi-DJ dialogue (2 or more hosts).
+ * Generalises buildDualDjSystemPrompt for N profiles.
+ */
+export function buildMultiDjSystemPrompt(
+  profiles: DjProfile[],
+  localeCode?: string | null,
+): string {
+  if (profiles.length < 2) return buildSystemPrompt(profiles[0]!, localeCode);
+
+  const names = profiles.map((p) => s(p.name, LIMITS.name));
+  const nameList = names.join(', ');
+
+  const lines: string[] = [
+    `You are writing a radio show with ${names.length} hosts: ${nameList}.`,
+  ];
+
+  for (const [i, p] of profiles.entries()) {
+    lines.push('');
+    lines.push(`${names[i]}'s persona:`);
+    lines.push(wrapUntrusted('persona.personality', p.personality, LIMITS.personality));
+    lines.push(`Voice style: ${wrapUntrusted('persona.voice_style', p.voice_style, LIMITS.voice_style)}`);
+    const cfg = p.persona_config;
+    if (cfg && Object.keys(cfg).length > 0) {
+      lines.push(buildPersonaSection(cfg));
+    }
+  }
+
+  const localeInstr = buildLocaleInstructions(localeCode);
+  if (localeInstr) {
+    lines.push('');
+    lines.push(localeInstr);
+  }
+
+  const tagLines = names.map((n) => `[${n}] Spoken text here...`).join('\n');
+  lines.push('');
+  lines.push(`FORMAT — Tag every line with the speaker's name in brackets:
+${tagLines}
+
+Rules:
+- Write ONLY spoken dialogue — no stage directions, no asterisks, no emojis
+- Every line MUST start with one of: ${names.map((n) => `[${n}]`).join(', ')}
+- Write natural multi-host banter — hosts react to each other, joke, agree, disagree
+- Rotate who leads each segment; all hosts should contribute roughly equally
+- Keep the energy of a real ensemble show: lively, spontaneous, never scripted-sounding
+- Be concise: each host's turn should be 1-2 sentences
+- Most segments should have 3-6 exchanges total
+- Never break the fourth wall or mention AI
+
+VARIETY IS ESSENTIAL — every segment must feel distinct:
+- NEVER open two segments the same way
+- Rotate who leads each exchange
+- Mix dynamics: playful teasing, one host riffing while others react, quick back-and-forth`);
 
   return lines.join('\n').trim();
 }

@@ -34,6 +34,7 @@ export const config = {
     provider: process.env.TTS_PROVIDER ?? 'openai',
     openaiApiKey: process.env.OPENAI_API_KEY ?? '',
     elevenlabsApiKey: process.env.ELEVENLABS_API_KEY ?? '',
+    elevenlabsModel: process.env.ELEVENLABS_MODEL ?? 'eleven_multilingual_v2',
     googleApiKey: process.env.GOOGLE_TTS_API_KEY ?? '',
     geminiApiKey: process.env.GEMINI_API_KEY ?? '',
     mistralApiKey: process.env.MISTRAL_API_KEY ?? '',

@@ -1,7 +1,7 @@
 import { getPool } from '../db.js';
 import { getSocialProviders } from '../adapters/social/index.js';
 import { llmComplete } from '../adapters/llm/index.js';
-import { buildSystemPrompt, buildDualDjSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
+import { buildSystemPrompt, buildDualDjSystemPrompt, buildMultiDjSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import type { StationIdentity } from '../lib/promptBuilder.js';
 import { logLlmUsage } from '../lib/usageLogger.js';
 import { checkLlmRateLimit } from '../lib/rateLimiter.js';
@@ -179,7 +179,7 @@ export async function runGenerationJob(
   }
   if (!profile) throw new Error('No DJ profile found for station');
 
-  // 2a. Load secondary DJ profile for dual-DJ dialogue
+  // 2a. Load secondary and tertiary DJ profiles for multi-DJ dialogue
   let secondaryProfile: DjProfile | null = null;
   if (data.secondary_dj_profile_id) {
     const { rows } = await pool.query<DjProfile>(
@@ -188,7 +188,20 @@ export async function runGenerationJob(
     );
     secondaryProfile = rows[0] ?? null;
   }
+  let tertiaryProfile: DjProfile | null = null;
+  if (data.tertiary_dj_profile_id) {
+    const { rows } = await pool.query<DjProfile>(
+      `SELECT * FROM dj_profiles WHERE id = $1`,
+      [data.tertiary_dj_profile_id],
+    );
+    tertiaryProfile = rows[0] ?? null;
+  }
   const isDualDj = !!secondaryProfile;
+  const allProfiles: DjProfile[] = [
+    profile,
+    ...(secondaryProfile ? [secondaryProfile] : []),
+    ...(tertiaryProfile ? [tertiaryProfile] : []),
+  ];
 
   // 2b. Pre-flight: fail fast if no LLM API key is available before creating any DB records.
   //     Both per-station keys (from station columns / station_settings) and env var defaults
@@ -347,9 +360,9 @@ export async function runGenerationJob(
       .map((s) => ({ id: '', listener_name: s.listener_name, message: s.message })),
   ].slice(0, 3);
 
-  // 5. Create the script record (with dual-DJ fields when applicable)
+  // 5. Create the script record (with multi-DJ fields when applicable)
   const voiceMap = isDualDj
-    ? (data.voice_map ?? { [profile.name]: profile.tts_voice_id, [secondaryProfile!.name]: secondaryProfile!.tts_voice_id })
+    ? (data.voice_map ?? Object.fromEntries(allProfiles.map((p) => [p.name, p.tts_voice_id])))
     : null;
 
   const { rows: scriptRows } = await pool.query(
@@ -482,7 +495,7 @@ export async function runGenerationJob(
         : undefined,
     };
     const systemPrompt = isDualDj
-      ? buildDualDjSystemPrompt(profile!, secondaryProfile!, station.locale_code)
+      ? buildMultiDjSystemPrompt(allProfiles, station.locale_code)
       : buildSystemPrompt(profile!, station.locale_code);
     const userPrompt = buildUserPrompt(ctx) + rejectionContext;
 
@@ -691,7 +704,7 @@ export async function runGenerationJob(
       };
 
       const systemPrompt = isDualDj
-        ? buildDualDjSystemPrompt(profile, secondaryProfile!, station.locale_code)
+        ? buildMultiDjSystemPrompt(allProfiles, station.locale_code)
         : buildSystemPrompt(profile, station.locale_code);
       const userPrompt = buildUserPrompt(ctx) + rejectionContext;
 
@@ -790,7 +803,7 @@ export async function runGenerationJob(
           };
 
           const shoutoutSystemPrompt = isDualDj
-            ? buildDualDjSystemPrompt(profile, secondaryProfile!, station.locale_code)
+            ? buildMultiDjSystemPrompt(allProfiles, station.locale_code)
             : buildSystemPrompt(profile, station.locale_code);
           const shoutoutUserPrompt = buildUserPrompt(shoutoutCtx) + (data.rejection_notes
             ? `\n\nIMPORTANT: The previous script was rejected by the reviewer. Their feedback: "${data.rejection_notes}". Please rewrite accordingly.`

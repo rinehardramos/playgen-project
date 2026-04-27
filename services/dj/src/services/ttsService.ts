@@ -34,6 +34,7 @@ export interface TtsProviderConfig {
   provider: string;
   apiKey: string;
   voiceId: string;
+  model?: string;
 }
 
 /**
@@ -57,6 +58,7 @@ export async function generateSegmentTts(
   const ttsAdapter = getTtsAdapter({
     provider: providerCfg.provider,
     apiKey: providerCfg.apiKey,
+    model: providerCfg.model,
   });
 
   const result = await ttsAdapter.generate({
@@ -199,6 +201,7 @@ export async function generateDialogueTts(
       const ttsAdapter = getTtsAdapter({
         provider: providerCfg.provider,
         apiKey: providerCfg.apiKey,
+        model: providerCfg.model,
       });
 
       const result = await ttsAdapter.generate({
@@ -345,8 +348,9 @@ export async function loadTtsProviderConfig(
       : (stationKeys.openai_api_key ?? config.tts.openaiApiKey));
 
   const voiceId = settings['tts_voice_id'] ?? fallbackVoiceId;
+  const model = provider === 'elevenlabs' ? config.tts.elevenlabsModel : undefined;
 
   if (!apiKey) return null;
 
-  return { provider, apiKey, voiceId };
+  return { provider, apiKey, voiceId, model };
 }
