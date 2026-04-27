@@ -14,7 +14,9 @@ import { systemLogRoutes } from './routes/systemLogs';
 import { ingestRoutes } from './routes/ingest';
 import { publishRoutes } from './routes/publish';
 import { publicStationRoutes } from './routes/publicStations';
+import radioPipelineRoutes from './routes/radioPipeline';
 import { startPublishWorker } from './queues/publishPipeline';
+import { startRadioPipelineWorker } from './queues/radioPipeline';
 
 const app = Fastify({
   logger: {
@@ -42,6 +44,7 @@ app.register(systemLogRoutes,      { prefix: '/api/v1' });
 app.register(ingestRoutes,         { prefix: '/api/v1' });
 app.register(publishRoutes,        { prefix: '/api/v1' });
 app.register(publicStationRoutes,  { prefix: '/api/v1' });
+app.register(radioPipelineRoutes,  { prefix: '/api/v1' });
 
 app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);
@@ -61,9 +64,10 @@ app.listen({ port, host: '0.0.0.0' }, (err) => {
   if (err) { app.log.error(err); process.exit(1); }
 });
 
-// Start publish pipeline worker (connects to Redis)
+// Start pipeline workers (connect to Redis)
 if (process.env.REDIS_URL) {
   startPublishWorker();
+  startRadioPipelineWorker();
 }
 
 export default app;

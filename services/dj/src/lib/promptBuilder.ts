@@ -77,6 +77,10 @@ export interface ScriptContext {
   broker_joke?: JokeResponse;
   /** Pre-resolved theme directives for this segment (from themeResolver). */
   themeDirectives?: string;
+  /** Station locale code (e.g. "fil-PH") — guides language and TTS pronunciation. */
+  locale_code?: string | null;
+  /** Secondary DJ profile for dual-DJ dialogue generation. */
+  secondary_dj_profile?: DjProfile | null;
 }
 
 // Map energy level (1-10) to descriptive text
@@ -149,12 +153,28 @@ function buildPersonaSection(config: PersonaConfig): string {
   return parts.join('\n');
 }
 
+// Map locale_code to language instructions for the LLM.
+function buildLocaleInstructions(localeCode?: string | null): string | null {
+  if (!localeCode) return null;
+  const lc = localeCode.toLowerCase();
+
+  if (lc.startsWith('fil') || lc === 'tl' || lc === 'tl-ph') {
+    return `LANGUAGE: Write entirely in Tagalog/Filipino. Song titles and artist names stay in their original language.
+TTS PRONUNCIATION: After each Tagalog phrase or word, add a phonetic English respelling in parentheses so an English TTS engine can pronounce it naturally.
+Example: "Magandang umaga (mah-gahn-dahng oo-mah-gah) sa inyong lahat (sah een-yohng lah-haht)!"
+Keep parenthetical respellings brief — only the sounds, no explanations. Every Tagalog sentence needs them.`;
+  }
+
+  // Add more locales as needed
+  return null;
+}
+
 // System prompt for the DJ persona.
 // User-supplied fields (name, personality, voice_style) are sanitized to strip
 // control chars / bidi codepoints / zero-width unicode. Free-form text is
 // further wrapped in <untrusted> delimiters so prompt-injection payloads are
 // treated by the LLM as character data, not directives.
-export function buildSystemPrompt(profile: DjProfile): string {
+export function buildSystemPrompt(profile: DjProfile, localeCode?: string | null): string {
   const safeName = s(profile.name, LIMITS.name);
   const lines: string[] = [
     `You are ${safeName}, a radio DJ. Persona description follows in the <untrusted> block:`,
@@ -171,6 +191,13 @@ export function buildSystemPrompt(profile: DjProfile): string {
     lines.push(buildPersonaSection(config));
   }
 
+  // Locale-aware language instructions
+  const localeInstr = buildLocaleInstructions(localeCode);
+  if (localeInstr) {
+    lines.push('');
+    lines.push(localeInstr);
+  }
+
   lines.push('');
   lines.push(`Rules:
 - Write ONLY the spoken script — no stage directions, no asterisks, no emojis
@@ -185,6 +212,70 @@ export function buildSystemPrompt(profile: DjProfile): string {
 - Mix your approach: sometimes lead with a song fact, a question, an observation, a callback to the last track, a time/vibe reference, or an atmosphere-setting line — not just a greeting
 - Vary sentence structure and energy between segments — punchy one moment, warm the next
 - Write like a real DJ who naturally sounds different every time they open their mouth`);
+
+  return lines.join('\n').trim();
+}
+
+/**
+ * System prompt for dual-DJ dialogue generation.
+ * Instructs the LLM to write banter between two hosts using [Name] tags.
+ */
+export function buildDualDjSystemPrompt(
+  primary: DjProfile,
+  secondary: DjProfile,
+  localeCode?: string | null,
+): string {
+  const name1 = s(primary.name, LIMITS.name);
+  const name2 = s(secondary.name, LIMITS.name);
+
+  const lines: string[] = [
+    `You are writing a radio show with TWO hosts: ${name1} and ${name2}.`,
+    '',
+    `${name1}'s persona:`,
+    wrapUntrusted('persona.personality', primary.personality, LIMITS.personality),
+    `Voice style: ${wrapUntrusted('persona.voice_style', primary.voice_style, LIMITS.voice_style)}`,
+  ];
+
+  const config1 = primary.persona_config;
+  if (config1 && Object.keys(config1).length > 0) {
+    lines.push(buildPersonaSection(config1));
+  }
+
+  lines.push('');
+  lines.push(`${name2}'s persona:`);
+  lines.push(wrapUntrusted('persona.personality', secondary.personality, LIMITS.personality));
+  lines.push(`Voice style: ${wrapUntrusted('persona.voice_style', secondary.voice_style, LIMITS.voice_style)}`);
+
+  const config2 = secondary.persona_config;
+  if (config2 && Object.keys(config2).length > 0) {
+    lines.push(buildPersonaSection(config2));
+  }
+
+  // Locale-aware language instructions
+  const localeInstr = buildLocaleInstructions(localeCode);
+  if (localeInstr) {
+    lines.push('');
+    lines.push(localeInstr);
+  }
+
+  lines.push('');
+  lines.push(`FORMAT — Tag every line with the speaker's name in brackets:
+[${name1}] Spoken text here...
+[${name2}] Response text here...
+
+Rules:
+- Write ONLY spoken dialogue — no stage directions, no asterisks, no emojis
+- Every line MUST start with [${name1}] or [${name2}]
+- Write natural back-and-forth banter — they react to each other, joke, agree, disagree
+- Keep the energy of a real duo show: one host leads, the other riffs or reacts
+- Be concise: each host's turn should be 1-2 sentences
+- Most segments should have 2-4 exchanges total
+- Never break the fourth wall or mention AI
+
+VARIETY IS ESSENTIAL — every segment must feel distinct:
+- NEVER open two segments the same way
+- Alternate who leads each segment
+- Mix dynamics: sometimes playful banter, sometimes one host geeking out while the other teases`);
 
   return lines.join('\n').trim();
 }

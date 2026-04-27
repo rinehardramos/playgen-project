@@ -339,7 +339,8 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       if (!station.dj_enabled) return reply.badRequest('DJ is not enabled for this station');
 
       // Resolve DJ profile
-      let dj_profile_id = (req.body as any)?.dj_profile_id ?? null;
+      const body = req.body as any;
+      let dj_profile_id = body?.dj_profile_id ?? null;
       if (!dj_profile_id) {
         const defaultProfile = await getDefaultProfile(station.company_id);
         if (!defaultProfile) return reply.badRequest('No DJ profile configured for this station');
@@ -350,7 +351,9 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
         playlist_id: playlistId,
         station_id: station.id,
         dj_profile_id,
-        auto_approve: station.dj_auto_approve,
+        auto_approve: body?.auto_approve ?? station.dj_auto_approve,
+        secondary_dj_profile_id: body?.secondary_dj_profile_id ?? undefined,
+        voice_map: body?.voice_map ?? undefined,
       });
 
       return reply.code(202).send({ job_id: jobId, status: 'queued' });

@@ -117,17 +117,30 @@ export async function issueTokenPair(user: UserRow): Promise<TokenPair> {
 
   const accessToken = signAccessToken(accessPayload);
 
-  const refreshToken = signRefreshToken(user.id);
-  const tokenHash = hashToken(refreshToken);
+  // Retry refresh token generation on hash collision (concurrent logins can
+  // produce duplicate hashes — see #496).
+  const MAX_RETRIES = 3;
+  let refreshToken: string | undefined;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    refreshToken = signRefreshToken(user.id);
+    const tokenHash = hashToken(refreshToken);
+    try {
+      await pool.query(
+        `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+         VALUES ($1, $2, NOW() + INTERVAL '7 days')`,
+        [user.id, tokenHash],
+      );
+      break; // success
+    } catch (err: unknown) {
+      const pgErr = err as { code?: string; constraint?: string };
+      if (pgErr.code === '23505' && pgErr.constraint === 'refresh_tokens_token_hash_key' && attempt < MAX_RETRIES - 1) {
+        continue; // regenerate token and retry
+      }
+      throw err;
+    }
+  }
 
-  await pool.query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-     VALUES ($1, $2, NOW() + INTERVAL '7 days')
-     ON CONFLICT (token_hash) DO NOTHING`,
-    [user.id, tokenHash],
-  );
-
-  return { access_token: accessToken, refresh_token: refreshToken };
+  return { access_token: accessToken, refresh_token: refreshToken! };
 }
 
 // ─── Password Reset ───────────────────────────────────────────────────────────
