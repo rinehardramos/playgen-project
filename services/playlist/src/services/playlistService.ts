@@ -282,17 +282,31 @@ export async function regenEntry(
   };
 
   // 5. Candidate songs (active, hour-eligible)
+  // Respect inherit_library: include songs from sibling stations in the same company
+  const { rows: stMeta } = await pool.query<{ inherit_library: boolean }>(
+    'SELECT inherit_library FROM stations WHERE id = $1', [stationId],
+  );
+  const candidateStationIds = [stationId];
+  if (stMeta[0]?.inherit_library) {
+    const { rows: siblings } = await pool.query<{ id: string }>(
+      `SELECT id FROM stations
+       WHERE company_id = (SELECT company_id FROM stations WHERE id = $1)
+         AND id != $1 AND is_active = true`,
+      [stationId],
+    );
+    candidateStationIds.push(...siblings.map(s => s.id));
+  }
   const { rows: candidates } = await pool.query<{ id: string; artist: string }>(
     `SELECT s.id, s.artist
      FROM songs s
-     WHERE s.station_id = $1
+     WHERE s.station_id = ANY($1)
        AND s.category_id = $2
        AND s.is_active = TRUE
        AND (
          NOT EXISTS (SELECT 1 FROM song_slots ss WHERE ss.song_id = s.id)
          OR EXISTS (SELECT 1 FROM song_slots ss WHERE ss.song_id = s.id AND ss.eligible_hour = $3)
        )`,
-    [stationId, requiredCategoryId, hour],
+    [candidateStationIds, requiredCategoryId, hour],
   );
   if (candidates.length === 0) throw new Error(`No songs in category for slot ${hour}:${position}`);
 

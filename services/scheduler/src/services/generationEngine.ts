@@ -441,9 +441,20 @@ export async function generatePlaylist(
     );
 
     // ── Step 9a: Batch-load ALL active songs with eligibility (single query) ─
-    // When inherit_library=true and a parent station exists, include its songs too.
+    // When inherit_library=true, include songs from all stations in the same company.
     const stationIds = [stationId];
-    if (inheritLibrary && parentStationId) stationIds.push(parentStationId);
+    if (inheritLibrary) {
+      if (parentStationId) stationIds.push(parentStationId);
+      const { rows: siblings } = await pool.query<{ id: string }>(
+        `SELECT id FROM stations
+         WHERE company_id = (SELECT company_id FROM stations WHERE id = $1)
+           AND id != $1 AND is_active = true`,
+        [stationId],
+      );
+      for (const s of siblings) {
+        if (!stationIds.includes(s.id)) stationIds.push(s.id);
+      }
+    }
     const allSongsRes = await pool.query<SongWithEligibility>(
       `SELECT s.id, s.artist, s.category_id,
               COALESCE(

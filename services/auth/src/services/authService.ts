@@ -122,7 +122,8 @@ export async function issueTokenPair(user: UserRow): Promise<TokenPair> {
 
   await pool.query(
     `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-     VALUES ($1, $2, NOW() + INTERVAL '7 days')`,
+     VALUES ($1, $2, NOW() + INTERVAL '7 days')
+     ON CONFLICT (token_hash) DO NOTHING`,
     [user.id, tokenHash],
   );
 
