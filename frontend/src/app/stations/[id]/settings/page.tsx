@@ -358,6 +358,9 @@ export default function StationSettingsPage() {
             </div>
           </section>
 
+          {/* Music Scanner */}
+          <MusicScannerSection stationId={stationId} settings={settings} />
+
           <p className="text-xs text-gray-600 px-1">
             Settings override service-level environment variables. Leave a field empty to use the
             service default. Secret values (API keys) are masked after saving.
@@ -466,5 +469,244 @@ function SettingRow({
       {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
       {showSuccess && <p className="mt-1 text-xs text-green-400">Saved.</p>}
     </div>
+  );
+}
+
+// ─── Music Scanner section ──────────────────────────────────────────────────
+
+interface ScanResult {
+  status: 'completed' | 'failed';
+  started_at: string;
+  finished_at: string;
+  directory: string;
+  recursive: boolean;
+  files_found: number;
+  imported: number;
+  skipped: number;
+  errors: number;
+  error_message?: string;
+}
+
+interface ScanStatusResponse {
+  scanning: boolean;
+  progress?: { current: number; total: number };
+  last_result?: ScanResult;
+}
+
+function MusicScannerSection({
+  stationId,
+  settings,
+}: {
+  stationId: string;
+  settings: Record<string, StationSetting>;
+}) {
+  const [scanDir, setScanDir] = useState(settings['music_scan_dir']?.value ?? '');
+  const [recursive, setRecursive] = useState(settings['music_scan_recursive']?.value !== 'false');
+  const [extensions, setExtensions] = useState(settings['music_scan_extensions']?.value ?? 'mp3,flac,wav,m4a,ogg,aac');
+  const [autoTranscode, setAutoTranscode] = useState(settings['music_scan_auto_transcode']?.value === 'true');
+
+  const [scanning, setScanning] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [lastResult, setLastResult] = useState<ScanResult | null>(null);
+  const [scanError, setScanError] = useState('');
+  const [savingField, setSavingField] = useState<string | null>(null);
+  const [savedField, setSavedField] = useState<string | null>(null);
+
+  // Load last scan result on mount
+  useEffect(() => {
+    fetchStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stationId]);
+
+  async function fetchStatus() {
+    try {
+      const data = await api.get<ScanStatusResponse>(`/api/v1/stations/${stationId}/scan-music/status`);
+      setScanning(data.scanning);
+      setProgress(data.progress ?? null);
+      if (data.last_result) setLastResult(data.last_result);
+    } catch { /* non-critical */ }
+  }
+
+  async function saveScanSetting(key: string, value: string) {
+    setSavingField(key);
+    try {
+      await api.put(`/api/v1/stations/${stationId}/settings/${key}`, { value, is_secret: false });
+      setSavedField(key);
+      setTimeout(() => setSavedField(null), 2000);
+    } catch { /* ignore */ }
+    finally { setSavingField(null); }
+  }
+
+  async function triggerScan() {
+    setScanError('');
+    if (!scanDir.trim()) {
+      setScanError('Please enter a scan directory path first.');
+      return;
+    }
+
+    setScanning(true);
+    setProgress(null);
+    try {
+      await api.post(`/api/v1/stations/${stationId}/scan-music`, {
+        dir: scanDir.trim(),
+        recursive,
+        transcode: autoTranscode,
+        extensions,
+      });
+
+      // Poll status every 2s until done
+      const poll = setInterval(async () => {
+        try {
+          const data = await api.get<ScanStatusResponse>(`/api/v1/stations/${stationId}/scan-music/status`);
+          if (data.progress) setProgress(data.progress);
+          if (!data.scanning) {
+            clearInterval(poll);
+            setScanning(false);
+            setProgress(null);
+            if (data.last_result) setLastResult(data.last_result);
+          }
+        } catch {
+          clearInterval(poll);
+          setScanning(false);
+        }
+      }, 2000);
+    } catch (err: unknown) {
+      setScanning(false);
+      setScanError((err as ApiError).message ?? 'Failed to start scan');
+    }
+  }
+
+  return (
+    <section className="card p-5">
+      <h2 className="text-sm font-semibold text-violet-400 uppercase tracking-wider mb-1">
+        Music Scanner
+      </h2>
+      <p className="text-xs text-gray-500 mb-4">
+        Import audio files from a local directory into this station&apos;s song library.
+      </p>
+
+      <div className="space-y-4">
+        {/* Scan Directory */}
+        <div>
+          <label className="block text-sm text-gray-300 mb-0.5 font-medium">Scan Directory</label>
+          <p className="text-xs text-gray-500 mb-1.5">Absolute path to the directory containing audio files.</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={scanDir}
+              onChange={(e) => setScanDir(e.target.value)}
+              placeholder="/Users/you/Music"
+              className="input flex-1"
+            />
+            <button
+              onClick={() => saveScanSetting('music_scan_dir', scanDir)}
+              disabled={savingField === 'music_scan_dir'}
+              className="btn-secondary text-xs px-3 py-2 disabled:opacity-40"
+            >
+              {savingField === 'music_scan_dir' ? '...' : savedField === 'music_scan_dir' ? 'Saved' : 'Save'}
+            </button>
+          </div>
+        </div>
+
+        {/* Toggles row */}
+        <div className="flex flex-wrap gap-6">
+          {/* Recursive */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={recursive}
+              onChange={(e) => {
+                setRecursive(e.target.checked);
+                saveScanSetting('music_scan_recursive', e.target.checked ? 'true' : 'false');
+              }}
+              className="w-4 h-4 rounded border-gray-600 bg-[#0f0f1a] text-violet-500 focus:ring-violet-500"
+            />
+            <span className="text-sm text-gray-300">Recursive scan</span>
+          </label>
+
+          {/* Auto-transcode */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoTranscode}
+              onChange={(e) => {
+                setAutoTranscode(e.target.checked);
+                saveScanSetting('music_scan_auto_transcode', e.target.checked ? 'true' : 'false');
+              }}
+              className="w-4 h-4 rounded border-gray-600 bg-[#0f0f1a] text-violet-500 focus:ring-violet-500"
+            />
+            <span className="text-sm text-gray-300">Auto-transcode to HLS</span>
+          </label>
+        </div>
+
+        {/* File Extensions */}
+        <div>
+          <label className="block text-sm text-gray-300 mb-0.5 font-medium">File Extensions</label>
+          <p className="text-xs text-gray-500 mb-1.5">Comma-separated list of audio file extensions to include.</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={extensions}
+              onChange={(e) => setExtensions(e.target.value)}
+              placeholder="mp3,flac,wav,m4a,ogg,aac"
+              className="input flex-1"
+            />
+            <button
+              onClick={() => saveScanSetting('music_scan_extensions', extensions)}
+              disabled={savingField === 'music_scan_extensions'}
+              className="btn-secondary text-xs px-3 py-2 disabled:opacity-40"
+            >
+              {savingField === 'music_scan_extensions' ? '...' : savedField === 'music_scan_extensions' ? 'Saved' : 'Save'}
+            </button>
+          </div>
+        </div>
+
+        {/* Scan Now button */}
+        <div className="pt-1">
+          <button
+            onClick={triggerScan}
+            disabled={scanning}
+            className="btn-primary text-sm px-5 py-2.5 disabled:opacity-50"
+          >
+            {scanning ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                {progress ? `Scanning ${progress.current}/${progress.total}...` : 'Starting scan...'}
+              </span>
+            ) : (
+              'Scan Now'
+            )}
+          </button>
+          {scanError && <p className="mt-2 text-xs text-red-400">{scanError}</p>}
+        </div>
+
+        {/* Last Scan Result */}
+        {lastResult && (
+          <div className={`rounded-md px-4 py-3 border text-sm ${
+            lastResult.status === 'completed'
+              ? 'bg-green-900/20 border-green-700/40'
+              : 'bg-red-900/20 border-red-700/40'
+          }`}>
+            <div className="flex items-center justify-between mb-1">
+              <span className={`font-medium ${lastResult.status === 'completed' ? 'text-green-400' : 'text-red-400'}`}>
+                {lastResult.status === 'completed' ? 'Last scan completed' : 'Last scan failed'}
+              </span>
+              <span className="text-xs text-gray-500">
+                {new Date(lastResult.finished_at).toLocaleString()}
+              </span>
+            </div>
+            {lastResult.status === 'completed' ? (
+              <p className="text-xs text-gray-400">
+                Found {lastResult.files_found} files — {lastResult.imported} imported, {lastResult.skipped} already existed
+                {lastResult.errors > 0 && `, ${lastResult.errors} errors`}
+              </p>
+            ) : (
+              <p className="text-xs text-red-400">{lastResult.error_message ?? 'Unknown error'}</p>
+            )}
+            <p className="text-xs text-gray-500 mt-0.5">{lastResult.directory}{lastResult.recursive ? ' (recursive)' : ''}</p>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

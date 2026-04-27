@@ -75,6 +75,8 @@ export interface ScriptContext {
   joke_style?: string;
   /** Joke from broker — optional, present only for joke segments. */
   broker_joke?: JokeResponse;
+  /** Pre-resolved theme directives for this segment (from themeResolver). */
+  themeDirectives?: string;
 }
 
 // Map energy level (1-10) to descriptive text
@@ -321,6 +323,11 @@ export function buildUserPrompt(ctx: ScriptContext): string {
     if (enrichLines.length > 0) {
       prompt += '\n\nSong enrichment context (from music database — work these in naturally if relevant):\n' + enrichLines.join('\n');
     }
+  }
+
+  // Append theme directives (pre-resolved by themeResolver — not raw config).
+  if (ctx.themeDirectives) {
+    prompt += '\n\nTHEME DIRECTIVES FOR THIS SEGMENT (weave naturally, do NOT sound like a checklist):\n' + ctx.themeDirectives;
   }
 
   // For joke segments, append broker joke as a seed (treated as untrusted data).

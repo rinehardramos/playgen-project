@@ -352,6 +352,28 @@ export async function runGenerationJob(
   );
   const script_id: string = scriptRows[0].id;
 
+  // 5b. Load program themes for this station/hour and resolve directives
+  const { resolveThemeDirectives, formatDirectivesForSegment } = await import('../lib/themeResolver.js');
+  let themeDirectivesResolved: ReturnType<typeof resolveThemeDirectives> | null = null;
+  try {
+    const { rows: programRows } = await pool.query<{ themes: import('@playgen/types').ProgramTheme[] | null }>(
+      `SELECT themes FROM programs
+       WHERE station_id = $1 AND is_active = TRUE AND themes IS NOT NULL AND themes != '[]'::jsonb
+       ORDER BY is_default ASC LIMIT 1`,
+      [data.station_id],
+    );
+    const themes = programRows[0]?.themes;
+    if (themes && themes.length > 0) {
+      themeDirectivesResolved = resolveThemeDirectives(themes, {
+        weather: weatherData ?? undefined,
+        news_items: newsData?.items ?? undefined,
+        total_segments: entries.length * 2, // approximate
+      });
+    }
+  } catch (err) {
+    console.warn('[generationWorker] Theme resolution failed (non-fatal):', err);
+  }
+
   // 6. Generate segments
   const currentDate = new Date().toISOString().split('T')[0];
   let position = 0;
@@ -437,6 +459,9 @@ export async function runGenerationJob(
       broker_joke: segment_type === 'joke' ? jokeData : undefined,
       previousSegmentTexts: generatedTexts.slice(-4),
       segmentIndex: position,
+      themeDirectives: themeDirectivesResolved
+        ? formatDirectivesForSegment(themeDirectivesResolved, position)
+        : undefined,
     };
     const systemPrompt = buildSystemPrompt(profile!);
     const userPrompt = buildUserPrompt(ctx) + rejectionContext;
@@ -637,6 +662,9 @@ export async function runGenerationJob(
         broker_joke: segment_type === 'joke' ? jokeData : undefined,
         previousSegmentTexts: generatedTexts.slice(-4),
         segmentIndex: position,
+        themeDirectives: themeDirectivesResolved
+          ? formatDirectivesForSegment(themeDirectivesResolved, position)
+          : undefined,
       };
 
       const systemPrompt = buildSystemPrompt(profile);
@@ -726,6 +754,9 @@ export async function runGenerationJob(
             },
             previousSegmentTexts: generatedTexts.slice(-4),
             segmentIndex: position,
+            themeDirectives: themeDirectivesResolved
+              ? formatDirectivesForSegment(themeDirectivesResolved, position)
+              : undefined,
           };
 
           const shoutoutSystemPrompt = buildSystemPrompt(profile);

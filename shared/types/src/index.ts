@@ -610,6 +610,25 @@ export interface StationSetting {
 export type ProgramAirDay = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 export type EpisodeStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'aired';
 
+// ─── Program Themes ──────────────────────────────────────────────────────────
+
+export type ProgramThemeType =
+  | 'weather_reactive'
+  | 'news_reactive'
+  | 'sponsored'
+  | 'social_driven'
+  | 'custom'
+  | 'event'
+  | 'mood';
+
+export interface ProgramTheme {
+  id: string;
+  type: ProgramThemeType;
+  priority: number;           // 1-10 (higher = more influence)
+  active: boolean;
+  config: Record<string, unknown>;
+}
+
 export interface Program {
   id: string;
   station_id: string;
@@ -621,6 +640,7 @@ export interface Program {
   template_id: string | null;
   color_tag: string | null;
   dj_profile_id: string | null;
+  themes: ProgramTheme[];
   is_active: boolean;
   is_default: boolean;
   created_at: Date;

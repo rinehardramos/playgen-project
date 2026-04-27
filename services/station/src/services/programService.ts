@@ -28,11 +28,12 @@ export async function createProgram(data: {
   end_hour?: number;
   template_id?: string | null;
   color_tag?: string | null;
+  themes?: unknown[] | null;
 }): Promise<Program> {
   const { rows } = await getPool().query<Program>(
     `INSERT INTO programs
-       (station_id, name, description, active_days, start_hour, end_hour, template_id, color_tag)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (station_id, name, description, active_days, start_hour, end_hour, template_id, color_tag, themes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       data.station_id,
@@ -50,6 +51,7 @@ export async function createProgram(data: {
       data.end_hour ?? 24,
       data.template_id ?? null,
       data.color_tag ?? null,
+      JSON.stringify(data.themes ?? []),
     ]
   );
   return rows[0];
@@ -67,16 +69,19 @@ export async function updateProgram(
     color_tag: string | null;
     dj_profile_id: string | null;
     is_active: boolean;
+    themes: unknown[] | null;
   }>
 ): Promise<Program | null> {
-  const allowed = ['name', 'description', 'active_days', 'start_hour', 'end_hour', 'template_id', 'color_tag', 'dj_profile_id', 'is_active'] as const;
+  const allowed = ['name', 'description', 'active_days', 'start_hour', 'end_hour', 'template_id', 'color_tag', 'dj_profile_id', 'is_active', 'themes'] as const;
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;
   for (const key of allowed) {
     if (data[key] !== undefined) {
+      // JSONB fields need JSON.stringify
+      const val = key === 'themes' ? JSON.stringify(data[key]) : data[key];
       fields.push(`${key} = $${i++}`);
-      values.push(data[key]);
+      values.push(val);
     }
   }
   if (!fields.length) return getProgram(id);

@@ -8,6 +8,7 @@ import { categoryRoutes } from './routes/categories';
 import { songRoutes } from './routes/songs';
 import { templateRoutes } from './routes/templates';
 import { internalRoutes } from './routes/internal';
+import { scanRoutes } from './routes/scan';
 
 // Initialize object storage (local for dev, S3-compatible for prod)
 initStorage({
@@ -50,6 +51,7 @@ app.get('/health', async () => ({ status: 'ok', service: 'library-service' }));
 app.register(categoryRoutes, { prefix: '/api/v1' });
 app.register(songRoutes, { prefix: '/api/v1' });
 app.register(templateRoutes, { prefix: '/api/v1' });
+app.register(scanRoutes, { prefix: '/api/v1' });
 app.register(internalRoutes);
 
 app.setErrorHandler((err: FastifyError, _req, reply) => {

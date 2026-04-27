@@ -112,6 +112,15 @@ server {
         proxy_set_header X-Request-ID $request_id;
     }
 
+    # ─── Library: music scanner ─────────────────────────────────
+    location ~ ^/api/v1/stations/[^/]+/scan-music {
+        set $svc http://${LIBRARY_HOST}:3003;
+        proxy_pass $svc;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Request-ID $request_id;
+    }
+
     # ─── Library: templates ───────────────────────────────────────
     location ~ ^/api/v1/stations/[^/]+/templates {
         set $svc http://${LIBRARY_HOST}:3003;
