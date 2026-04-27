@@ -126,6 +126,9 @@ describe('generationWorker', () => {
       rows: [{ id: scriptId }],
     });
 
+    // 5b. Program themes query (no active themes)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
     // For 1 entry, segmentsForEntry returns ['show_intro', 'song_intro', 'show_outro']
     // After song_intro the opening station_id is injected (non-song, uses null playlist_entry_id)
     // 6. Segment inserts
@@ -197,6 +200,9 @@ describe('generationWorker', () => {
     });
     // 5. Script insert
     mockQuery.mockResolvedValueOnce({ rows: [{ id: scriptId }] });
+
+    // 5b. Program themes query (no active themes)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
 
     // 6. Segment inserts (main loop uses RETURNING id; shoutout INSERT does not)
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'seg-1' }] }); // show_intro RETURNING id
