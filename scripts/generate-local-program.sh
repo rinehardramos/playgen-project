@@ -32,6 +32,7 @@ AUTO_APPROVE=false
 PUBLISH=false
 DJ_PROFILE_ID=""
 SECONDARY_DJ_PROFILE_ID=""
+TERTIARY_DJ_PROFILE_ID=""
 VOICE_MAP=""
 
 # ── Parse args ────────────────────────────────────────────────────────────
@@ -41,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --date)                     PLAYLIST_DATE="$2"; shift 2 ;;
     --dj-profile-id)            DJ_PROFILE_ID="$2"; shift 2 ;;
     --secondary-dj-profile-id)  SECONDARY_DJ_PROFILE_ID="$2"; shift 2 ;;
+    --tertiary-dj-profile-id)   TERTIARY_DJ_PROFILE_ID="$2"; shift 2 ;;
     --voice-map)                VOICE_MAP="$2"; shift 2 ;;
     --sync)                     PUBLISH=true; shift ;;
     --auto-approve)             AUTO_APPROVE=true; shift ;;
@@ -90,6 +92,7 @@ echo "▸ Triggering pipeline…"
 TRIGGER_BODY="{\"date\": \"$PLAYLIST_DATE\", \"auto_approve\": $AUTO_APPROVE, \"publish\": $PUBLISH"
 [ -n "$DJ_PROFILE_ID" ] && TRIGGER_BODY="$TRIGGER_BODY, \"dj_profile_id\": \"$DJ_PROFILE_ID\""
 [ -n "$SECONDARY_DJ_PROFILE_ID" ] && TRIGGER_BODY="$TRIGGER_BODY, \"secondary_dj_profile_id\": \"$SECONDARY_DJ_PROFILE_ID\""
+[ -n "$TERTIARY_DJ_PROFILE_ID" ] && TRIGGER_BODY="$TRIGGER_BODY, \"tertiary_dj_profile_id\": \"$TERTIARY_DJ_PROFILE_ID\""
 [ -n "$VOICE_MAP" ] && TRIGGER_BODY="$TRIGGER_BODY, \"voice_map\": $VOICE_MAP"
 TRIGGER_BODY="$TRIGGER_BODY}"
 
