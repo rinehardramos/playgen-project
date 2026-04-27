@@ -1,8 +1,17 @@
 /**
- * Claude Code LLM adapter — spawns `claude -p` CLI to use the local subscription.
+ * Claude Code LLM adapter — uses the local `claude` CLI subscription.
  *
- * Only works where the `claude` binary is installed and authenticated
- * (local dev). In production Docker, set LLM_BACKEND=openrouter instead.
+ * Two modes (auto-detected):
+ *
+ *   Relay mode (CLAUDE_RELAY_URL set) — HTTP call to a host-side relay server
+ *     that spawns `claude -p`. Used when running inside Docker where the
+ *     binary is not available. Start the relay with:
+ *       node scripts/claude-relay.mjs
+ *     and set CLAUDE_RELAY_URL=http://host.docker.internal:3099 in the
+ *     DJ container (docker-compose.override.yml).
+ *
+ *   Direct mode (CLAUDE_RELAY_URL not set) — spawns `claude -p` as a
+ *     subprocess. Works when the DJ worker runs directly on the host.
  */
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -15,12 +24,37 @@ interface ClaudeCliResult {
   result?: string;
   is_error?: boolean;
   cost_usd?: number;
-  duration_ms?: number;
 }
 
-export async function claudeCodeLlmComplete(
+// ── Relay mode ────────────────────────────────────────────────────────────────
+
+async function relayComplete(
+  relayUrl: string,
   messages: LlmMessage[],
-  options: LlmOptions = {},
+  options: LlmOptions,
+): Promise<LlmResult> {
+  const res = await fetch(`${relayUrl}/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, model: options.model }),
+    signal: AbortSignal.timeout(180_000),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`claude-relay ${res.status}: ${body.slice(0, 200)}`);
+  }
+
+  const data = await res.json() as { text?: string; error?: string };
+  if (!data.text) throw new Error(`claude-relay returned no text: ${JSON.stringify(data).slice(0, 200)}`);
+  return { text: data.text };
+}
+
+// ── Direct subprocess mode ────────────────────────────────────────────────────
+
+async function directComplete(
+  messages: LlmMessage[],
+  options: LlmOptions,
 ): Promise<LlmResult> {
   const systemParts = messages.filter((m) => m.role === 'system').map((m) => m.content);
   const userParts = messages.filter((m) => m.role !== 'system').map((m) => m.content);
@@ -31,7 +65,7 @@ export async function claudeCodeLlmComplete(
   const args: string[] = [
     '--print',
     '--output-format', 'json',
-    '--dangerously-skip-permissions', // non-interactive, no workspace dialog
+    '--dangerously-skip-permissions',
   ];
 
   if (systemParts.length > 0) {
@@ -39,7 +73,6 @@ export async function claudeCodeLlmComplete(
   }
 
   if (options.model && !options.model.includes('/')) {
-    // Pass through non-OpenRouter model strings (e.g. 'sonnet', 'claude-sonnet-4-6')
     args.push('--model', options.model);
   }
 
@@ -50,8 +83,8 @@ export async function claudeCodeLlmComplete(
   let stdout: string;
   try {
     const out = await execFileAsync(claudeBin, args, {
-      timeout: options.maxTokens ? 180_000 : 120_000,
-      maxBuffer: 4 * 1024 * 1024, // 4 MB
+      timeout: 180_000,
+      maxBuffer: 4 * 1024 * 1024,
       env: {
         ...process.env,
         PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH ?? ''}`,
@@ -61,7 +94,7 @@ export async function claudeCodeLlmComplete(
   } catch (err: unknown) {
     const e = err as { stderr?: string; message?: string };
     throw new Error(
-      `claude-code subprocess failed: ${e.message ?? 'unknown error'}${e.stderr ? ` — ${e.stderr.slice(0, 200)}` : ''}`,
+      `claude-code subprocess failed: ${e.message ?? 'unknown'}${e.stderr ? ` — ${e.stderr.slice(0, 200)}` : ''}`,
     );
   }
 
@@ -69,20 +102,27 @@ export async function claudeCodeLlmComplete(
   try {
     parsed = JSON.parse(stdout) as ClaudeCliResult;
   } catch {
-    // --output-format json sometimes streams extra lines; try last JSON line
     const lastJson = stdout.trim().split('\n').reverse().find((l) => l.startsWith('{'));
-    if (!lastJson) throw new Error(`claude-code: could not parse CLI output: ${stdout.slice(0, 200)}`);
+    if (!lastJson) throw new Error(`claude-code: cannot parse output: ${stdout.slice(0, 200)}`);
     parsed = JSON.parse(lastJson) as ClaudeCliResult;
   }
 
   if (parsed.is_error || !parsed.result) {
-    throw new Error(`claude-code returned error or empty result: ${JSON.stringify(parsed).slice(0, 200)}`);
+    throw new Error(`claude-code error or empty result: ${JSON.stringify(parsed).slice(0, 200)}`);
   }
 
-  return {
-    text: parsed.result.trim(),
-    usage: parsed.cost_usd !== undefined
-      ? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
-      : undefined,
-  };
+  return { text: parsed.result.trim() };
+}
+
+// ── Public entry point ────────────────────────────────────────────────────────
+
+export async function claudeCodeLlmComplete(
+  messages: LlmMessage[],
+  options: LlmOptions = {},
+): Promise<LlmResult> {
+  const relayUrl = process.env.CLAUDE_RELAY_URL;
+  if (relayUrl) {
+    return relayComplete(relayUrl, messages, options);
+  }
+  return directComplete(messages, options);
 }

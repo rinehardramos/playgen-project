@@ -1,0 +1,20 @@
+# Local override: avoid host port conflicts with other projects.
+# Only the gateway is exposed on the host. Infra (postgres, redis) stays
+# internal to the Docker network — exactly like production.
+#
+# To use: docker compose up --build -d
+# Access everything via http://localhost:8888/api/v1/...
+services:
+  postgres:
+    ports:
+      - "15432:5432"
+  redis:
+    ports:
+      - "16379:6379"
+  gateway:
+    ports:
+      - "8888:80"
+  dj:
+    environment:
+      INFO_BROKER_BASE_URL: http://host.docker.internal:8000
+      INFO_BROKER_API_KEY: ${INFO_BROKER_API_KEY}
