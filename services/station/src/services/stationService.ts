@@ -23,12 +23,19 @@ export async function createStation(data: {
   broadcast_end_hour?: number;
   active_days?: string[];
 }): Promise<Station> {
+  // Auto-generate slug from name if not provided
+  const slug = data.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
   const { rows } = await getPool().query<Station>(
-    `INSERT INTO stations (company_id, name, timezone, broadcast_start_hour, broadcast_end_hour, active_days)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    `INSERT INTO stations (company_id, name, slug, timezone, broadcast_start_hour, broadcast_end_hour, active_days)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
     [
       data.company_id,
       data.name,
+      slug,
       data.timezone ?? 'Asia/Manila',
       data.broadcast_start_hour ?? 4,
       data.broadcast_end_hour ?? 3,
