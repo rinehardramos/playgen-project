@@ -6,9 +6,10 @@ import type { FastifyInstance } from 'fastify';
 import { getPool } from '../db';
 
 export async function publicStationRoutes(app: FastifyInstance) {
-  // GET /public/stations — list all active stations with DJ + stream info
+  // GET /public/stations — list all active stations with their assigned DJ
   app.get('/public/stations', async () => {
     const pool = getPool();
+    // Join via dj_daypart_assignments to get the station-specific DJ (morning daypart as representative)
     const { rows } = await pool.query(`
       SELECT
         s.id, s.name, s.slug, s.timezone, s.locale_code, s.city, s.country_code,
@@ -20,7 +21,14 @@ export async function publicStationRoutes(app: FastifyInstance) {
         dp.tts_provider AS dj_tts_provider,
         dp.tts_voice_id AS dj_tts_voice_id
       FROM stations s
-      LEFT JOIN dj_profiles dp ON dp.company_id = s.company_id AND dp.is_default = true AND dp.is_active = true
+      LEFT JOIN LATERAL (
+        SELECT da.dj_profile_id
+        FROM dj_daypart_assignments da
+        WHERE da.station_id = s.id
+        ORDER BY da.start_hour ASC
+        LIMIT 1
+      ) assign ON true
+      LEFT JOIN dj_profiles dp ON dp.id = assign.dj_profile_id AND dp.is_active = true
       WHERE s.is_active = true AND s.slug IS NOT NULL
       ORDER BY s.name ASC
     `);
@@ -48,7 +56,7 @@ export async function publicStationRoutes(app: FastifyInstance) {
     }));
   });
 
-  // GET /public/stations/:slug — single station by slug
+  // GET /public/stations/:slug — single station by slug with all DJs
   app.get<{ Params: { slug: string } }>('/public/stations/:slug', async (req, reply) => {
     const pool = getPool();
     const { rows } = await pool.query(`
@@ -63,12 +71,14 @@ export async function publicStationRoutes(app: FastifyInstance) {
     if (!rows[0]) return reply.status(404).send({ error: 'Station not found' });
     const st = rows[0];
 
-    // Get all DJ profiles for this station's company
+    // Get DJs assigned to THIS station via daypart assignments
     const { rows: djRows } = await pool.query(`
-      SELECT id, name, personality, voice_style, persona_config, tts_provider, tts_voice_id
-      FROM dj_profiles
-      WHERE company_id = (SELECT company_id FROM stations WHERE id = $1) AND is_active = true
-      ORDER BY is_default DESC, name ASC
+      SELECT DISTINCT dp.id, dp.name, dp.personality, dp.voice_style,
+        dp.persona_config, dp.tts_provider, dp.tts_voice_id
+      FROM dj_daypart_assignments da
+      JOIN dj_profiles dp ON dp.id = da.dj_profile_id AND dp.is_active = true
+      WHERE da.station_id = $1
+      ORDER BY dp.name ASC
     `, [st.id]);
 
     const primaryDj = djRows[0];
