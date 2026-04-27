@@ -5,83 +5,109 @@
 import type { FastifyInstance } from 'fastify';
 import { getPool } from '../db';
 
+interface DjRow {
+  id: string;
+  name: string;
+  personality: string | null;
+  voice_style: string | null;
+  persona_config: Record<string, unknown> | null;
+  tts_provider: string | null;
+  tts_voice_id: string | null;
+  station_id: string;
+}
+
+function formatDj(d: DjRow) {
+  return {
+    id: d.id,
+    name: d.name,
+    bio: d.personality ?? '',
+    avatarUrl: null,
+    personality: (d.persona_config as Record<string, unknown>)?.backstory ?? null,
+  };
+}
+
 export async function publicStationRoutes(app: FastifyInstance) {
-  // GET /public/stations — list all active stations with their assigned DJ
+  // GET /public/stations — list all active stations with all assigned DJs
   app.get('/public/stations', async () => {
     const pool = getPool();
-    // Join via dj_daypart_assignments to get the station-specific DJ (morning daypart as representative)
-    const { rows } = await pool.query(`
-      SELECT
-        s.id, s.name, s.slug, s.timezone, s.locale_code, s.city, s.country_code,
-        s.callsign, s.tagline, s.frequency, s.is_active, s.dj_enabled,
-        s.logo_url, s.primary_color, s.secondary_color,
-        dp.id AS dj_id, dp.name AS dj_name, dp.personality AS dj_bio,
-        dp.voice_style AS dj_voice_style,
-        dp.persona_config AS dj_persona_config,
-        dp.tts_provider AS dj_tts_provider,
-        dp.tts_voice_id AS dj_tts_voice_id
-      FROM stations s
-      LEFT JOIN LATERAL (
-        SELECT da.dj_profile_id
-        FROM dj_daypart_assignments da
-        WHERE da.station_id = s.id
-        ORDER BY da.start_hour ASC
-        LIMIT 1
-      ) assign ON true
-      LEFT JOIN dj_profiles dp ON dp.id = assign.dj_profile_id AND dp.is_active = true
-      WHERE s.is_active = true AND s.slug IS NOT NULL
-      ORDER BY s.name ASC
+
+    const { rows: stations } = await pool.query(`
+      SELECT id, name, slug, timezone, locale_code, city, country_code,
+        callsign, tagline, frequency, is_active, dj_enabled,
+        logo_url, primary_color, secondary_color
+      FROM stations
+      WHERE is_active = true AND slug IS NOT NULL
+      ORDER BY name ASC
     `);
 
-    return rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      slug: r.slug,
-      description: r.tagline ?? '',
-      streamUrl: '',
-      metadataUrl: '',
-      genre: '',
-      artworkUrl: r.logo_url ?? null,
-      isLive: r.dj_enabled ?? false,
-      status: r.dj_enabled ? 'on_air' : 'off_air',
-      dj: r.dj_id ? {
-        id: r.dj_id,
-        name: r.dj_name,
-        bio: r.dj_bio ?? '',
-        avatarUrl: null,
-        personality: r.dj_persona_config?.backstory ?? null,
-      } : null,
-      currentSong: null,
-      listenerCount: 0,
-    }));
+    if (stations.length === 0) return [];
+
+    // Batch-load all DJs assigned to these stations via daypart assignments
+    const stationIds = stations.map(s => s.id);
+    const { rows: djRows } = await pool.query<DjRow>(`
+      SELECT DISTINCT ON (da.station_id, dp.id)
+        dp.id, dp.name, dp.personality, dp.voice_style,
+        dp.persona_config, dp.tts_provider, dp.tts_voice_id,
+        da.station_id
+      FROM dj_daypart_assignments da
+      JOIN dj_profiles dp ON dp.id = da.dj_profile_id AND dp.is_active = true
+      WHERE da.station_id = ANY($1)
+      ORDER BY da.station_id, dp.id
+    `, [stationIds]);
+
+    // Group DJs by station
+    const djsByStation = new Map<string, DjRow[]>();
+    for (const dj of djRows) {
+      const list = djsByStation.get(dj.station_id) ?? [];
+      list.push(dj);
+      djsByStation.set(dj.station_id, list);
+    }
+
+    return stations.map(s => {
+      const djs = djsByStation.get(s.id) ?? [];
+      return {
+        id: s.id,
+        name: s.name,
+        slug: s.slug,
+        description: s.tagline ?? '',
+        streamUrl: '',
+        metadataUrl: '',
+        genre: '',
+        artworkUrl: s.logo_url ?? null,
+        isLive: s.dj_enabled ?? false,
+        status: s.dj_enabled ? 'on_air' : 'off_air',
+        dj: djs[0] ? formatDj(djs[0]) : null,
+        djs: djs.map(formatDj),
+        currentSong: null,
+        listenerCount: 0,
+      };
+    });
   });
 
   // GET /public/stations/:slug — single station by slug with all DJs
   app.get<{ Params: { slug: string } }>('/public/stations/:slug', async (req, reply) => {
     const pool = getPool();
     const { rows } = await pool.query(`
-      SELECT
-        s.id, s.name, s.slug, s.timezone, s.locale_code, s.city, s.country_code,
-        s.callsign, s.tagline, s.frequency, s.is_active, s.dj_enabled,
-        s.logo_url, s.primary_color, s.secondary_color
-      FROM stations s
-      WHERE s.slug = $1 AND s.is_active = true
+      SELECT id, name, slug, timezone, locale_code, city, country_code,
+        callsign, tagline, frequency, is_active, dj_enabled,
+        logo_url, primary_color, secondary_color
+      FROM stations
+      WHERE slug = $1 AND is_active = true
     `, [req.params.slug]);
 
     if (!rows[0]) return reply.status(404).send({ error: 'Station not found' });
     const st = rows[0];
 
-    // Get DJs assigned to THIS station via daypart assignments
-    const { rows: djRows } = await pool.query(`
-      SELECT DISTINCT dp.id, dp.name, dp.personality, dp.voice_style,
-        dp.persona_config, dp.tts_provider, dp.tts_voice_id
+    const { rows: djRows } = await pool.query<DjRow>(`
+      SELECT DISTINCT ON (dp.id)
+        dp.id, dp.name, dp.personality, dp.voice_style,
+        dp.persona_config, dp.tts_provider, dp.tts_voice_id,
+        da.station_id
       FROM dj_daypart_assignments da
       JOIN dj_profiles dp ON dp.id = da.dj_profile_id AND dp.is_active = true
       WHERE da.station_id = $1
-      ORDER BY dp.name ASC
+      ORDER BY dp.id
     `, [st.id]);
-
-    const primaryDj = djRows[0];
 
     return {
       id: st.id,
@@ -94,19 +120,8 @@ export async function publicStationRoutes(app: FastifyInstance) {
       artworkUrl: st.logo_url ?? null,
       isLive: st.dj_enabled ?? false,
       status: st.dj_enabled ? 'on_air' : 'off_air',
-      dj: primaryDj ? {
-        id: primaryDj.id,
-        name: primaryDj.name,
-        bio: primaryDj.personality ?? '',
-        avatarUrl: null,
-        personality: primaryDj.persona_config?.backstory ?? null,
-      } : null,
-      djs: djRows.map(d => ({
-        id: d.id,
-        name: d.name,
-        bio: d.personality ?? '',
-        avatarUrl: null,
-      })),
+      dj: djRows[0] ? formatDj(djRows[0]) : null,
+      djs: djRows.map(formatDj),
       currentSong: null,
       listenerCount: 0,
       songs: [],
