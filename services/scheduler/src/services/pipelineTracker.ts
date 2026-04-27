@@ -195,3 +195,26 @@ export async function findActiveRun(stationId: string, date: string): Promise<st
   );
   return rows[0]?.id ?? null;
 }
+
+const STAGE_ORDER: PipelineStage[] = ['playlist', 'dj_script', 'review', 'tts', 'publish'];
+
+/**
+ * Retry a failed stage: reset it to 'running', reset all downstream stages to 'pending',
+ * and set the overall run back to 'running'.
+ */
+export async function retryStage(runId: string, stage: PipelineStage): Promise<void> {
+  const pool = getPool();
+  const stageIdx = STAGE_ORDER.indexOf(stage);
+
+  // Build SET clauses: retry stage → running, downstream stages → pending
+  const sets: string[] = [
+    `${STAGE_COLUMN[stage]} = '{"status":"running","started_at":"${new Date().toISOString()}"}'::jsonb`,
+  ];
+  for (let i = stageIdx + 1; i < STAGE_ORDER.length; i++) {
+    sets.push(`${STAGE_COLUMN[STAGE_ORDER[i]]} = '{"status":"pending"}'::jsonb`);
+  }
+  sets.push(`status = 'running'`);
+  sets.push(`updated_at = NOW()`);
+
+  await pool.query(`UPDATE pipeline_runs SET ${sets.join(', ')} WHERE id = $1`, [runId]);
+}

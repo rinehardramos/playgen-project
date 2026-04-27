@@ -116,7 +116,12 @@ function StageBox({ stage, data, expanded, onToggle }: {
   );
 }
 
-function StageDetail({ stage, data }: { stage: typeof STAGES[number]; data: StageData }) {
+function StageDetail({ stage, data, onRetry, retrying }: {
+  stage: typeof STAGES[number];
+  data: StageData;
+  onRetry?: () => void;
+  retrying?: boolean;
+}) {
   if (data.status === 'pending') return null;
   return (
     <div className="mt-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm">
@@ -126,6 +131,15 @@ function StageDetail({ stage, data }: { stage: typeof STAGES[number]; data: Stag
         <span className={`px-2 py-0.5 rounded text-xs ${statusColor(data.status)}`}>
           {data.status}
         </span>
+        {data.status === 'failed' && onRetry && (
+          <button
+            onClick={onRetry}
+            disabled={retrying}
+            className="ml-auto px-3 py-1 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 text-white text-xs font-medium rounded transition-colors"
+          >
+            {retrying ? 'Retrying...' : 'Retry'}
+          </button>
+        )}
       </div>
       {data.step && (
         <p className="text-zinc-400 text-xs mb-1">{data.step}</p>
@@ -154,8 +168,14 @@ function StageDetail({ stage, data }: { stage: typeof STAGES[number]; data: Stag
   );
 }
 
-function PipelineRunCard({ run, isActive }: { run: PipelineRun; isActive: boolean }) {
+function PipelineRunCard({ run, isActive, stationId, onRefresh }: {
+  run: PipelineRun;
+  isActive: boolean;
+  stationId: string;
+  onRefresh: () => void;
+}) {
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
+  const [retryingStage, setRetryingStage] = useState<string | null>(null);
 
   const stages = STAGES.map(s => ({
     ...s,
@@ -163,6 +183,19 @@ function PipelineRunCard({ run, isActive }: { run: PipelineRun; isActive: boolea
   }));
 
   const totalDuration = formatDuration(run.created_at, run.status === 'running' ? undefined : run.updated_at);
+
+  const handleRetry = async (stageKey: string) => {
+    const stageName = stageKey.replace('stage_', '');
+    setRetryingStage(stageKey);
+    try {
+      await api.post(`/api/v1/stations/${stationId}/pipeline/runs/${run.id}/retry/${stageName}`, {});
+      onRefresh();
+    } catch {
+      // Error handled by polling refresh
+    } finally {
+      setRetryingStage(null);
+    }
+  };
 
   return (
     <div className={`p-4 rounded-xl border ${isActive ? 'border-blue-500/30 bg-zinc-900/80' : 'border-zinc-800 bg-zinc-900/40'}`}>
@@ -202,6 +235,10 @@ function PipelineRunCard({ run, isActive }: { run: PipelineRun; isActive: boolea
         <StageDetail
           stage={stages.find(s => s.key === expandedStage)!}
           data={stages.find(s => s.key === expandedStage)!.data}
+          onRetry={stages.find(s => s.key === expandedStage)!.data.status === 'failed'
+            ? () => handleRetry(expandedStage)
+            : undefined}
+          retrying={retryingStage === expandedStage}
         />
       )}
     </div>
@@ -306,7 +343,7 @@ export default function PipelinePage() {
       {/* Runs list */}
       <div className="space-y-4">
         {runs.map(run => (
-          <PipelineRunCard key={run.id} run={run} isActive={run.status === 'running'} />
+          <PipelineRunCard key={run.id} run={run} isActive={run.status === 'running'} stationId={stationId} onRefresh={fetchRuns} />
         ))}
       </div>
     </div>

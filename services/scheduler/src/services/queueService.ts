@@ -87,7 +87,7 @@ generationWorker.on('failed', (job, err) => {
  * Get a JWT token for internal service-to-service calls.
  * Uses ADMIN_EMAIL + ADMIN_PASSWORD env vars.
  */
-async function getServiceToken(): Promise<string> {
+export async function getServiceToken(): Promise<string> {
   const authBase = process.env.AUTH_INTERNAL_URL ?? 'http://auth:3001';
   const email = process.env.ADMIN_EMAIL;
   const password = process.env.ADMIN_PASSWORD;

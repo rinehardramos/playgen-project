@@ -1,12 +1,13 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requirePermission, requireStationAccess } from '@playgen/middleware';
-import { getRuns, getRun, createPipelineRun, startStage } from '../services/pipelineTracker.js';
-import { enqueueGeneration } from '../services/queueService.js';
+import { getRuns, getRun, createPipelineRun, startStage, retryStage, type PipelineStage } from '../services/pipelineTracker.js';
+import { enqueueGeneration, getServiceToken } from '../services/queueService.js';
 import { todayInTimezone } from './generateDay.js';
 import { getPool } from '../db.js';
 
 interface StationParams { stationId: string }
 interface RunParams extends StationParams { runId: string }
+interface RetryParams extends RunParams { stage: string }
 interface TriggerBody { date?: string }
 
 export async function pipelineRoutes(app: FastifyInstance) {
@@ -80,6 +81,87 @@ export async function pipelineRoutes(app: FastifyInstance) {
         date,
         status: 'running',
       });
+    },
+  );
+
+  // Retry a specific failed stage
+  app.post<{ Params: RetryParams }>(
+    '/stations/:stationId/pipeline/runs/:runId/retry/:stage',
+    { preHandler: [authenticate, requirePermission('playlist:write'), requireStationAccess()] },
+    async (req, reply) => {
+      const { stationId, runId, stage } = req.params;
+      const validStages: PipelineStage[] = ['playlist', 'dj_script', 'review', 'tts', 'publish'];
+      if (!validStages.includes(stage as PipelineStage)) {
+        return reply.status(400).send({ error: `Invalid stage: ${stage}` });
+      }
+
+      const run = await getRun(runId);
+      if (!run || run.station_id !== stationId) {
+        return reply.status(404).send({ error: 'Pipeline run not found' });
+      }
+
+      const stageData = run[`stage_${stage}` as keyof typeof run] as Record<string, unknown>;
+      if (stageData?.status !== 'failed') {
+        return reply.status(400).send({ error: `Stage "${stage}" is not in failed state` });
+      }
+
+      // Reset the stage and downstream stages
+      await retryStage(runId, stage as PipelineStage);
+
+      // Trigger the appropriate action for each stage
+      const djBase = process.env.DJ_INTERNAL_URL ?? 'http://dj:3007';
+      const stationBase = process.env.STATION_INTERNAL_URL ?? 'http://station:3002';
+
+      try {
+        switch (stage) {
+          case 'playlist': {
+            await enqueueGeneration({
+              stationId,
+              date: run.date,
+              triggeredBy: 'manual',
+              pipelineRunId: runId,
+            });
+            break;
+          }
+          case 'dj_script': {
+            if (!run.playlist_id) throw new Error('No playlist linked to this run');
+            const token = await getServiceToken();
+            await fetch(`${djBase}/api/v1/dj/playlists/${run.playlist_id}/generate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ pipeline_run_id: runId }),
+            });
+            break;
+          }
+          case 'tts': {
+            if (!run.script_id) throw new Error('No script linked to this run');
+            const token2 = await getServiceToken();
+            await fetch(`${djBase}/api/v1/dj/scripts/${run.script_id}/tts?force=true`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token2}` },
+            });
+            break;
+          }
+          case 'publish': {
+            if (!run.script_id) throw new Error('No script linked to this run');
+            const token3 = await getServiceToken();
+            await fetch(`${stationBase}/api/v1/programs/${run.script_id}/publish`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token3}` },
+            });
+            break;
+          }
+          case 'review':
+            // Review is manual — just reset the stage, user approves via UI
+            break;
+        }
+      } catch (err) {
+        const { failStage } = await import('../services/pipelineTracker.js');
+        await failStage(runId, stage as PipelineStage, String(err));
+        return reply.status(500).send({ error: `Retry failed: ${err}` });
+      }
+
+      return reply.status(202).send({ run_id: runId, stage, status: 'retrying' });
     },
   );
 }
