@@ -245,7 +245,11 @@ services:
       NODE_ENV: production
       PORT: ${DJ_SERVICE_PORT:-3007}
       STORAGE_LOCAL_PATH: /app/data/audio
-      # LLM for DJ script generation
+      # LLM backend: claude-code uses the claude-code sidecar container (subscription)
+      # Switch to openrouter for production: LLM_BACKEND=openrouter
+      LLM_BACKEND: ${LLM_BACKEND:-claude-code}
+      CLAUDE_RELAY_URL: http://claude-code:3099
+      # LLM for DJ script generation (used when LLM_BACKEND=openrouter)
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       # TTS storage (S3/R2 for CDN-backed HLS)
@@ -278,13 +282,35 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      claude-code:
+        condition: service_started
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3007/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # ── Claude Code LLM service ─────────────────────────────────────────────────
+  # Runs the `claude` CLI inside Docker and exposes an HTTP relay on :3099.
+  # The DJ service calls this to generate scripts using your Claude subscription.
+  #
+  # First-time login (run once after `docker compose up`):
+  #   docker compose exec -it claude-code claude
+  #   → follow the browser login flow, then Ctrl+C back to the relay
+  claude-code:
+    build:
+      context: services/claude-code
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3099
+    volumes:
+      - claude_auth:/root/.claude   # persists login across restarts
+    networks:
+      - playgen
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
   dj_audio_data:
+  claude_auth:
