@@ -885,23 +885,17 @@ export async function runGenerationJob(
 
   await reportProgress(95, 'Finalising…');
 
-  // 8. Update script with final segment count + generation time
-  const generation_ms = Date.now() - start;
-  await pool.query(
-    `UPDATE dj_scripts
-     SET total_segments = $2, generation_ms = $3, updated_at = NOW()
-     WHERE id = $1`,
-    [script_id, position, generation_ms],
-  );
+  await reportProgress(100, 'Done');
 
   // 9. Build manifest (fire-and-forget — failure does not block script)
   buildManifest(script_id).catch((err) =>
     console.error('[generationWorker] Manifest build failed:', err),
   );
 
-  await reportProgress(100, 'Done');
-
-  // 10. Inject floating DJ segments over songs (dynamic layered audio)
+  // 10. Inject floating DJ segments over songs (dynamic layered audio).
+  // Must complete BEFORE generation_ms is stamped — the pipeline polls for
+  // generation_ms != null as a signal that ALL segments (including floating ones)
+  // are ready for TTS.
   await injectFloatingSegments({
     scriptId: script_id,
     stationId: data.station_id,
@@ -917,6 +911,16 @@ export async function runGenerationJob(
     effectiveTtsProvider,
     pool,
   });
+
+  // 8. Update script with final segment count + generation time.
+  // Stamped AFTER floating injection so the pipeline's poll sees a complete set.
+  const generation_ms = Date.now() - start;
+  await pool.query(
+    `UPDATE dj_scripts
+     SET total_segments = $2, generation_ms = $3, updated_at = NOW()
+     WHERE id = $1`,
+    [script_id, position, generation_ms],
+  );
 
   // 11. Auto-trigger TTS if script is auto-approved (pipeline automation)
   if (data.auto_approve) {

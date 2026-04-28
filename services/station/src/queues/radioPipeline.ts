@@ -303,14 +303,24 @@ async function stagePublish(
 ): Promise<void> {
   const pool = getPool();
 
-  // Insert a publish_jobs row
+  // Upsert: if the DJ service's autoTriggerPublish already created a row, reuse it.
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO publish_jobs (station_id, script_id, status, stages_completed)
      VALUES ($1, $2, 'queued', '{}')
+     ON CONFLICT ON CONSTRAINT publish_jobs_station_active DO NOTHING
      RETURNING id`,
     [stationId, scriptId],
   );
-  const publishJobId = rows[0]?.id;
+
+  // If the row already existed (DO NOTHING), find it
+  let publishJobId = rows[0]?.id;
+  if (!publishJobId) {
+    const { rows: existing } = await pool.query<{ id: string }>(
+      `SELECT id FROM publish_jobs WHERE script_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [scriptId],
+    );
+    publishJobId = existing[0]?.id;
+  }
   if (!publishJobId) throw new Error('publish: failed to insert publish_jobs row');
 
   // Enqueue in publish pipeline
