@@ -4,6 +4,7 @@ import type { ProgramManifest, ShowManifest } from '../services/manifestService.
 import { triggerPlayout } from '../playout/playoutTrigger.js';
 import { generateHls } from '../playout/hlsGenerator.js';
 import { getPool } from '../db.js';
+import { generateDjAvatar, generateStationArtwork } from '../services/imageGenerator.js';
 
 /**
  * Internal manifest routes — not exposed through the gateway.
@@ -127,5 +128,51 @@ export async function manifestRoutes(app: FastifyInstance) {
       total_segments: hls.totalSegments,
       stream_url: `${GATEWAY_URL}/stream/${manifestRow.station_id}/playlist.m3u8`,
     };
+  });
+
+  /**
+   * Trigger DALL-E image regeneration for a DJ avatar or station artwork.
+   * Fire-and-forget — returns 202 immediately.
+   *
+   * POST /internal/regenerate-image
+   * Body: { type: 'dj-avatar', profile_id: string }
+   *     | { type: 'station-artwork', station_id: string }
+   */
+  app.post('/internal/regenerate-image', async (req, reply) => {
+    const body = req.body as
+      | { type: 'dj-avatar'; profile_id: string }
+      | { type: 'station-artwork'; station_id: string };
+
+    if (body?.type === 'dj-avatar') {
+      if (!body.profile_id) return reply.code(400).send({ error: 'profile_id required' });
+
+      const { rows } = await getPool().query<{ id: string; name: string; personality: string | null }>(
+        'SELECT id, name, personality FROM dj_profiles WHERE id = $1',
+        [body.profile_id],
+      );
+      if (!rows[0]) return reply.code(404).send({ error: 'DJ profile not found' });
+
+      generateDjAvatar(rows[0]).catch((err) =>
+        app.log.error({ err }, '[regenerate-image] DJ avatar generation failed'),
+      );
+      return reply.code(202).send({ ok: true, message: 'DJ avatar generation started' });
+    }
+
+    if (body?.type === 'station-artwork') {
+      if (!body.station_id) return reply.code(400).send({ error: 'station_id required' });
+
+      const { rows } = await getPool().query<{ id: string; name: string; genre: string | null }>(
+        'SELECT id, name, genre FROM stations WHERE id = $1',
+        [body.station_id],
+      );
+      if (!rows[0]) return reply.code(404).send({ error: 'Station not found' });
+
+      generateStationArtwork(rows[0]).catch((err) =>
+        app.log.error({ err }, '[regenerate-image] Station artwork generation failed'),
+      );
+      return reply.code(202).send({ ok: true, message: 'Station artwork generation started' });
+    }
+
+    return reply.code(400).send({ error: 'type must be "dj-avatar" or "station-artwork"' });
   });
 }
