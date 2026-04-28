@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { JwtPayload } from '@playgen/types';
 
@@ -17,7 +18,13 @@ export function signAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): strin
 }
 
 export function signRefreshToken(userId: string): string {
-  return jwt.sign({ sub: userId }, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES_SEC });
+  // jti (JWT ID) adds per-call entropy so concurrent logins at the same
+  // second don't produce identical tokens → identical hashes → DB collision.
+  return jwt.sign(
+    { sub: userId, jti: crypto.randomBytes(16).toString('hex') },
+    REFRESH_SECRET,
+    { expiresIn: REFRESH_EXPIRES_SEC },
+  );
 }
 
 export function verifyAccessToken(token: string): JwtPayload {

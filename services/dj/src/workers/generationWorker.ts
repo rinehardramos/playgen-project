@@ -1031,7 +1031,6 @@ async function autoTriggerPublish(scriptId: string, stationId: string): Promise<
   const res = await fetch(`${stationBase}/api/v1/stations/${stationId}/programs/${scriptId}/publish`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
   });

@@ -278,11 +278,12 @@ async function stageGenerateScript(
   return scriptId;
 }
 
-async function stageGenerateTts(scriptId: string, getToken: () => Promise<string>): Promise<void> {
+async function stageGenerateTts(playlistId: string, getToken: () => Promise<string>): Promise<void> {
   // TTS is auto-triggered by the DJ worker when auto_approve=true.
-  // We simply poll until all segments have a non-empty audio_url (max 300s, every 5s).
+  // Poll /dj/playlists/:playlistId/script (by playlist, not script ID) until all
+  // segments have a non-empty audio_url (max 600s, every 5s).
   await pollUntil<true>(
-    `${DJ_URL()}/api/v1/dj/scripts/${scriptId}`,
+    `${DJ_URL()}/api/v1/dj/playlists/${playlistId}/script`,
     getToken,
     (body) => {
       const b = body as { segments?: Array<{ audio_url?: string | null }> } | null;
@@ -394,7 +395,7 @@ export function startRadioPipelineWorker(): Worker<RadioPipelineJobData> {
         if (config.auto_approve) {
           await setStage(pipeline_run_id, 'generate_tts');
           const start = Date.now();
-          await stageGenerateTts(scriptId, getServiceToken);
+          await stageGenerateTts(playlistId, getServiceToken);
           await completeStage(pipeline_run_id, 'generate_tts', { duration_ms: Date.now() - start });
         } else {
           await completeStage(pipeline_run_id, 'generate_tts', { skipped: true });

@@ -123,7 +123,7 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
 
   if [ "$STAGE" != "$LAST_STAGE" ] && [ "$STAGE" != "null" ]; then
     [ -n "$LAST_STAGE" ] && echo "  ✓ $LAST_STAGE done"
-    echo "  ▸ $STAGE…"
+    echo "  > $STAGE..."
     LAST_STAGE="$STAGE"
   fi
 
