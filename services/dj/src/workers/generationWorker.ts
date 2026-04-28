@@ -1097,7 +1097,8 @@ async function autoTriggerTts(scriptId: string, stationId: string): Promise<void
     return;
   }
 
-  const concurrency = Math.max(1, parseInt(process.env.TTS_WORKER_CONCURRENCY ?? '3', 10));
+  // ElevenLabs free/starter plans cap at 3 concurrent requests; default to 2 to stay safe.
+  const concurrency = Math.max(1, parseInt(process.env.TTS_WORKER_CONCURRENCY ?? '2', 10));
   let generated = 0;
   let failed = 0;
 
@@ -1180,7 +1181,7 @@ async function autoTriggerPublish(scriptId: string, stationId: string): Promise<
     return;
   }
 
-  const res = await fetch(`${stationBase}/api/v1/stations/${stationId}/programs/${scriptId}/publish`, {
+  const res = await fetch(`${stationBase}/api/v1/programs/${scriptId}/publish`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
