@@ -23,7 +23,7 @@ RUN pnpm --filter @playgen/station-service build
 FROM node:25-alpine
 WORKDIR /app
 
-RUN npm install -g pnpm
+RUN apk add --no-cache ffmpeg && npm install -g pnpm
 
 COPY --from=builder /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/package.json ./

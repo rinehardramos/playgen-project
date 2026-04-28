@@ -25,7 +25,13 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { getPool } from '../db';
+
+const execFileAsync = promisify(execFile);
 
 // ── Queue ──────────────────────────────────────────────────────────────────
 
@@ -278,55 +284,78 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
   // player can stream them. CDN URL is written back to songs.audio_url so
   // subsequent publishes skip the re-upload (idempotent).
   const { rows: songs } = await pool.query<{
-    song_id: string; audio_url: string; ext: string;
+    song_id: string; audio_url: string;
   }>(
-    `SELECT DISTINCT s.id AS song_id, s.audio_url,
-            lower(regexp_replace(s.audio_url, '^.*\\.([^.]+)$', '\\1')) AS ext
+    `SELECT DISTINCT s.id AS song_id, s.audio_url
      FROM dj_scripts ds
      JOIN playlists pl ON pl.id = ds.playlist_id
      JOIN playlist_entries pe ON pe.playlist_id = pl.id
      JOIN songs s ON s.id = pe.song_id
      WHERE ds.id = $1
        AND s.audio_url IS NOT NULL
-       AND s.audio_url NOT LIKE 'http%'`,
+       AND s.audio_url != ''
+       AND s.audio_url NOT LIKE 'http%.aac'`,
     [scriptId],
   );
 
   for (const song of songs) {
-    const ext = ['mp3', 'aac', 'flac', 'wav', 'm4a', 'ogg'].includes(song.ext) ? song.ext : 'mp3';
-    const s3Key = `songs/${song.song_id}.${ext}`;
+    // Songs are transcoded to ADTS AAC so they share the same codec as DJ segments.
+    const s3Key = `songs/${song.song_id}.aac`;
 
     try {
       await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: s3Key }));
-      // Already uploaded — just ensure DB has CDN URL
+      // Already uploaded — ensure DB has CDN URL and correct duration
       const cdnUrl = `${publicBase}/${s3Key}`;
       await pool.query(`UPDATE songs SET audio_url = $1 WHERE id = $2`, [cdnUrl, song.song_id]);
       continue;
-    } catch { /* not found — upload */ }
+    } catch { /* not found — transcode + upload */ }
 
-    let body: Buffer;
-    try {
-      const localMusicDir = process.env.LOCAL_MUSIC_DIR;
-      const filePath = localMusicDir && song.audio_url.startsWith(localMusicDir)
-        ? song.audio_url.replace(localMusicDir, '/library')
-        : song.audio_url;
-      body = fs.readFileSync(filePath);
-    } catch (err) {
-      console.warn(`[stageUploadAssets] Song file not readable, skipping: ${song.audio_url}`, err);
+    const localMusicDir = process.env.LOCAL_MUSIC_DIR;
+    const srcPath = localMusicDir && song.audio_url.startsWith(localMusicDir)
+      ? song.audio_url.replace(localMusicDir, '/library')
+      : song.audio_url;
+
+    if (!fs.existsSync(srcPath)) {
+      console.warn(`[stageUploadAssets] Song file not found, skipping: ${srcPath}`);
       continue;
     }
 
-    const contentType = ext === 'mp3' ? 'audio/mpeg'
-      : ext === 'aac' ? 'audio/aac'
-      : ext === 'flac' ? 'audio/flac'
-      : ext === 'wav' ? 'audio/wav'
-      : ext === 'm4a' ? 'audio/mp4'
-      : 'audio/ogg';
+    // Transcode to ADTS AAC — same format as DJ segments for seamless HLS playback
+    const tmpOut = path.join(os.tmpdir(), `song-${song.song_id}.aac`);
+    try {
+      await execFileAsync('ffmpeg', [
+        '-i', srcPath,
+        '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2',
+        '-f', 'adts',
+        '-y', tmpOut,
+      ], { timeout: 300_000 });
+    } catch (err) {
+      console.warn(`[stageUploadAssets] ffmpeg transcode failed, skipping song ${song.song_id}:`, err);
+      continue;
+    }
 
-    await s3.send(new PutObjectCommand({ Bucket: bucket, Key: s3Key, Body: body, ContentType: contentType }));
+    let body: Buffer;
+    let durationSec: number | null = null;
+    try {
+      body = fs.readFileSync(tmpOut);
+      // Get precise duration from ffprobe
+      try {
+        const { stdout } = await execFileAsync('ffprobe', [
+          '-v', 'quiet', '-print_format', 'json', '-show_format', tmpOut,
+        ], { timeout: 10_000 });
+        durationSec = parseFloat(JSON.parse(stdout).format.duration);
+      } catch { /* keep existing duration */ }
+    } finally {
+      fs.promises.unlink(tmpOut).catch(() => {});
+    }
+
+    await s3.send(new PutObjectCommand({ Bucket: bucket, Key: s3Key, Body: body!, ContentType: 'audio/aac' }));
     const cdnUrl = `${publicBase}/${s3Key}`;
-    await pool.query(`UPDATE songs SET audio_url = $1 WHERE id = $2`, [cdnUrl, song.song_id]);
-    console.info(`[stageUploadAssets] Uploaded song ${song.song_id} → ${cdnUrl}`);
+    await pool.query(
+      `UPDATE songs SET audio_url = $1${durationSec !== null ? ', duration_sec = $3' : ''} WHERE id = $2`,
+      durationSec !== null ? [cdnUrl, song.song_id, durationSec] : [cdnUrl, song.song_id],
+    );
+    console.info(`[stageUploadAssets] Transcoded + uploaded song ${song.song_id} → ${cdnUrl}`);
   }
 }
 
