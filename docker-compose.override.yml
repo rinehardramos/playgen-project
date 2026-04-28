@@ -14,6 +14,12 @@ services:
   gateway:
     ports:
       - "8888:80"
+  station:
+    volumes:
+      - ${LOCAL_MUSIC_DIR}:/library:ro
+    environment:
+      LOCAL_MUSIC_DIR: ${LOCAL_MUSIC_DIR}
+
   dj:
     environment:
       INFO_BROKER_BASE_URL: http://host.docker.internal:8000

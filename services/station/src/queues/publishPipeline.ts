@@ -262,7 +262,11 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
 
     let body: Buffer;
     try {
-      body = fs.readFileSync(song.audio_url);
+      const localMusicDir = process.env.LOCAL_MUSIC_DIR;
+      const filePath = localMusicDir && song.audio_url.startsWith(localMusicDir)
+        ? song.audio_url.replace(localMusicDir, '/library')
+        : song.audio_url;
+      body = fs.readFileSync(filePath);
     } catch (err) {
       console.warn(`[stageUploadAssets] Song file not readable, skipping: ${song.audio_url}`, err);
       continue;
