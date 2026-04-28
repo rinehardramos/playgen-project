@@ -294,7 +294,8 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
      WHERE ds.id = $1
        AND s.audio_url IS NOT NULL
        AND s.audio_url != ''
-       AND s.audio_url NOT LIKE 'http%.aac'`,
+       AND s.audio_url NOT LIKE 'http%.aac'
+       AND s.audio_url NOT LIKE 'http%.m3u8'`,
     [scriptId],
   );
 
@@ -310,14 +311,33 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
       continue;
     } catch { /* not found — transcode + upload */ }
 
+    // Resolve source: remap local music dir, or download from CDN if it's an HTTP URL
     const localMusicDir = process.env.LOCAL_MUSIC_DIR;
-    const srcPath = localMusicDir && song.audio_url.startsWith(localMusicDir)
-      ? song.audio_url.replace(localMusicDir, '/library')
-      : song.audio_url;
+    let srcPath: string;
+    let tmpSrc: string | null = null;
 
-    if (!fs.existsSync(srcPath)) {
-      console.warn(`[stageUploadAssets] Song file not found, skipping: ${srcPath}`);
-      continue;
+    if (song.audio_url.startsWith('http')) {
+      // Download from CDN to a temp file for transcoding
+      const srcExt = song.audio_url.split('.').pop()?.split('?')[0] ?? 'mp3';
+      tmpSrc = path.join(os.tmpdir(), `song-src-${song.song_id}.${srcExt}`);
+      try {
+        const res = await fetch(song.audio_url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await fs.promises.writeFile(tmpSrc, Buffer.from(await res.arrayBuffer()));
+        srcPath = tmpSrc;
+      } catch (err) {
+        console.warn(`[stageUploadAssets] Failed to download song ${song.song_id}: ${song.audio_url}`, err);
+        fs.promises.unlink(tmpSrc).catch(() => {});
+        continue;
+      }
+    } else {
+      srcPath = localMusicDir && song.audio_url.startsWith(localMusicDir)
+        ? song.audio_url.replace(localMusicDir, '/library')
+        : song.audio_url;
+      if (!fs.existsSync(srcPath)) {
+        console.warn(`[stageUploadAssets] Song file not found, skipping: ${srcPath}`);
+        continue;
+      }
     }
 
     // Transcode to ADTS AAC — same format as DJ segments for seamless HLS playback
@@ -332,6 +352,8 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
     } catch (err) {
       console.warn(`[stageUploadAssets] ffmpeg transcode failed, skipping song ${song.song_id}:`, err);
       continue;
+    } finally {
+      if (tmpSrc) fs.promises.unlink(tmpSrc).catch(() => {});
     }
 
     let body: Buffer;
@@ -343,7 +365,7 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
         const { stdout } = await execFileAsync('ffprobe', [
           '-v', 'quiet', '-print_format', 'json', '-show_format', tmpOut,
         ], { timeout: 10_000 });
-        durationSec = parseFloat(JSON.parse(stdout).format.duration);
+        durationSec = Math.round(parseFloat(JSON.parse(stdout).format.duration));
       } catch { /* keep existing duration */ }
     } finally {
       fs.promises.unlink(tmpOut).catch(() => {});
