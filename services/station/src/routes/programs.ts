@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate, requirePermission, requireStationAccess } from '@playgen/middleware';
 import * as programService from '../services/programService';
 import { notifyStreamUrlChange } from '../services/streamControlNotifier';
+import { generateStationArtwork } from '../services/imageGenerator';
 import { getPool } from '../db';
 
 export async function programRoutes(app: FastifyInstance) {
@@ -30,6 +31,22 @@ export async function programRoutes(app: FastifyInstance) {
       color_tag?: string | null;
     };
     const program = await programService.createProgram({ ...body, station_id: stationId });
+
+    // Fire-and-forget: generate DALL-E station artwork when a new program is delivered.
+    // Fetch station name for a better prompt; use program description as genre hint.
+    getPool()
+      .query<{ id: string; name: string }>(`SELECT id, name FROM stations WHERE id = $1`, [stationId])
+      .then(({ rows }) => {
+        if (rows[0]) {
+          generateStationArtwork({
+            id: stationId,
+            name: rows[0].name,
+            genre: body.description ?? null,
+          }).catch((err) => req.log.warn({ err }, 'Station artwork generation failed'));
+        }
+      })
+      .catch((err) => req.log.warn({ err }, 'Failed to fetch station for artwork generation'));
+
     return reply.code(201).send(program);
   });
 

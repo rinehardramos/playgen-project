@@ -227,6 +227,8 @@ export interface Station {
   primary_color?: string | null;
   secondary_color?: string | null;
   website_url?: string | null;
+  /** DALL-E generated abstract cover art URL (nullable until generated). Added in migration 072. */
+  artwork_url?: string | null;
 }
 
 export interface Role {
@@ -462,6 +464,8 @@ export interface DjProfile {
   tts_voice_id: string;
   is_default: boolean;
   is_active: boolean;
+  /** DALL-E generated portrait URL (nullable until generated). Added in migration 071. */
+  avatar_url?: string | null;
   created_at: Date;
   updated_at: Date;
 }

@@ -400,6 +400,9 @@ importers:
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.3
+      openai:
+        specifier: ^6.34.0
+        version: 6.34.0
       pg:
         specifier: ^8.11.0
         version: 8.20.0

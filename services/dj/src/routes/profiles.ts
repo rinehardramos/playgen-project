@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@playgen/middleware';
 import * as profileService from '../services/profileService.js';
+import { generateDjAvatar } from '../services/imageGenerator.js';
 import { listElevenLabsVoices } from '../adapters/tts/elevenlabs.js';
 import { GOOGLE_TTS_VOICES } from '../adapters/tts/google.js';
 import { config } from '../config.js';
@@ -34,6 +35,12 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
   app.post('/dj/profiles', async (req, reply) => {
     const company_id = (req as any).user.cid;
     const profile = await profileService.createProfile(company_id, req.body as any);
+
+    // Fire-and-forget: generate DALL-E avatar after the profile is saved
+    generateDjAvatar({ id: profile.id, name: profile.name, personality: profile.personality }).catch(
+      (err) => req.log.warn({ err }, 'DJ avatar generation failed'),
+    );
+
     return reply.code(201).send(profile);
   });
 

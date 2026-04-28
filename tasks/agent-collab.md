@@ -26,6 +26,7 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 ## Active Work
 - [x] feat(dj): parallel TTS generation — concurrency-limited batching with TTS_WORKER_CONCURRENCY (#424, feat/issue-424-parallel-tts, PR #454) | @claude-sonnet-4-6 | 2026-04-25
 - [x] fix(station+public): persist stream_url from publish pipeline + public endpoint returns it (#32, fix/ownradio-stream-url, PR #526) | @claude-sonnet-4-6 | 2026-04-27 | Migration: 069
+- [x] feat(dj+station+public): DALL-E 3 DJ avatar + station artwork generation, exposed in public stations API | @claude-sonnet-4-6 | 2026-04-28 | Migrations: 071, 072
 - [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
 
 ## Recently Completed
