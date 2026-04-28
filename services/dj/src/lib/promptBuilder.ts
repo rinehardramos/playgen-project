@@ -153,6 +153,61 @@ function buildPersonaSection(config: PersonaConfig): string {
   return parts.join('\n');
 }
 
+/**
+ * Build TTS-provider-specific writing guidance.
+ *
+ * ElevenLabs renders voice entirely from text — punctuation, sentence rhythm, and
+ * the voice_style description are the only levers. Narakeet voices are named personas
+ * with built-in characteristics; writing should match the persona implied by the
+ * voice name, not try to override it with punctuation tricks.
+ */
+function buildTtsWritingGuide(ttsProvider: string, profiles?: DjProfile[]): string | null {
+  const p = ttsProvider.toLowerCase();
+
+  if (p === 'elevenlabs') {
+    const voiceNotes = profiles
+      ? profiles
+          .map((prof) => {
+            const style = prof.voice_style ? ` — ${s(prof.voice_style, LIMITS.voice_style)}` : '';
+            return `  [${s(prof.name, LIMITS.name)}]${style}`;
+          })
+          .join('\n')
+      : '';
+
+    return `TTS ENGINE: ElevenLabs (neural voice synthesis)
+Each [Speaker] line is sent to a distinct ElevenLabs voice. Write to each voice's character:
+${voiceNotes}
+
+ElevenLabs pacing rules:
+- Use commas for brief pauses, ellipses (…) for trailing off, em-dashes (—) for interruptions
+- Exclamation marks add energy; question marks add upward inflection
+- Keep each speaker's turn to 1–2 short sentences — shorter lines sound more natural
+- Write as if transcribing real speech, not prose
+- NO stage directions, parentheticals, or text in asterisks — they are spoken literally
+- NO ALL-CAPS for emphasis — ElevenLabs reads them letter by letter`;
+  }
+
+  if (p === 'narakeet') {
+    const voiceNotes = profiles
+      ? profiles
+          .map((prof) => {
+            const voiceName = (prof as { tts_voice_id?: string }).tts_voice_id ?? prof.name;
+            return `  [${s(prof.name, LIMITS.name)}] → Narakeet voice "${s(voiceName, LIMITS.name)}"`;
+          })
+          .join('\n')
+      : '';
+
+    return `TTS ENGINE: Narakeet
+Each [Speaker] line is spoken by its Narakeet voice persona:
+${voiceNotes}
+
+Write to match each persona's inherent character. Narakeet voices have built-in rhythm —
+avoid over-punctuating. Plain, natural sentences sound best. No SSML or special markup.`;
+  }
+
+  return null;
+}
+
 // Map locale_code to language instructions for the LLM.
 function buildLocaleInstructions(localeCode?: string | null): string | null {
   if (!localeCode) return null;
@@ -173,7 +228,11 @@ No phonetic respellings needed — the TTS engine handles Filipino pronunciation
 // control chars / bidi codepoints / zero-width unicode. Free-form text is
 // further wrapped in <untrusted> delimiters so prompt-injection payloads are
 // treated by the LLM as character data, not directives.
-export function buildSystemPrompt(profile: DjProfile, localeCode?: string | null): string {
+export function buildSystemPrompt(
+  profile: DjProfile,
+  localeCode?: string | null,
+  ttsProvider?: string | null,
+): string {
   const safeName = s(profile.name, LIMITS.name);
   const lines: string[] = [
     `You are ${safeName}, a radio DJ. Persona description follows in the <untrusted> block:`,
@@ -195,6 +254,15 @@ export function buildSystemPrompt(profile: DjProfile, localeCode?: string | null
   if (localeInstr) {
     lines.push('');
     lines.push(localeInstr);
+  }
+
+  // TTS-provider-specific writing guidance
+  if (ttsProvider) {
+    const ttsGuide = buildTtsWritingGuide(ttsProvider, [profile]);
+    if (ttsGuide) {
+      lines.push('');
+      lines.push(ttsGuide);
+    }
   }
 
   lines.push('');
@@ -223,6 +291,7 @@ export function buildDualDjSystemPrompt(
   primary: DjProfile,
   secondary: DjProfile,
   localeCode?: string | null,
+  ttsProvider?: string | null,
 ): string {
   const name1 = s(primary.name, LIMITS.name);
   const name2 = s(secondary.name, LIMITS.name);
@@ -257,6 +326,15 @@ export function buildDualDjSystemPrompt(
     lines.push(localeInstr);
   }
 
+  // TTS-provider-specific writing guidance
+  if (ttsProvider) {
+    const ttsGuide = buildTtsWritingGuide(ttsProvider, [primary, secondary]);
+    if (ttsGuide) {
+      lines.push('');
+      lines.push(ttsGuide);
+    }
+  }
+
   lines.push('');
   lines.push(`FORMAT — Tag every line with the speaker's name in brackets:
 [${name1}] Spoken text here...
@@ -286,8 +364,9 @@ VARIETY IS ESSENTIAL — every segment must feel distinct:
 export function buildMultiDjSystemPrompt(
   profiles: DjProfile[],
   localeCode?: string | null,
+  ttsProvider?: string | null,
 ): string {
-  if (profiles.length < 2) return buildSystemPrompt(profiles[0]!, localeCode);
+  if (profiles.length < 2) return buildSystemPrompt(profiles[0]!, localeCode, ttsProvider);
 
   const names = profiles.map((p) => s(p.name, LIMITS.name));
   const nameList = names.join(', ');
@@ -311,6 +390,15 @@ export function buildMultiDjSystemPrompt(
   if (localeInstr) {
     lines.push('');
     lines.push(localeInstr);
+  }
+
+  // TTS-provider-specific writing guidance (must appear before FORMAT rules)
+  if (ttsProvider) {
+    const ttsGuide = buildTtsWritingGuide(ttsProvider, profiles);
+    if (ttsGuide) {
+      lines.push('');
+      lines.push(ttsGuide);
+    }
   }
 
   const tagLines = names.map((n) => `[${n}] Spoken text here...`).join('\n');

@@ -495,8 +495,8 @@ export async function runGenerationJob(
         : undefined,
     };
     const systemPrompt = isDualDj
-      ? buildMultiDjSystemPrompt(allProfiles, station.locale_code)
-      : buildSystemPrompt(profile!, station.locale_code);
+      ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider)
+      : buildSystemPrompt(profile!, station.locale_code, effectiveTtsProvider);
     const userPrompt = buildUserPrompt(ctx) + rejectionContext;
 
     // Soft rate limit check — skip segment rather than abort the whole script
@@ -704,8 +704,8 @@ export async function runGenerationJob(
       };
 
       const systemPrompt = isDualDj
-        ? buildMultiDjSystemPrompt(allProfiles, station.locale_code)
-        : buildSystemPrompt(profile, station.locale_code);
+        ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider)
+        : buildSystemPrompt(profile, station.locale_code, effectiveTtsProvider);
       const userPrompt = buildUserPrompt(ctx) + rejectionContext;
 
       console.info(
@@ -803,8 +803,8 @@ export async function runGenerationJob(
           };
 
           const shoutoutSystemPrompt = isDualDj
-            ? buildMultiDjSystemPrompt(allProfiles, station.locale_code)
-            : buildSystemPrompt(profile, station.locale_code);
+            ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider)
+            : buildSystemPrompt(profile, station.locale_code, effectiveTtsProvider);
           const shoutoutUserPrompt = buildUserPrompt(shoutoutCtx) + (data.rejection_notes
             ? `\n\nIMPORTANT: The previous script was rejected by the reviewer. Their feedback: "${data.rejection_notes}". Please rewrite accordingly.`
             : '');
@@ -901,11 +901,156 @@ export async function runGenerationJob(
 
   await reportProgress(100, 'Done');
 
-  // 10. Auto-trigger TTS if script is auto-approved (pipeline automation)
+  // 10. Inject floating DJ segments over songs (dynamic layered audio)
+  await injectFloatingSegments({
+    scriptId: script_id,
+    stationId: data.station_id,
+    playlistId: data.playlist_id,
+    entries,
+    allProfiles,
+    isDualDj,
+    profile: profile!,
+    station,
+    effectiveLlmModel,
+    effectiveLlmApiKey,
+    effectiveLlmProvider,
+    effectiveTtsProvider,
+    pool,
+  });
+
+  // 11. Auto-trigger TTS if script is auto-approved (pipeline automation)
   if (data.auto_approve) {
     autoTriggerTts(script_id, data.station_id).catch((err) =>
       console.error('[auto-pipeline] Auto-TTS failed:', err),
     );
+  }
+}
+
+// ── Floating segment injection ─────────────────────────────────────────────
+
+interface FloatingSegmentOpts {
+  scriptId: string;
+  stationId: string;
+  playlistId: string;
+  entries: PlaylistEntryRow[];
+  allProfiles: DjProfile[];
+  isDualDj: boolean;
+  profile: DjProfile;
+  station: StationRow;
+  effectiveLlmModel: string;
+  effectiveLlmApiKey: string | null;
+  effectiveLlmProvider: string;
+  effectiveTtsProvider: string;
+  pool: ReturnType<typeof getPool>;
+}
+
+/**
+ * Inject floating DJ segments that play *over* songs rather than between them.
+ *
+ * Each song gets a randomised chance of:
+ *  - A mid-song adlib (40% chance) — spontaneous energy drop or station promo
+ *  - A near-end overlap (60% chance) — DJ starts talking before song ends
+ *
+ * Floating segments carry `start_offset_sec` (seconds into the song) and
+ * `anchor_playlist_entry_id` so the HLS builder can place them on the DJ track
+ * at the correct program-timeline offset.
+ *
+ * Runs after sequential segments are committed — does not affect position counter.
+ */
+async function injectFloatingSegments(opts: FloatingSegmentOpts): Promise<void> {
+  const {
+    scriptId, stationId, entries, allProfiles, isDualDj, profile,
+    station, effectiveLlmModel, effectiveLlmApiKey, effectiveLlmProvider,
+    effectiveTtsProvider, pool,
+  } = opts;
+
+  if (entries.length === 0) return;
+
+  // Station-level sponsor name for mid-song promos (falls through to generic if absent)
+  const { rows: settingRows } = await pool.query<{ value: string }>(
+    `SELECT value FROM station_settings WHERE station_id = $1 AND key = 'sponsor_name'`,
+    [stationId],
+  );
+  const sponsorName = settingRows[0]?.value ?? null;
+
+  const systemPrompt = isDualDj
+    ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider)
+    : buildSystemPrompt(profile, station.locale_code, effectiveTtsProvider);
+
+  let injected = 0;
+
+  for (const entry of entries) {
+    const durationSec = entry.duration_sec ?? 180;
+
+    // Skip very short tracks (jingles, station IDs < 30s) — no room for overlay
+    if (durationSec < 30) continue;
+
+    // ── Mid-song adlib (40% per song, not first or last song) ────────────────
+    const isFirstOrLast = entry.position === 0 || entry.position === entries.length - 1;
+    if (!isFirstOrLast && Math.random() < 0.4) {
+      // Place between 20% and 60% into the song for a natural mid-point feel
+      const minOffset = Math.floor(durationSec * 0.2);
+      const maxOffset = Math.floor(durationSec * 0.6);
+      const offset = minOffset + Math.floor(Math.random() * (maxOffset - minOffset + 1));
+
+      // Alternate between spontaneous adlib and station promo
+      const isSponsor = sponsorName && Math.random() < 0.35;
+      const userMsg = isSponsor
+        ? `Drop a quick mid-song sponsor mention for "${sponsorName}". One sentence, natural and energetic — like you just remembered to say it.`
+        : `Drop a quick spontaneous mid-song comment — an adlib, a fun reaction, or a playful observation. One or two short sentences. Sound like it just came to you naturally.`;
+
+      try {
+        const result = await llmComplete(
+          [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }],
+          { model: effectiveLlmModel, temperature: 0.95, apiKey: effectiveLlmApiKey ?? undefined, provider: effectiveLlmProvider },
+        );
+        await pool.query(
+          `INSERT INTO dj_segments
+             (script_id, anchor_playlist_entry_id, segment_type, position, script_text,
+              start_offset_sec)
+           VALUES ($1, $2, 'adlib', -1, $3, $4)`,
+          [scriptId, entry.id, result.text, offset],
+        );
+        injected++;
+      } catch (err) {
+        console.warn('[floating] Mid-song adlib LLM failed:', err);
+      }
+    }
+
+    // ── Near-end overlap (60% per song, last 20–30s) ─────────────────────────
+    if (Math.random() < 0.6) {
+      const overlapWindow = Math.min(30, Math.floor(durationSec * 0.15));
+      const offset = durationSec - overlapWindow - Math.floor(Math.random() * 8);
+
+      const isLastSong = entry.position === entries.length - 1;
+      const nextEntry = isLastSong ? null : entries[entry.position + 1];
+      const nextInfo = nextEntry
+        ? ` The next song coming up is "${nextEntry.song_title}" by ${nextEntry.song_artist}.`
+        : '';
+
+      const userMsg = `"${entry.song_title}" by ${entry.song_artist} is about to end.${nextInfo} Bridge naturally into what's next — or just keep the energy going. One to two sentences, like you're jumping in before the fade.`;
+
+      try {
+        const result = await llmComplete(
+          [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }],
+          { model: effectiveLlmModel, temperature: 0.9, apiKey: effectiveLlmApiKey ?? undefined, provider: effectiveLlmProvider },
+        );
+        await pool.query(
+          `INSERT INTO dj_segments
+             (script_id, anchor_playlist_entry_id, segment_type, position, script_text,
+              start_offset_sec)
+           VALUES ($1, $2, 'song_transition', -1, $3, $4)`,
+          [scriptId, entry.id, result.text, Math.max(0, offset)],
+        );
+        injected++;
+      } catch (err) {
+        console.warn('[floating] Near-end overlap LLM failed:', err);
+      }
+    }
+  }
+
+  if (injected > 0) {
+    console.info(`[floating] Injected ${injected} floating segments for script ${scriptId}`);
   }
 }
 
@@ -915,18 +1060,22 @@ export async function runGenerationJob(
  */
 async function autoTriggerTts(scriptId: string, stationId: string): Promise<void> {
   // Lazy import to avoid module-level storage initialization (breaks unit tests)
-  const { generateSegmentTts, loadTtsProviderConfig } = await import('../services/ttsService.js');
+  const { generateSegmentTts, generateDialogueTts, isDialogueText, loadTtsProviderConfig } =
+    await import('../services/ttsService.js');
   const pool = getPool();
   console.info(`[auto-pipeline] Auto-triggering TTS for script ${scriptId}`);
 
-  // Load TTS config
-  const { rows: profileRows } = await pool.query<{ tts_voice_id: string }>(
-    `SELECT dp.tts_voice_id
+  // Load TTS config + voice_map (needed for multi-DJ dialogue segments)
+  const { rows: profileRows } = await pool.query<{
+    tts_voice_id: string; voice_map: Record<string, string> | null;
+  }>(
+    `SELECT dp.tts_voice_id, ds.voice_map
      FROM dj_scripts ds JOIN dj_profiles dp ON dp.id = ds.dj_profile_id
      WHERE ds.id = $1`,
     [scriptId],
   );
   const fallbackVoiceId = profileRows[0]?.tts_voice_id ?? 'alloy';
+  const voiceMap = profileRows[0]?.voice_map ?? null;
   const providerCfg = await loadTtsProviderConfig(stationId, fallbackVoiceId);
   if (!providerCfg) {
     console.warn('[auto-pipeline] TTS not configured for station, skipping auto-TTS');
@@ -955,18 +1104,21 @@ async function autoTriggerTts(scriptId: string, stationId: string): Promise<void
   for (let i = 0; i < segments.length; i += concurrency) {
     const batch = segments.slice(i, i + concurrency);
     const results = await Promise.allSettled(
-      batch.map((seg) =>
-        generateSegmentTts(
-          {
-            id: seg.id,
-            position: seg.position,
-            text: seg.edited_text ?? seg.script_text,
-            script_id: scriptId,
-            station_id: stationId,
-          },
-          providerCfg,
-        ),
-      ),
+      batch.map((seg) => {
+        const text = seg.edited_text ?? seg.script_text;
+        const segInput = {
+          id: seg.id,
+          position: seg.position,
+          text,
+          script_id: scriptId,
+          station_id: stationId,
+        };
+        // Multi-DJ dialogue: use per-speaker voice synthesis + ffmpeg concat
+        if (voiceMap && isDialogueText(text)) {
+          return generateDialogueTts(segInput, providerCfg, voiceMap);
+        }
+        return generateSegmentTts(segInput, providerCfg);
+      }),
     );
     for (const result of results) {
       if (result.status === 'fulfilled') generated++;

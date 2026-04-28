@@ -66,6 +66,9 @@ describe('manifestService', () => {
       ],
     });
 
+    // 2b. Floating segments (anchor-based)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
     // 4. Manifest insert
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'man-1' }] });
 
@@ -143,6 +146,7 @@ describe('manifestService', () => {
         { id: 'entry-1', hour: 9, position: 0, title: 'Song A', artist: 'Artist A', duration_sec: 240 },
       ],
     });
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // no floating segments
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'man-2' }] });
 
     await buildManifest('script-2');

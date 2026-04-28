@@ -200,8 +200,9 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
   const s3 = getS3Client();
   const bucket = process.env.S3_BUCKET ?? '';
   const publicBase = (process.env.S3_PUBLIC_URL_BASE ?? '').replace(/\/$/, '');
-  // NOTE: Audio files are fetched from the DJ service via HTTP, not from local disk.
+  const dateStr = new Date(playlistDate).toISOString().split('T')[0]; // YYYY-MM-DD
 
+  // ── 1. Upload DJ segment audio ────────────────────────────────────────────
   const { rows: segs } = await pool.query<{
     id: string; position: number; segment_type: string; audio_url: string | null;
   }>(
@@ -211,39 +212,73 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
 
   for (const seg of segs) {
     if (!seg.audio_url) continue;
-    // Skip segments already on CDN
-    if (seg.audio_url.startsWith('http')) continue;
+    if (seg.audio_url.startsWith('http')) continue; // Already on CDN
 
-    const dateStr = new Date(playlistDate).toISOString().split('T')[0]; // YYYY-MM-DD, no spaces
     const s3Key = `programs/${stationSlug}/${dateStr}/${seg.position}_${seg.segment_type}.mp3`;
 
-    // Check if already uploaded (idempotent resume)
     try {
       await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: s3Key }));
-      // Already exists — update DB with CDN URL without re-uploading
       const cdnUrl = `${publicBase}/${s3Key}`;
-      await pool.query(
-        `UPDATE dj_segments SET audio_url = $1 WHERE id = $2`,
-        [cdnUrl, seg.id],
-      );
+      await pool.query(`UPDATE dj_segments SET audio_url = $1 WHERE id = $2`, [cdnUrl, seg.id]);
       continue;
-    } catch {
-      // Not found — proceed with upload
-    }
+    } catch { /* not found — upload */ }
 
     const body = await fetchAudioBuffer(seg.audio_url);
-    await s3.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: s3Key,
-      Body: body,
-      ContentType: 'audio/mpeg',
-    }));
-
+    await s3.send(new PutObjectCommand({ Bucket: bucket, Key: s3Key, Body: body, ContentType: 'audio/mpeg' }));
     const cdnUrl = `${publicBase}/${s3Key}`;
-    await pool.query(
-      `UPDATE dj_segments SET audio_url = $1 WHERE id = $2`,
-      [cdnUrl, seg.id],
-    );
+    await pool.query(`UPDATE dj_segments SET audio_url = $1 WHERE id = $2`, [cdnUrl, seg.id]);
+  }
+
+  // ── 2. Upload song audio for this program's playlist ─────────────────────
+  // Songs with local filesystem paths are uploaded to R2 so the production
+  // player can stream them. CDN URL is written back to songs.audio_url so
+  // subsequent publishes skip the re-upload (idempotent).
+  const { rows: songs } = await pool.query<{
+    song_id: string; audio_url: string; ext: string;
+  }>(
+    `SELECT DISTINCT s.id AS song_id, s.audio_url,
+            lower(regexp_replace(s.audio_url, '^.*\\.([^.]+)$', '\\1')) AS ext
+     FROM dj_scripts ds
+     JOIN playlists pl ON pl.id = ds.playlist_id
+     JOIN playlist_entries pe ON pe.playlist_id = pl.id
+     JOIN songs s ON s.id = pe.song_id
+     WHERE ds.id = $1
+       AND s.audio_url IS NOT NULL
+       AND s.audio_url NOT LIKE 'http%'`,
+    [scriptId],
+  );
+
+  for (const song of songs) {
+    const ext = ['mp3', 'aac', 'flac', 'wav', 'm4a', 'ogg'].includes(song.ext) ? song.ext : 'mp3';
+    const s3Key = `songs/${song.song_id}.${ext}`;
+
+    try {
+      await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: s3Key }));
+      // Already uploaded — just ensure DB has CDN URL
+      const cdnUrl = `${publicBase}/${s3Key}`;
+      await pool.query(`UPDATE songs SET audio_url = $1 WHERE id = $2`, [cdnUrl, song.song_id]);
+      continue;
+    } catch { /* not found — upload */ }
+
+    let body: Buffer;
+    try {
+      body = fs.readFileSync(song.audio_url);
+    } catch (err) {
+      console.warn(`[stageUploadAssets] Song file not readable, skipping: ${song.audio_url}`, err);
+      continue;
+    }
+
+    const contentType = ext === 'mp3' ? 'audio/mpeg'
+      : ext === 'aac' ? 'audio/aac'
+      : ext === 'flac' ? 'audio/flac'
+      : ext === 'wav' ? 'audio/wav'
+      : ext === 'm4a' ? 'audio/mp4'
+      : 'audio/ogg';
+
+    await s3.send(new PutObjectCommand({ Bucket: bucket, Key: s3Key, Body: body, ContentType: contentType }));
+    const cdnUrl = `${publicBase}/${s3Key}`;
+    await pool.query(`UPDATE songs SET audio_url = $1 WHERE id = $2`, [cdnUrl, song.song_id]);
+    console.info(`[stageUploadAssets] Uploaded song ${song.song_id} → ${cdnUrl}`);
   }
 }
 
@@ -303,7 +338,9 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<s
   const { rows: segments } = await pool.query<{
     segment_type: string; position: number; script_text: string;
     playlist_entry_id: string | null; audio_url: string | null; audio_duration_sec: number | null;
-  }>(`SELECT segment_type, position, script_text, playlist_entry_id, audio_url, audio_duration_sec
+    start_offset_sec: number | null; anchor_playlist_entry_id: string | null;
+  }>(`SELECT segment_type, position, script_text, playlist_entry_id, audio_url,
+            audio_duration_sec, start_offset_sec, anchor_playlist_entry_id
       FROM dj_segments WHERE script_id = $1 ORDER BY position`, [scriptId]);
 
   // Build entry ID → index map
@@ -312,6 +349,10 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<s
     [script.playlist_id],
   );
   const entryIndexMap = new Map(entryRows.map((e, i) => [e.id, i]));
+
+  // Split sequential segments from floating segments
+  const sequentialSegments = segments.filter((s) => s.anchor_playlist_entry_id === null);
+  const floatingSegments = segments.filter((s) => s.anchor_playlist_entry_id !== null);
 
   const payload = {
     station: {
@@ -349,7 +390,8 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<s
       generation_source: script.generation_source,
       llm_model: script.llm_model,
       review_status: script.review_status,
-      segments: segments.map((seg) => ({
+      // Sequential segments (play between songs)
+      segments: sequentialSegments.map((seg) => ({
         segment_type: seg.segment_type,
         position: seg.position,
         script_text: seg.script_text,
@@ -358,6 +400,17 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<s
           : null,
         audio_url: seg.audio_url,
         audio_duration_sec: seg.audio_duration_sec,
+      })),
+      // Floating segments (play over songs at start_offset_sec into the anchored song)
+      floating_segments: floatingSegments.map((seg) => ({
+        segment_type: seg.segment_type,
+        script_text: seg.script_text,
+        audio_url: seg.audio_url,
+        audio_duration_sec: seg.audio_duration_sec,
+        start_offset_sec: seg.start_offset_sec,
+        playlist_entry_ref: seg.anchor_playlist_entry_id != null
+          ? (entryIndexMap.get(seg.anchor_playlist_entry_id) ?? null)
+          : null,
       })),
     },
   };

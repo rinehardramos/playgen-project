@@ -13,6 +13,23 @@ export interface ManifestItem {
   cumulative_ms: number;
 }
 
+/**
+ * A floating DJ event that plays over a song at a specific program-timeline offset.
+ * The player fires this clip at `program_offset_sec` while the music track continues,
+ * ducking music volume during playback.
+ */
+export interface DjFloatingEvent {
+  segment_id: string;
+  segment_type: string;
+  audio_url: string;
+  duration_sec: number;
+  /** Seconds from program start (cumulative, not relative to song start) */
+  program_offset_sec: number;
+  /** Seconds into the anchored song at which this event fires */
+  song_offset_sec: number;
+  duck_music: true;
+}
+
 export interface ProgramManifestSegment {
   position: number;
   type: 'song' | 'dj_segment' | 'station_id' | 'weather' | 'news' | 'joke' | 'ad_break' | 'time_check' | 'adlib' | 'listener_activity';
@@ -39,6 +56,8 @@ export interface ProgramManifest {
 export interface ShowManifest {
   total_duration_ms: number;
   items: ManifestItem[];
+  /** Floating DJ events that overlay music. Empty array = no floating events. */
+  dj_events: DjFloatingEvent[];
 }
 
 export async function buildManifest(scriptId: string): Promise<string> {
@@ -69,8 +88,21 @@ export async function buildManifest(scriptId: string): Promise<string> {
     [script.playlist_id]
   );
 
+  // 2b. Get floating segments (anchor-based, not positional)
+  const { rows: floatingSegs } = await pool.query(
+    `SELECT id, anchor_playlist_entry_id, segment_type, audio_url, audio_duration_sec, start_offset_sec
+     FROM dj_segments
+     WHERE script_id = $1
+       AND anchor_playlist_entry_id IS NOT NULL
+       AND start_offset_sec IS NOT NULL
+       AND audio_url IS NOT NULL
+     ORDER BY start_offset_sec`,
+    [scriptId]
+  );
+
   // 3. Interleave — track cumulative timing in milliseconds
   const items: ManifestItem[] = [];
+  const djEvents: DjFloatingEvent[] = [];
   let cumulativeMs = 0;
 
   const audioPrefix = '/api/v1/dj/audio/';
@@ -101,7 +133,8 @@ export async function buildManifest(scriptId: string): Promise<string> {
       }
     }
 
-    // The song itself
+    // The song itself — record its program-start offset so floating events can be resolved
+    const songStartMs = cumulativeMs;
     const songDurationMs = Math.round((entry.duration_sec || 0) * 1000);
     items.push({
       type: 'song',
@@ -115,6 +148,23 @@ export async function buildManifest(scriptId: string): Promise<string> {
       cumulative_ms: cumulativeMs,
     });
     cumulativeMs += songDurationMs;
+
+    // Resolve floating segments anchored to this song
+    for (const fseg of floatingSegs) {
+      if (fseg.anchor_playlist_entry_id !== entry.id) continue;
+      if (!fseg.audio_url) continue;
+      const songOffsetSec = parseFloat(fseg.start_offset_sec) || 0;
+      const programOffsetSec = (songStartMs / 1000) + songOffsetSec;
+      djEvents.push({
+        segment_id: fseg.id,
+        segment_type: fseg.segment_type,
+        audio_url: fseg.audio_url,
+        duration_sec: parseFloat(fseg.audio_duration_sec) || 0,
+        program_offset_sec: programOffsetSec,
+        song_offset_sec: songOffsetSec,
+        duck_music: true,
+      });
+    }
 
     // show_outro comes AFTER the very last song
     if (i === entries.length - 1) {
@@ -142,7 +192,9 @@ export async function buildManifest(scriptId: string): Promise<string> {
   // 4. Save to dj_show_manifests
   const storage = getStorageAdapter();
   const totalDurationSec = cumulativeMs / 1000;
-  const manifestPayload: ShowManifest = { total_duration_ms: cumulativeMs, items };
+  // Sort dj_events by program_offset_sec so the player can process them in order
+  djEvents.sort((a, b) => a.program_offset_sec - b.program_offset_sec);
+  const manifestPayload: ShowManifest = { total_duration_ms: cumulativeMs, items, dj_events: djEvents };
   const manifestPath = `${script.company_id}/${script.station_id}/${script.id}_manifest.json`;
 
   await storage.write(manifestPath, Buffer.from(JSON.stringify(manifestPayload)));
