@@ -161,13 +161,13 @@ export async function manifestRoutes(app: FastifyInstance) {
     if (body?.type === 'station-artwork') {
       if (!body.station_id) return reply.code(400).send({ error: 'station_id required' });
 
-      const { rows } = await getPool().query<{ id: string; name: string; genre: string | null }>(
-        'SELECT id, name, genre FROM stations WHERE id = $1',
+      const { rows } = await getPool().query<{ id: string; name: string; tagline: string | null }>(
+        'SELECT id, name, tagline FROM stations WHERE id = $1',
         [body.station_id],
       );
       if (!rows[0]) return reply.code(404).send({ error: 'Station not found' });
 
-      generateStationArtwork(rows[0]).catch((err) =>
+      generateStationArtwork({ ...rows[0], genre: rows[0].tagline }).catch((err) =>
         app.log.error({ err }, '[regenerate-image] Station artwork generation failed'),
       );
       return reply.code(202).send({ ok: true, message: 'Station artwork generation started' });
