@@ -19,6 +19,9 @@ services:
       - ${LOCAL_MUSIC_DIR}:/library:ro
     environment:
       LOCAL_MUSIC_DIR: ${LOCAL_MUSIC_DIR}
+      INFO_BROKER_URL: http://host.docker.internal:8000
+      INFO_BROKER_API_KEY: ${INFO_BROKER_API_KEY}
+      SOURCING_CALLBACK_BASE: http://gateway
 
   dj:
     environment:

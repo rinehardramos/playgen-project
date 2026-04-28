@@ -123,27 +123,71 @@ async function failJob(publishJobId: string, message: string): Promise<void> {
 // ── Stage implementations ──────────────────────────────────────────────────
 
 /**
- * Fire-and-forget: ask info-broker to source audio for songs that have no audio_url.
- * Never throws — silent if env vars missing or network fails.
+ * Ask info-broker to source audio for songs missing audio_url, then poll the DB
+ * until all songs have a URL or the timeout elapses. Uses SOURCING_CALLBACK_BASE
+ * (default: PROD_GATEWAY_URL) for the callback so local dev can point at the
+ * local gateway instead of production.
+ *
+ * Never throws — if env vars are missing or the request fails, sourcing is skipped.
  */
-function triggerSongSourcing(
+async function awaitSongSourcing(
+  scriptId: string,
   stationId: string,
   songs: Array<{ song_id: string; title: string; artist: string }>,
-): void {
+): Promise<void> {
+  if (songs.length === 0) return;
+
   const infoBrokerUrl = process.env.INFO_BROKER_URL;
   const apiKey = process.env.INFO_BROKER_API_KEY;
-  const callbackBase = process.env.PROD_GATEWAY_URL ?? 'https://api.playgen.site';
-  if (!infoBrokerUrl || !apiKey || songs.length === 0) return;
+  if (!infoBrokerUrl || !apiKey) {
+    console.warn('[awaitSongSourcing] INFO_BROKER_URL or INFO_BROKER_API_KEY not set — skipping audio sourcing');
+    return;
+  }
 
-  fetch(`${infoBrokerUrl}/v1/playlists/source-audio`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-    body: JSON.stringify({
-      station_id: stationId,
-      songs,
-      callback_url: `${callbackBase}/api/v1/internal/songs/audio-sourced`,
-    }),
-  }).catch(() => {});
+  // SOURCING_CALLBACK_BASE lets local dev point at the local gateway (http://gateway)
+  // instead of PROD_GATEWAY_URL which targets production.
+  const callbackBase = process.env.SOURCING_CALLBACK_BASE
+    ?? process.env.PROD_GATEWAY_URL
+    ?? 'https://api.playgen.site';
+
+  try {
+    await fetch(`${infoBrokerUrl}/v1/playlists/source-audio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+      body: JSON.stringify({
+        station_id: stationId,
+        songs,
+        callback_url: `${callbackBase}/api/v1/internal/songs/audio-sourced`,
+      }),
+    });
+  } catch (err) {
+    console.warn('[awaitSongSourcing] Failed to reach info-broker — skipping audio sourcing', err);
+    return;
+  }
+
+  // Poll until all submitted songs have an audio_url or we time out.
+  const timeoutMs = parseInt(process.env.SONG_SOURCING_TIMEOUT_SEC ?? '300', 10) * 1000;
+  const pollMs = 10_000;
+  const deadline = Date.now() + timeoutMs;
+  const songIds = songs.map(s => s.song_id);
+
+  console.info(`[awaitSongSourcing] Waiting up to ${timeoutMs / 1000}s for ${songs.length} song(s) to be sourced…`);
+
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, pollMs));
+    const { rows } = await getPool().query<{ count: string }>(
+      `SELECT COUNT(*) FROM songs WHERE id = ANY($1) AND (audio_url IS NULL OR audio_url = '')`,
+      [songIds],
+    );
+    const pending = parseInt(rows[0].count, 10);
+    if (pending === 0) {
+      console.info('[awaitSongSourcing] All songs sourced.');
+      return;
+    }
+    console.info(`[awaitSongSourcing] ${pending} song(s) still pending…`);
+  }
+
+  console.warn('[awaitSongSourcing] Timed out waiting for song sourcing — proceeding with available audio.');
 }
 
 async function stageValidate(scriptId: string): Promise<void> {
@@ -475,7 +519,8 @@ export function startPublishWorker(): Worker<PublishJobData> {
       );
       const done = rows[0]?.stages_completed ?? {};
 
-      // Fire-and-forget: trigger audio sourcing for songs that have no audio_url
+      // Source audio for songs that have no audio_url before uploading assets.
+      // Waits for the info-broker callback to update the DB (up to SONG_SOURCING_TIMEOUT_SEC).
       const { rows: songsToSource } = await pool.query<{
         song_id: string; title: string; artist: string;
       }>(
@@ -486,7 +531,7 @@ export function startPublishWorker(): Worker<PublishJobData> {
          WHERE sc.id = $1 AND (s.audio_url IS NULL OR s.audio_url = '')`,
         [script_id],
       );
-      triggerSongSourcing(job.data.station_id, songsToSource);
+      await awaitSongSourcing(script_id, job.data.station_id, songsToSource);
 
       // Stage 1: validate
       if (!done.validate) {
