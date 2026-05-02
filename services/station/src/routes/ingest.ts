@@ -310,6 +310,7 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
             slug: stationData.slug,
             name: stationData.name,
             streamUrl: stationStreamUrl,
+            metadataUrl: `${gatewayUrl}/stream/${station_id}/status.json`,
             genre: 'OPM',
             isLive: true,
           }),
