@@ -20,7 +20,7 @@
     "@playgen/middleware": "workspace:*",
     "@playgen/storage": "workspace:*",
     "@playgen/types": "workspace:*",
-    "bullmq": "^5.76.2",
+    "bullmq": "^5.76.4",
     "fastify": "^5.8.5",
     "jsonwebtoken": "^9.0.2",
     "openai": "^6.34.0",
