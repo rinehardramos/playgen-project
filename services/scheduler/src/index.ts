@@ -10,6 +10,7 @@ import { closeQueue } from './services/queueService';
 import { dailyProgramRoutes } from './routes/dailyProgram';
 import { generateDayRoutes } from './routes/generateDay';
 import { pipelineRoutes } from './routes/pipeline';
+import { scheduleDailyGeneration, stopDailyGeneration } from './jobs/dailyProgramJob';
 
 const app = Fastify({
   logger: {
@@ -60,6 +61,7 @@ async function shutdown(signal: string): Promise<void> {
   app.log.info(`Received ${signal}, shutting down gracefully`);
   try {
     stopCron();
+    stopDailyGeneration();
     await closeQueue();
     await app.close();
     process.exit(0);
@@ -83,6 +85,7 @@ app.listen({ port, host }, (err) => {
     process.exit(1);
   }
   startCron();
+  scheduleDailyGeneration();
   app.log.info(`scheduler-service listening on port ${port}`);
 });
 
