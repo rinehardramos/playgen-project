@@ -13,22 +13,27 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Next Recommended Tickets
+_Updated: 2026-05-03 by PM agent_
 
 ### For ticket-bug workers (P0 first)
-1. **#502** (P0) — Publish pipeline doesn't create station on production — assumes station exists
-2. **#465** (P0) — fix(audio): yt-dlp YouTube bot detection — needs cookie auth
-3. **#497** (P1) — Station auto-creation missing template slots, categories not seeded
+1. **#465** (P0) — fix(audio): yt-dlp YouTube bot detection — needs cookie auth
+2. **#497** (P1) — Station auto-creation missing template slots, categories not seeded
+3. **#498** (P1) — inherit_library flag on stations doesn't inherit songs from parent
+   _(#502 has open PR #542 in review — do not duplicate; #528 merged/Done)_
 
 ### For ticket-feat workers
-1. **#499** (P1) — Pipeline UI — GitHub Actions-style Radio Program Factory dashboard
+1. **#499** — Pipeline UI — GitHub Actions-style Radio Program Factory dashboard
+2. **#500** — Adaptive bandwidth streaming for low bandwidth / high latency clients
 
 ---
 
 ## Active Work
 
 
+
 ## Recently Completed
-- [x] fix(station): ingest-external ignores floating_segments — floating DJ segments now ingested to production (#502, fix/issue-502, PR pending) | @claude-sonnet-4-6 | 2026-05-03
+- [x] feat(playout): dynamic layered audio — dj.m3u8 + floating segments (#532, feat/issue-532, PR #541) | @claude-sonnet-4-6 | 2026-05-02 | Migration: 073
+- [x] fix(scheduler+playlist): fall back to master music library when station has no songs (#528, fix/issue-528, PR #540) | @claude-sonnet-4-6 | 2026-05-02 | Migration: 074
 - [x] fix(station): mount local music lib into station container via env-var volume (#533, feat/issue-533-local-music-mount, PR #536) | @claude-sonnet-4-6 | 2026-05-02
 - [x] fix(station+scripts): dual-DJ name in sync-program + artwork_url in publish pipeline (#531, #530, fix/issue-531, PR #537) | @claude-sonnet-4-6 | 2026-05-02
 - [x] feat(dj+station+public): DALL-E 3 DJ avatar + station artwork generation, exposed in public stations API | @claude-sonnet-4-6 | 2026-04-28 | Migrations: 071, 072
