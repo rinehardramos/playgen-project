@@ -21,7 +21,7 @@
     "fastify": "^5.8.5",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.0",
-    "resend": "^6.10.0"
+    "resend": "^6.12.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
