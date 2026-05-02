@@ -1,44 +1,62 @@
 /**
- * Retry helper for transient LLM / TTS API errors.
+ * Exponential backoff retry utility for transient LLM/TTS provider errors.
  *
- * Retries on rate-limit (429) and server-error (5xx) responses with
- * exponential back-off. Non-retryable errors (4xx except 429) are
- * rethrown immediately.
+ * Retries on 429 (rate limit) and 5xx (server error) responses.
+ * Non-retryable errors (400, 401, 404, etc.) are rethrown immediately.
  */
 
-export interface RetryOptions {
-  maxAttempts?: number;
-  initialDelayMs?: number;
-  label?: string;
+const BASE_DELAY_MS = 1_000;
+const MAX_DELAY_MS = 30_000;
+
+/** True for errors that are worth retrying (rate limits, transient server errors). */
+function isRetryable(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes('429') ||
+    msg.includes('rate limit') ||
+    msg.includes('too many requests') ||
+    msg.includes('500') ||
+    msg.includes('502') ||
+    msg.includes('503') ||
+    msg.includes('504') ||
+    msg.includes('quota') ||
+    msg.includes('insufficient credits') ||
+    msg.includes('retry-after') ||
+    msg.includes('overloaded')
+  );
 }
 
-/** Returns true if the error message looks like a retryable transient failure. */
-function isRetryable(err: Error): boolean {
-  const msg = err.message;
-  return /42[79]|5\d{2}|rate.?limit|too many requests|upstream|overload/i.test(msg);
+/** Parse Retry-After delay from an error message (returns ms or null). */
+function parseRetryAfterMs(err: unknown): number | null {
+  const msg = err instanceof Error ? err.message : String(err);
+  const m = msg.match(/retry.?after[:\s]+(\d+)/i);
+  if (m) return Math.min(parseInt(m[1], 10) * 1_000, MAX_DELAY_MS);
+  return null;
 }
 
+/**
+ * Retry `fn` up to `maxAttempts` times with exponential backoff + jitter.
+ * Non-retryable errors are rethrown immediately (no retry delay wasted).
+ */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  opts: RetryOptions = {},
+  { maxAttempts = 3, label = 'call' }: { maxAttempts?: number; label?: string } = {},
 ): Promise<T> {
-  const { maxAttempts = 3, initialDelayMs = 1000, label = 'op' } = opts;
-  let lastErr: Error = new Error('no attempts');
-
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await fn();
     } catch (err) {
-      lastErr = err as Error;
-      if (!isRetryable(lastErr) || attempt === maxAttempts) {
-        throw lastErr;
-      }
-      const delay = initialDelayMs * Math.pow(2, attempt - 1);
+      if (!isRetryable(err) || attempt === maxAttempts) throw err;
+      const retryAfterMs = parseRetryAfterMs(err);
+      const backoffMs = retryAfterMs ?? Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS);
+      const jitter = Math.random() * 500;
+      const delayMs = Math.round(backoffMs + jitter);
       console.warn(
-        `[retry] ${label} attempt ${attempt}/${maxAttempts} failed: ${lastErr.message} — retrying in ${delay}ms`,
+        `[retry] ${label} failed (attempt ${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${(err as Error).message}`,
       );
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
-  throw lastErr;
+  // Unreachable — last iteration always throws
+  throw new Error(`[retry] ${label} exhausted ${maxAttempts} attempts`);
 }

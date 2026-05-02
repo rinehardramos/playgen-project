@@ -1,3 +1,4 @@
+import cron, { ScheduledTask } from 'node-cron';
 import { getPool } from '../db';
 import { enqueueGeneration } from '../services/queueService';
 import { getDayOfWeek } from '../services/generationEngine';
@@ -11,6 +12,11 @@ interface ActiveProgram {
 }
 
 // ─── Core generation handler ─────────────────────────────────────────────────
+// ─── Cron state ───────────────────────────────────────────────────────────────
+
+let _scheduledTask: ScheduledTask | null = null;
+
+// ─── Core tick handler ────────────────────────────────────────────────────────
 
 /**
  * Query active programs for tomorrow's day-of-week and enqueue playlist
@@ -167,4 +173,46 @@ function getDefaultTargetDate(): string {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   return tomorrow.toISOString().slice(0, 10);
+}
+
+// ─── Schedule registration ────────────────────────────────────────────────────
+
+/**
+ * Register the daily program generation cron job using BullMQ's node-cron
+ * compatible expression.
+ *
+ * Hour is configurable via DAILY_GENERATION_HOUR (0–23, default 2).
+ * Full expression can be overridden with DAILY_PROGRAM_CRON.
+ */
+export function scheduleDailyGeneration(): void {
+  if (_scheduledTask) {
+    console.warn('[dailyProgramJob] Already scheduled — ignoring duplicate call');
+    return;
+  }
+
+  const hour = Number(process.env.DAILY_GENERATION_HOUR ?? 2);
+  const expression = process.env.DAILY_PROGRAM_CRON ?? `0 ${hour} * * *`;
+
+  if (!cron.validate(expression)) {
+    throw new Error(`[dailyProgramJob] Invalid cron expression: "${expression}"`);
+  }
+
+  _scheduledTask = cron.schedule(expression, () => {
+    runDailyProgramGeneration().catch((err) => {
+      console.error('[dailyProgramJob] Unhandled error in runDailyProgramGeneration', err);
+    });
+  });
+
+  console.info(`[dailyProgramJob] Scheduled with expression="${expression}"`);
+}
+
+/**
+ * Stop the daily program generation cron job. Called on graceful shutdown.
+ */
+export function stopDailyGeneration(): void {
+  if (_scheduledTask) {
+    _scheduledTask.stop();
+    _scheduledTask = null;
+    console.info('[dailyProgramJob] Stopped');
+  }
 }

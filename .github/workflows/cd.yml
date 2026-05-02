@@ -51,7 +51,7 @@ jobs:
             dockerfile: shared/db/Dockerfile
             context: .
     steps:
-      - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
           disable-file-monitoring: true
@@ -99,7 +99,7 @@ jobs:
 
       - run: corepack enable && corepack prepare pnpm@9.15.9 --activate
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version: 20
           cache: pnpm
@@ -124,7 +124,7 @@ jobs:
 
       - run: corepack enable && corepack prepare pnpm@9.15.9 --activate
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version: 20
           cache: pnpm
@@ -145,7 +145,7 @@ jobs:
       matrix:
         service: [auth, station, library, scheduler, playlist, analytics, dj, gateway]
     steps:
-      - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
           disable-file-monitoring: true
@@ -174,7 +174,7 @@ jobs:
     needs: [deploy-services, deploy-frontend]
     environment: production
     steps:
-      - uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176  # v2.17.0
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
           disable-file-monitoring: true

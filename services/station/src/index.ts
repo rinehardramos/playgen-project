@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
 import sensible from '@fastify/sensible';
 import rateLimit from '@fastify/rate-limit';
+import multipart from '@fastify/multipart';
 import { registerSecurity } from '@playgen/middleware';
 import { companyRoutes } from './routes/companies';
 import { stationRoutes } from './routes/stations';
@@ -17,6 +18,8 @@ import { publicStationRoutes } from './routes/publicStations';
 import radioPipelineRoutes from './routes/radioPipeline';
 import { startPublishWorker } from './queues/publishPipeline';
 import { startRadioPipelineWorker } from './queues/radioPipeline';
+import { programExportRoutes } from './routes/programExport';
+import { programImportRoutes } from './routes/programImport';
 
 const app = Fastify({
   logger: {
@@ -30,6 +33,7 @@ const app = Fastify({
 registerSecurity(app);
 app.register(sensible);
 app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
+app.register(multipart, { limits: { fileSize: 500 * 1024 * 1024 } });
 
 app.get('/health', async () => ({ status: 'ok', service: 'station-service' }));
 
@@ -45,6 +49,8 @@ app.register(ingestRoutes,         { prefix: '/api/v1' });
 app.register(publishRoutes,        { prefix: '/api/v1' });
 app.register(publicStationRoutes,  { prefix: '/api/v1' });
 app.register(radioPipelineRoutes,  { prefix: '/api/v1' });
+app.register(programExportRoutes,  { prefix: '/api/v1' });
+app.register(programImportRoutes,  { prefix: '/api/v1' });
 
 app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);
