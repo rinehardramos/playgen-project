@@ -282,7 +282,9 @@ export async function regenEntry(
   };
 
   // 5. Candidate songs (active, hour-eligible)
-  // Respect inherit_library: include songs from sibling stations in the same company
+  // Respect inherit_library: include songs from sibling stations in the same company.
+  // Sibling songs are matched to the current station's category by category code so
+  // that a station with 0 songs can inherit from a sibling's library.
   const { rows: stMeta } = await pool.query<{ inherit_library: boolean }>(
     'SELECT inherit_library FROM stations WHERE id = $1', [stationId],
   );
@@ -296,18 +298,54 @@ export async function regenEntry(
     );
     candidateStationIds.push(...siblings.map(s => s.id));
   }
-  const { rows: candidates } = await pool.query<{ id: string; artist: string }>(
-    `SELECT s.id, s.artist
+
+  // Determine effective category IDs to query (own + sibling categories with matching code)
+  let effectiveCategoryIds = [requiredCategoryId];
+  if (candidateStationIds.length > 1) {
+    const { rows: allCats } = await pool.query<{ station_id: string; id: string; code: string }>(
+      `SELECT station_id, id, code FROM categories WHERE station_id = ANY($1)`,
+      [candidateStationIds],
+    );
+    const ownCatCode = allCats.find((c) => c.id === requiredCategoryId)?.code;
+    if (ownCatCode) {
+      const siblingCatIds = allCats
+        .filter((c) => c.station_id !== stationId && c.code === ownCatCode)
+        .map((c) => c.id);
+      effectiveCategoryIds = [requiredCategoryId, ...siblingCatIds];
+    }
+  }
+
+  const candidateQuery = `SELECT s.id, s.artist
      FROM songs s
      WHERE s.station_id = ANY($1)
-       AND s.category_id = $2
+       AND s.category_id = ANY($2)
        AND s.is_active = TRUE
        AND (
          NOT EXISTS (SELECT 1 FROM song_slots ss WHERE ss.song_id = s.id)
          OR EXISTS (SELECT 1 FROM song_slots ss WHERE ss.song_id = s.id AND ss.eligible_hour = $3)
-       )`,
-    [candidateStationIds, requiredCategoryId, hour],
+       )`;
+
+  let { rows: candidates } = await pool.query<{ id: string; artist: string }>(
+    candidateQuery,
+    [candidateStationIds, effectiveCategoryIds, hour],
   );
+
+  // Fallback: if no candidates found (station has no music library), use master library stations.
+  if (candidates.length === 0) {
+    const { rows: masterStations } = await pool.query<{ id: string }>(
+      `SELECT id FROM stations WHERE is_master_library = TRUE AND is_active = TRUE AND id != $1`,
+      [stationId],
+    );
+    if (masterStations.length > 0) {
+      const masterIds = masterStations.map((s) => s.id);
+      const fallback = await pool.query<{ id: string; artist: string }>(
+        candidateQuery,
+        [masterIds, effectiveCategoryIds, hour],
+      );
+      candidates = fallback.rows;
+    }
+  }
+
   if (candidates.length === 0) throw new Error(`No songs in category for slot ${hour}:${position}`);
 
   // 6. Play history (72 h) + today's play counts
