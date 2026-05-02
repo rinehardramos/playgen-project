@@ -29,6 +29,17 @@ export interface ExternalSegment {
   tts_voice_id?: string | null;
 }
 
+export interface ExternalFloatingSegment {
+  segment_type: string;
+  script_text: string;
+  audio_url: string | null;
+  audio_duration_sec: number | null;
+  /** Seconds into the anchored song at which this segment starts */
+  start_offset_sec: number | null;
+  /** Index into playlist.entries[] for the song this segment floats over */
+  playlist_entry_ref?: number | null;
+}
+
 export interface ExternalProgramPayload {
   station: {
     slug: string;
@@ -68,6 +79,8 @@ export interface ExternalProgramPayload {
     llm_model?: string;
     review_status?: string;
     segments: ExternalSegment[];
+    /** Floating segments play over a song at a specific time offset */
+    floating_segments?: ExternalFloatingSegment[];
   };
   /** HLS playlist URL (R2 public URL) to push to OwnRadio after ingest */
   stream_url?: string | null;
@@ -259,13 +272,13 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
           dj_profile_id,
           scriptData.review_status ?? 'auto_approved',
           scriptData.llm_model ?? 'claude-code',
-          scriptData.segments.length,
+          scriptData.segments.length + (scriptData.floating_segments?.length ?? 0),
           scriptData.generation_source ?? 'external',
         ],
       );
       const script_id = scriptRows[0].id;
 
-      // ── 7. Insert segments ────────────────────────────────────────────
+      // ── 7. Insert sequential segments ────────────────────────────────
       for (const seg of scriptData.segments) {
         const playlist_entry_id =
           seg.playlist_entry_ref != null ? (entryRows[seg.playlist_entry_ref]?.id ?? null) : null;
@@ -286,6 +299,36 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
             seg.audio_duration_sec ?? null,
             seg.speaker ?? null,
             seg.tts_voice_id ?? null,
+          ],
+        );
+      }
+
+      // ── 7b. Insert floating segments ──────────────────────────────────
+      // Floating segments play over a song at a specific time offset rather than
+      // between songs. Positions are assigned after all sequential segments.
+      const floatingSegments = scriptData.floating_segments ?? [];
+      const seqPositionBase = scriptData.segments.length;
+      for (let i = 0; i < floatingSegments.length; i++) {
+        const seg = floatingSegments[i];
+        const anchor_playlist_entry_id =
+          seg.playlist_entry_ref != null ? (entryRows[seg.playlist_entry_ref]?.id ?? null) : null;
+
+        await pool.query(
+          `INSERT INTO dj_segments
+             (script_id, segment_type, position,
+              script_text, audio_url, audio_duration_sec,
+              start_offset_sec, anchor_playlist_entry_id,
+              segment_review_status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'approved')`,
+          [
+            script_id,
+            seg.segment_type,
+            seqPositionBase + i,
+            seg.script_text,
+            seg.audio_url ?? null,
+            seg.audio_duration_sec ?? null,
+            seg.start_offset_sec ?? null,
+            anchor_playlist_entry_id,
           ],
         );
       }
@@ -336,6 +379,7 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
         playlist_id,
         script_id,
         segment_count: scriptData.segments.length,
+        floating_segment_count: floatingSegments.length,
         slug: stationData.slug,
         ownradio_notified: !!stream_url,
       };

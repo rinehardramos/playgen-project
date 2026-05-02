@@ -25,10 +25,10 @@ Before starting any task, an agent MUST:
 ---
 
 ## Active Work
-- [ ] feat(playout): dynamic layered audio — dj.m3u8 generation + floating segments (#532, feat/issue-532) | @claude-sonnet-4-6 | 2026-05-02 | Migration: 073
 
 
 ## Recently Completed
+- [x] feat(playout): dynamic layered audio — dj.m3u8 + floating segments (#532, feat/issue-532, PR #541) | @claude-sonnet-4-6 | 2026-05-02 | Migration: 073
 - [x] fix(station): mount local music lib into station container via env-var volume (#533, feat/issue-533-local-music-mount, PR #536) | @claude-sonnet-4-6 | 2026-05-02
 - [x] fix(station+scripts): dual-DJ name in sync-program + artwork_url in publish pipeline (#531, #530, fix/issue-531, PR #537) | @claude-sonnet-4-6 | 2026-05-02
 - [x] feat(dj+station+public): DALL-E 3 DJ avatar + station artwork generation, exposed in public stations API | @claude-sonnet-4-6 | 2026-04-28 | Migrations: 071, 072

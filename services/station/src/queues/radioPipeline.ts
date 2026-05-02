@@ -394,9 +394,20 @@ export function startRadioPipelineWorker(): Worker<RadioPipelineJobData> {
         await setStage(pipeline_run_id, 'generate_script');
         const start = Date.now();
         scriptId = await stageGenerateScript(pipeline_run_id, playlistId, config, getServiceToken);
+        // AC4/AC6: include segment count in stages_completed for progress visibility
+        const { rows: segCountRows } = await getPool().query<{ total_segments: number; count: string }>(
+          `SELECT ds.total_segments, COUNT(seg.id) AS count
+           FROM dj_scripts ds LEFT JOIN dj_segments seg ON seg.script_id = ds.id
+           WHERE ds.id = $1
+           GROUP BY ds.total_segments`,
+          [scriptId],
+        );
+        const segRow = segCountRows[0];
         await completeStage(pipeline_run_id, 'generate_script', {
           script_id: scriptId,
           duration_ms: Date.now() - start,
+          segments_done: segRow ? parseInt(String(segRow.count), 10) : null,
+          total_segments: segRow?.total_segments ?? null,
         });
       }
 
@@ -406,7 +417,18 @@ export function startRadioPipelineWorker(): Worker<RadioPipelineJobData> {
           await setStage(pipeline_run_id, 'generate_tts');
           const start = Date.now();
           await stageGenerateTts(playlistId, getServiceToken);
-          await completeStage(pipeline_run_id, 'generate_tts', { duration_ms: Date.now() - start });
+          // AC4/AC6: include TTS segment counts for progress visibility
+          const { rows: ttsCountRows } = await getPool().query<{ total: string; with_audio: string }>(
+            `SELECT COUNT(*) AS total, COUNT(audio_url) AS with_audio
+             FROM dj_segments WHERE script_id = $1`,
+            [scriptId],
+          );
+          const ttsRow = ttsCountRows[0];
+          await completeStage(pipeline_run_id, 'generate_tts', {
+            duration_ms: Date.now() - start,
+            tts_segments_done: ttsRow ? parseInt(ttsRow.with_audio, 10) : null,
+            tts_segments_total: ttsRow ? parseInt(ttsRow.total, 10) : null,
+          });
         } else {
           await completeStage(pipeline_run_id, 'generate_tts', { skipped: true });
         }

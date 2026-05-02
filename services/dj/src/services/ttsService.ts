@@ -1,5 +1,6 @@
 import { getTtsAdapter } from '../adapters/tts/openai.js';
 import { getStorageAdapter } from '../lib/storage/index.js';
+import { withRetry } from '../utils/retry.js';
 import { config } from '../config.js';
 import { getPool } from '../db.js';
 import { logTtsUsage } from '../lib/usageLogger.js';
@@ -61,10 +62,10 @@ export async function generateSegmentTts(
     model: providerCfg.model,
   });
 
-  const result = await ttsAdapter.generate({
-    voice_id: providerCfg.voiceId,
-    text: segment.text,
-  });
+  const result = await withRetry(
+    () => ttsAdapter.generate({ voice_id: providerCfg.voiceId, text: segment.text }),
+    { label: `tts/segment-${segment.position}` },
+  );
 
   // Transcode MP3 → AAC for codec consistency with HLS song segments
   let audioData = result.audio_data;
@@ -204,10 +205,10 @@ export async function generateDialogueTts(
         model: providerCfg.model,
       });
 
-      const result = await ttsAdapter.generate({
-        voice_id: voiceId,
-        text: line.text,
-      });
+      const result = await withRetry(
+        () => ttsAdapter.generate({ voice_id: voiceId, text: line.text }),
+        { label: `tts/dialogue-line-${i}` },
+      );
 
       const clipPath = path.join(tmpDir, `clip-${String(i).padStart(3, '0')}.mp3`);
       fs.writeFileSync(clipPath, result.audio_data);
