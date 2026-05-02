@@ -1,6 +1,7 @@
 import { getPool } from '../db.js';
 import { getSocialProviders } from '../adapters/social/index.js';
 import { llmComplete } from '../adapters/llm/index.js';
+import { withRetry } from '../utils/retry.js';
 import { buildSystemPrompt, buildDualDjSystemPrompt, buildMultiDjSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
 import type { StationIdentity } from '../lib/promptBuilder.js';
 import { logLlmUsage } from '../lib/usageLogger.js';
@@ -811,7 +812,7 @@ export async function runGenerationJob(
 
           let shoutoutText: string;
           try {
-            const shoutoutResult = await llmComplete(
+            const shoutoutResult = await withRetry(() => llmComplete(
               [
                 { role: 'system', content: shoutoutSystemPrompt },
                 { role: 'user', content: shoutoutUserPrompt },
@@ -822,7 +823,7 @@ export async function runGenerationJob(
                 apiKey: effectiveLlmApiKey ?? undefined,
                 provider: effectiveLlmProvider,
               },
-            );
+            ), { label: 'shoutout/listener_activity' });
             shoutoutText = shoutoutResult.text;
             if (shoutoutResult.usage) {
               logLlmUsage({
@@ -835,8 +836,11 @@ export async function runGenerationJob(
               });
             }
           } catch (llmErr) {
-            console.error('[generationWorker] Shoutout LLM call FAILED:', llmErr);
-            throw llmErr;
+            console.error(
+              `[generationWorker] Shoutout segment permanently failed after retries — provider=${effectiveLlmProvider}: ${(llmErr as Error).message}`,
+            );
+            segmentsDone++;
+            continue;
           }
 
           const shoutoutPos = position++;
@@ -1004,10 +1008,10 @@ async function injectFloatingSegments(opts: FloatingSegmentOpts): Promise<void> 
         : `Drop a quick spontaneous mid-song comment — an adlib, a fun reaction, or a playful observation. One or two short sentences. Sound like it just came to you naturally.`;
 
       try {
-        const result = await llmComplete(
+        const result = await withRetry(() => llmComplete(
           [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }],
           { model: effectiveLlmModel, temperature: 0.95, apiKey: effectiveLlmApiKey ?? undefined, provider: effectiveLlmProvider },
-        );
+        ), { label: 'floating/adlib' });
         await pool.query(
           `INSERT INTO dj_segments
              (script_id, anchor_playlist_entry_id, segment_type, position, script_text,
@@ -1035,10 +1039,10 @@ async function injectFloatingSegments(opts: FloatingSegmentOpts): Promise<void> 
       const userMsg = `"${entry.song_title}" by ${entry.song_artist} is about to end.${nextInfo} Bridge naturally into what's next — or just keep the energy going. One to two sentences, like you're jumping in before the fade.`;
 
       try {
-        const result = await llmComplete(
+        const result = await withRetry(() => llmComplete(
           [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }],
           { model: effectiveLlmModel, temperature: 0.9, apiKey: effectiveLlmApiKey ?? undefined, provider: effectiveLlmProvider },
-        );
+        ), { label: 'floating/song_transition' });
         await pool.query(
           `INSERT INTO dj_segments
              (script_id, anchor_playlist_entry_id, segment_type, position, script_text,

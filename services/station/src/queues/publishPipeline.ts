@@ -379,6 +379,28 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
     );
     console.info(`[stageUploadAssets] Transcoded + uploaded song ${song.song_id} → ${cdnUrl}`);
   }
+
+  // ── 3. Upload station artwork if stored as local DJ API path ─────────────
+  // The DJ imageGenerator stores artwork_url as /api/v1/dj/audio/... when using
+  // local storage. Upload to R2 so the production ingest can store a CDN URL.
+  const { rows: artRows } = await pool.query<{ id: string; artwork_url: string | null }>(
+    `SELECT st.id, st.artwork_url
+     FROM dj_scripts ds JOIN stations st ON st.id = ds.station_id
+     WHERE ds.id = $1`, [scriptId],
+  );
+  const artStation = artRows[0];
+  if (artStation?.artwork_url && !artStation.artwork_url.startsWith('http')) {
+    try {
+      const artBuffer = await fetchAudioBuffer(artStation.artwork_url);
+      const artKey = `images/stations/${stationSlug}/artwork.jpg`;
+      await s3.send(new PutObjectCommand({ Bucket: bucket, Key: artKey, Body: artBuffer, ContentType: 'image/jpeg' }));
+      const artCdnUrl = `${publicBase}/${artKey}`;
+      await pool.query(`UPDATE stations SET artwork_url = $1 WHERE id = $2`, [artCdnUrl, artStation.id]);
+      console.info(`[stageUploadAssets] Uploaded station artwork → ${artCdnUrl}`);
+    } catch (err) {
+      console.warn('[stageUploadAssets] Station artwork upload failed (non-fatal):', err);
+    }
+  }
 }
 
 async function stageIngestProduction(scriptId: string, token: string): Promise<string> {
@@ -396,8 +418,8 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<s
   const { rows: stRows } = await pool.query<{
     name: string; slug: string; timezone: string; locale_code: string | null;
     city: string | null; country_code: string | null; callsign: string | null;
-    tagline: string | null; frequency: string | null;
-  }>(`SELECT name, slug, timezone, locale_code, city, country_code, callsign, tagline, frequency
+    tagline: string | null; frequency: string | null; artwork_url: string | null;
+  }>(`SELECT name, slug, timezone, locale_code, city, country_code, callsign, tagline, frequency, artwork_url
       FROM stations WHERE id = $1`, [script.station_id]);
   const station = stRows[0];
   if (!station) throw new Error('Station not found');
@@ -464,6 +486,7 @@ async function stageIngestProduction(scriptId: string, token: string): Promise<s
       callsign: station.callsign,
       tagline: station.tagline,
       frequency: station.frequency,
+      artwork_url: station.artwork_url ?? undefined,
     },
     dj_profile: profile ? {
       name: profile.name,

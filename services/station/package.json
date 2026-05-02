@@ -34,7 +34,7 @@
     "@types/supertest": "^7.2.0",
     "@types/unzipper": "^0.10.11",
     "supertest": "^7.0.0",
-    "typescript": "^5.4.0",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.5"
   }
 }

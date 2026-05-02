@@ -97,16 +97,16 @@ const s3Bucket = process.env.S3_BUCKET ?? '';
 const s3Prefix = process.env.S3_PREFIX ?? 'dj-audio';
 const s3PublicBase = (process.env.S3_PUBLIC_URL_BASE ?? '').replace(/\/$/, '');
 
-async function uploadToR2(localRelPath: string): Promise<string> {
+async function uploadToR2(localRelPath: string, contentType = 'audio/mpeg'): Promise<string> {
   const localAbs = path.join(localStoragePath, localRelPath);
-  if (!fs.existsSync(localAbs)) throw new Error(`Audio file not found: ${localAbs}`);
+  if (!fs.existsSync(localAbs)) throw new Error(`File not found: ${localAbs}`);
   const buf = fs.readFileSync(localAbs);
   const s3Key = s3Prefix ? `${s3Prefix}/${localRelPath}` : localRelPath;
   await s3.send(new PutObjectCommand({
     Bucket: s3Bucket,
     Key: s3Key,
     Body: buf,
-    ContentType: 'audio/mpeg',
+    ContentType: contentType,
   }));
   const publicUrl = s3PublicBase
     ? `${s3PublicBase}/${s3Key}`
@@ -201,7 +201,8 @@ async function main() {
     id: string; name: string; slug: string | null; timezone: string; locale_code: string | null;
     city: string | null; country_code: string | null;
     callsign: string | null; tagline: string | null; frequency: string | null;
-  }>(`SELECT id, name, slug, timezone, locale_code, city, country_code, callsign, tagline, frequency
+    artwork_url: string | null;
+  }>(`SELECT id, name, slug, timezone, locale_code, city, country_code, callsign, tagline, frequency, artwork_url
       FROM stations WHERE id = $1`, [script.station_id]);
   const station = stRows[0];
   if (!station) { console.error('Station not found'); process.exit(1); }
@@ -215,6 +216,16 @@ async function main() {
       FROM dj_profiles WHERE id = $1`, [script.dj_profile_id]);
   const profile = profRows[0];
   if (!profile) { console.error('DJ profile not found'); process.exit(1); }
+
+  // For dual-DJ scripts, combine both names (e.g., "Kuya Jun & Ate Joy")
+  const secondaryDjId = (script as Record<string, unknown>).secondary_dj_profile_id as string | null;
+  if (secondaryDjId) {
+    const { rows: secRows } = await pool.query<{ name: string }>(
+      `SELECT name FROM dj_profiles WHERE id = $1`, [secondaryDjId]);
+    if (secRows[0]) {
+      profile.name = `${profile.name} & ${secRows[0].name}`;
+    }
+  }
 
   const { rows: plRows } = await pool.query<{ id: string; date: string }>(
     `SELECT id, date FROM playlists WHERE id = $1`, [script.playlist_id]);
@@ -287,7 +298,21 @@ async function main() {
     });
   }
 
-  // ── 3. Build sync payload ──────────────────────────────────────────
+  // ── 3. Upload station artwork to R2 if stored as local DJ API path ───────
+  let artworkUrl: string | null = station.artwork_url ?? null;
+  if (!dryRun && artworkUrl && !artworkUrl.startsWith('http')) {
+    const artPrefix = '/api/v1/dj/audio/';
+    const artRelPath = artworkUrl.startsWith(artPrefix) ? artworkUrl.substring(artPrefix.length) : artworkUrl;
+    try {
+      artworkUrl = await uploadToR2(artRelPath, 'image/jpeg');
+      console.log(`  ✓ artwork uploaded → ${artworkUrl.substring(0, 80)}…`);
+    } catch (err) {
+      console.warn(`  ⚠ Could not upload artwork: ${err instanceof Error ? err.message : err}`);
+      artworkUrl = null;
+    }
+  }
+
+  // ── 4. Build sync payload ──────────────────────────────────────────
   const payload = {
     station: {
       slug,
@@ -299,6 +324,7 @@ async function main() {
       callsign: station.callsign,
       tagline: station.tagline,
       frequency: station.frequency,
+      artwork_url: artworkUrl ?? undefined,
     },
     dj_profile: {
       name: profile.name,
@@ -329,7 +355,7 @@ async function main() {
     stream_url: null as string | null,
   };
 
-  // ── 4. POST to production ingest endpoint ──────────────────────────
+  // ── 5. POST to production ingest endpoint ──────────────────────────
   if (dryRun) {
     console.log('\n[sync-program] DRY RUN — payload:');
     console.log(JSON.stringify(payload, null, 2));

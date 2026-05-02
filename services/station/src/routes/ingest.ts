@@ -40,6 +40,8 @@ export interface ExternalProgramPayload {
     callsign?: string | null;
     tagline?: string | null;
     frequency?: string | null;
+    /** CDN URL for station cover art (e.g. R2-hosted image) */
+    artwork_url?: string | null;
   };
   dj_profile: {
     name: string;
@@ -99,8 +101,8 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
       const { rows: stationRows } = await pool.query<{ id: string }>(
         `INSERT INTO stations
            (company_id, name, slug, timezone, locale_code, city, country_code,
-            callsign, tagline, frequency, is_active, dj_enabled)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, true)
+            callsign, tagline, frequency, is_active, dj_enabled, artwork_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, true, $11)
          ON CONFLICT (company_id, slug) WHERE slug IS NOT NULL
          DO UPDATE SET
            name         = EXCLUDED.name,
@@ -112,6 +114,7 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
            tagline      = EXCLUDED.tagline,
            frequency    = EXCLUDED.frequency,
            dj_enabled   = true,
+           artwork_url  = COALESCE(EXCLUDED.artwork_url, stations.artwork_url),
            updated_at   = NOW()
          RETURNING id`,
         [
@@ -125,6 +128,7 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
           stationData.callsign ?? null,
           stationData.tagline ?? null,
           stationData.frequency ?? null,
+          stationData.artwork_url ?? null,
         ],
       );
       const station_id = stationRows[0].id;
@@ -313,6 +317,7 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
             metadataUrl: `${gatewayUrl}/stream/${station_id}/status.json`,
             genre: 'OPM',
             isLive: true,
+            ...(stationData.artwork_url ? { artworkUrl: stationData.artwork_url } : {}),
           }),
         }).catch((err: unknown) =>
           req.log.warn({ err }, 'OwnRadio station upsert failed'),
