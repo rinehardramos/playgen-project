@@ -242,6 +242,9 @@ describe('runDailyProgramGenerationForDate', () => {
     expect(result.date).toBe('2026-05-01');
     expect(result.queued).toBe(1);
     expect(result.skipped).toBe(0);
+  });
+});
+
 describe('scheduleDailyGeneration / stopDailyGeneration', () => {
   afterEach(() => {
     // Always stop after each test to reset module-level state
