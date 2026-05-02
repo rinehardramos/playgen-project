@@ -15,22 +15,23 @@ Before starting any task, an agent MUST:
 ## Next Recommended Tickets
 
 ### For ticket-bug workers (P0 first)
-_(no open bugs — check GitHub Issues for new P0/P1 bugs)_
+1. **#502** (P0) — Publish pipeline doesn't create station on production — assumes station exists
+2. **#465** (P0) — fix(audio): yt-dlp YouTube bot detection — needs cookie auth
+3. **#497** (P1) — Station auto-creation missing template slots, categories not seeded
 
-### For ticket-feat worker
-1. **#293** — T-C: Generate-day-from-Programs orchestration route (P1, epic:programs-logs-unification)
-2. **#294** — T-D: WebSocket/SSE now-playing channel for /today (P1, epic:programs-logs-unification)
+### For ticket-feat workers
+1. **#499** (P1) — Pipeline UI — GitHub Actions-style Radio Program Factory dashboard
 
 ---
 
 ## Active Work
-- [ ] fix(station): mount local music lib into station container via env-var volume (#533, feat/issue-533-local-music-mount) | @claude-sonnet-4-6 | 2026-05-02
-- [x] feat(dj): parallel TTS generation — concurrency-limited batching with TTS_WORKER_CONCURRENCY (#424, feat/issue-424-parallel-tts, PR #454) | @claude-sonnet-4-6 | 2026-04-25
-- [x] fix(station+public): persist stream_url from publish pipeline + public endpoint returns it (#32, fix/ownradio-stream-url, PR #526) | @claude-sonnet-4-6 | 2026-04-27 | Migration: 069
-- [x] feat(dj+station+public): DALL-E 3 DJ avatar + station artwork generation, exposed in public stations API | @claude-sonnet-4-6 | 2026-04-28 | Migrations: 071, 072
-- [ ] feat(frontend): Timeline multi-day view ?span=3 (#301, feat/issue-301) | @claude-code | 2026-04-13
+- [ ] feat(playout): dynamic layered audio — dj.m3u8 generation + floating segments (#532, feat/issue-532) | @claude-sonnet-4-6 | 2026-05-02 | Migration: 073
+
 
 ## Recently Completed
+- [x] fix(station): mount local music lib into station container via env-var volume (#533, feat/issue-533-local-music-mount, PR #536) | @claude-sonnet-4-6 | 2026-05-02
+- [x] fix(station+scripts): dual-DJ name in sync-program + artwork_url in publish pipeline (#531, #530, fix/issue-531, PR #537) | @claude-sonnet-4-6 | 2026-05-02
+- [x] feat(dj+station+public): DALL-E 3 DJ avatar + station artwork generation, exposed in public stations API | @claude-sonnet-4-6 | 2026-04-28 | Migrations: 071, 072
 - [x] fix(station+public): persist stream_url from publish pipeline + public endpoint returns it (#32, fix/ownradio-stream-url, PR #526) | @claude-sonnet-4-6 | 2026-04-27 | Migration: 069
 - [x] feat(dj): parallel TTS generation — concurrency-limited batching with TTS_WORKER_CONCURRENCY (#424, feat/issue-424-parallel-tts, PR #454) | @claude-sonnet-4-6 | 2026-04-25
 - [x] feat(playlist+frontend): SSE now-playing channel for /today (#294, feat/issue-294-sse-now-playing) | @claude-sonnet-4-6 | 2026-04-25
