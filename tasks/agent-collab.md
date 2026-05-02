@@ -24,6 +24,7 @@ _(no open bugs — check GitHub Issues for new P0/P1 bugs)_
 ---
 
 ## Active Work
+- [ ] fix(station): mount local music lib into station container via env-var volume (#533, feat/issue-533-local-music-mount) | @claude-sonnet-4-6 | 2026-05-02
 - [x] feat(dj): parallel TTS generation — concurrency-limited batching with TTS_WORKER_CONCURRENCY (#424, feat/issue-424-parallel-tts, PR #454) | @claude-sonnet-4-6 | 2026-04-25
 - [x] fix(station+public): persist stream_url from publish pipeline + public endpoint returns it (#32, fix/ownradio-stream-url, PR #526) | @claude-sonnet-4-6 | 2026-04-27 | Migration: 069
 - [x] feat(dj+station+public): DALL-E 3 DJ avatar + station artwork generation, exposed in public stations API | @claude-sonnet-4-6 | 2026-04-28 | Migrations: 071, 072
