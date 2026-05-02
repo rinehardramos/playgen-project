@@ -29,7 +29,9 @@ _Updated: 2026-05-03 by PM agent_
 
 ## Active Work
 
-
+- [ ] fix(dj+station): LLM/TTS retry backoff + segment resume + pipeline progress (#529, fix/issue-529) | @claude-sonnet-4-6 | 2026-05-03 | Migration: 075 (stage columns)
+- [ ] feat(station+dj+frontend): Pipeline UI — GitHub Actions-style Radio Program Factory dashboard (#499, feat/issue-499) | @claude-sonnet-4-6 | 2026-05-03 | Migration: none (uses 075 from #529)
+- [x] fix(scheduler+station): inherit_library category remapping + station auto-creation slots (#497, #498, fix/issue-497-498) | @claude-sonnet-4-6 | 2026-05-03
 
 ## Recently Completed
 - [x] feat(playout): dynamic layered audio — dj.m3u8 + floating segments (#532, feat/issue-532, PR #541) | @claude-sonnet-4-6 | 2026-05-02 | Migration: 073
