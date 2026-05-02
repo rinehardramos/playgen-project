@@ -22,7 +22,6 @@ vi.mock('../../src/services/queueService', () => ({
 
 import { getPool } from '../../src/db';
 import { enqueueGeneration } from '../../src/services/queueService';
-import { runDailyProgramGeneration } from '../../src/jobs/dailyProgramJob';
 import { runDailyProgramGeneration, scheduleDailyGeneration, stopDailyGeneration } from '../../src/jobs/dailyProgramJob';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
