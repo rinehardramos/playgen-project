@@ -46,6 +46,15 @@ const STAGE_COLUMN: Record<PipelineStage, string> = {
   publish: 'stage_publish',
 };
 
+/** Ordered list of all pipeline stages — exported for tests and route validation. */
+export const PIPELINE_STAGES: PipelineStage[] = ['playlist', 'dj_script', 'review', 'tts', 'publish'];
+
+/** Returns the stages that come after `stage` in the pipeline (will be reset to 'pending' on retry). */
+export function getDownstreamStages(stage: PipelineStage): PipelineStage[] {
+  const idx = PIPELINE_STAGES.indexOf(stage);
+  return idx === -1 ? [] : PIPELINE_STAGES.slice(idx + 1);
+}
+
 /**
  * Create a new pipeline run. Returns the run ID.
  */
@@ -196,22 +205,19 @@ export async function findActiveRun(stationId: string, date: string): Promise<st
   return rows[0]?.id ?? null;
 }
 
-const STAGE_ORDER: PipelineStage[] = ['playlist', 'dj_script', 'review', 'tts', 'publish'];
-
 /**
  * Retry a failed stage: reset it to 'running', reset all downstream stages to 'pending',
  * and set the overall run back to 'running'.
  */
 export async function retryStage(runId: string, stage: PipelineStage): Promise<void> {
   const pool = getPool();
-  const stageIdx = STAGE_ORDER.indexOf(stage);
 
   // Build SET clauses: retry stage → running, downstream stages → pending
   const sets: string[] = [
     `${STAGE_COLUMN[stage]} = '{"status":"running","started_at":"${new Date().toISOString()}"}'::jsonb`,
   ];
-  for (let i = stageIdx + 1; i < STAGE_ORDER.length; i++) {
-    sets.push(`${STAGE_COLUMN[STAGE_ORDER[i]]} = '{"status":"pending"}'::jsonb`);
+  for (const downstream of getDownstreamStages(stage)) {
+    sets.push(`${STAGE_COLUMN[downstream]} = '{"status":"pending"}'::jsonb`);
   }
   sets.push(`status = 'running'`);
   sets.push(`updated_at = NOW()`);
