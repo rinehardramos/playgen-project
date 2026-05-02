@@ -43,6 +43,7 @@ interface CandidateSong {
 interface SongWithEligibility {
   id: string;
   artist: string;
+  station_id: string;
   category_id: string;
   eligible_hours: number[];
 }
@@ -456,8 +457,8 @@ export async function generatePlaylist(
         if (!stationIds.includes(s.id)) stationIds.push(s.id);
       }
     }
-    const allSongsRes = await pool.query<SongWithEligibility>(
-      `SELECT s.id, s.artist, s.category_id,
+
+    const songQuery = `SELECT s.id, s.artist, s.station_id, s.category_id,
               COALESCE(
                 array_agg(DISTINCT ss.eligible_hour) FILTER (WHERE ss.eligible_hour IS NOT NULL),
                 '{}'
@@ -465,17 +466,67 @@ export async function generatePlaylist(
        FROM songs s
        LEFT JOIN song_slots ss ON ss.song_id = s.id
        WHERE s.station_id = ANY($1) AND s.is_active = true
-       GROUP BY s.id`,
-      [stationIds],
-    );
-    const allSongs = allSongsRes.rows;
+       GROUP BY s.id, s.station_id`;
+
+    const allSongsRes = await pool.query<SongWithEligibility>(songQuery, [stationIds]);
+    let allSongs = allSongsRes.rows;
+
+    // ── Step 9a fallback: use master library stations when this station has no songs ─
+    // This covers stations created via the OwnRadio wizard with no music library assigned.
+    if (allSongs.length === 0) {
+      const { rows: masterStations } = await pool.query<{ id: string }>(
+        `SELECT id FROM stations WHERE is_master_library = TRUE AND is_active = TRUE AND id != $1`,
+        [stationId],
+      );
+      if (masterStations.length > 0) {
+        const masterIds = masterStations.map((s) => s.id);
+        console.warn(
+          `[generationEngine] Station ${stationId} has no songs — falling back to master library stations: ${masterIds.join(', ')}`,
+        );
+        const fallbackRes = await pool.query<SongWithEligibility>(songQuery, [masterIds]);
+        allSongs = fallbackRes.rows;
+      }
+    }
 
     // Build in-memory index: categoryId -> songs[]
+    // When inherit_library=true, remap sibling songs' category_ids to the matching
+    // category in the current station (matched by category code). This makes inherited
+    // songs visible under the current station's template slot categories.
     const songsByCategory = new Map<string, SongWithEligibility[]>();
-    for (const song of allSongs) {
-      const arr = songsByCategory.get(song.category_id) ?? [];
-      arr.push(song);
-      songsByCategory.set(song.category_id, arr);
+
+    if (inheritLibrary && stationIds.length > 1) {
+      // Load categories for all involved stations to build a code-based remap
+      const { rows: allCats } = await pool.query<{ station_id: string; id: string; code: string }>(
+        `SELECT station_id, id, code FROM categories WHERE station_id = ANY($1)`,
+        [stationIds],
+      );
+      // Map: own station category code → category_id
+      const ownCatByCode = new Map<string, string>();
+      for (const cat of allCats) {
+        if (cat.station_id === stationId) ownCatByCode.set(cat.code, cat.id);
+      }
+      // Map: sibling category_id → category code
+      const catCodeById = new Map<string, string>(allCats.map((c) => [c.id, c.code]));
+
+      for (const song of allSongs) {
+        // Own station songs: index by their actual category_id (no remap)
+        let effectiveCategoryId = song.category_id;
+        if (song.station_id !== stationId) {
+          // Remap sibling song to current station's matching category by code
+          const code = catCodeById.get(song.category_id);
+          const ownCatId = code ? ownCatByCode.get(code) : undefined;
+          if (ownCatId) effectiveCategoryId = ownCatId;
+        }
+        const arr = songsByCategory.get(effectiveCategoryId) ?? [];
+        arr.push(song);
+        songsByCategory.set(effectiveCategoryId, arr);
+      }
+    } else {
+      for (const song of allSongs) {
+        const arr = songsByCategory.get(song.category_id) ?? [];
+        arr.push(song);
+        songsByCategory.set(song.category_id, arr);
+      }
     }
 
     // Build artist lookup for overrides (single query instead of N)

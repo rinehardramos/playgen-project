@@ -201,6 +201,7 @@ export interface Station {
   station_type?: StationType;
   depth?: number;
   inherit_library?: boolean;
+  is_master_library?: boolean;
   sort_order?: number;
   created_at: Date;
   updated_at: Date;
