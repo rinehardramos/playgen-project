@@ -13,17 +13,17 @@ Before starting any task, an agent MUST:
 9. **ACCEPTANCE CRITERIA MANDATE**: NEVER move a ticket to Done unless ALL `- [ ]` acceptance criteria in the GitHub issue are checked off (`- [x]`). Verify with `gh issue view <N>` before calling `gh project item-edit` to set status Done. Check off each criterion as it is implemented in the merged PR.
 
 ## Next Recommended Tickets
-_Updated: 2026-05-02 by PM agent_
+_Updated: 2026-05-03 by PM agent_
 
 ### For ticket-bug workers (P0 first)
-1. **#502** (P0) — Publish pipeline doesn't create station on production — assumes station exists
-2. **#465** (P0) — fix(audio): yt-dlp YouTube bot detection — needs cookie auth
-3. **#497** (P1) — Station auto-creation missing template slots, categories not seeded
-   _(#528 music library fallback already claimed — do not duplicate)_
+1. **#465** (P0) — fix(audio): yt-dlp YouTube bot detection — needs cookie auth
+2. **#497** (P1) — Station auto-creation missing template slots, categories not seeded
+3. **#498** (P1) — inherit_library flag on stations doesn't inherit songs from parent
+   _(#502 has open PR #542 in review — do not duplicate; #528 merged/Done)_
 
 ### For ticket-feat workers
 1. **#499** — Pipeline UI — GitHub Actions-style Radio Program Factory dashboard
-   _(#532 dynamic layered audio already claimed — do not duplicate)_
+2. **#500** — Adaptive bandwidth streaming for low bandwidth / high latency clients
 
 ---
 

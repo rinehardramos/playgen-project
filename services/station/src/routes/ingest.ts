@@ -40,6 +40,17 @@ export interface ExternalFloatingSegment {
   playlist_entry_ref?: number | null;
 }
 
+
+export interface ExternalFloatingSegment {
+  segment_type: string;
+  script_text: string;
+  audio_url: string | null;
+  audio_duration_sec: number | null;
+  /** Seconds into the anchored song at which this segment starts */
+  start_offset_sec: number | null;
+  /** Index into playlist.entries[] for the song this segment floats over */
+  playlist_entry_ref?: number | null;
+}
 export interface ExternalProgramPayload {
   station: {
     slug: string;
