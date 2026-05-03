@@ -130,12 +130,16 @@ describe('generationWorker', () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
     // 4c. Pending shoutouts (none)
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    // 5. Script insert
+    // 5. Existing script check (none — fresh run)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 5a. Segments resume query — always executes (WHERE script_id = NULL → empty result)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 5b. Script insert
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: scriptId }],
     });
 
-    // 5b. Program themes query (no active themes)
+    // 5c. Program themes query (no active themes)
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
     // For 1 entry, segmentsForEntry returns ['show_intro', 'song_intro', 'show_outro']
@@ -207,10 +211,14 @@ describe('generationWorker', () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'shoutout-1', listener_name: 'Maria', message: 'Love the morning show!' }],
     });
-    // 5. Script insert
+    // 5. Existing script check (none — fresh run)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 5a. Segments resume query — always executes (WHERE script_id = NULL → empty result)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 5b. Script insert
     mockQuery.mockResolvedValueOnce({ rows: [{ id: scriptId }] });
 
-    // 5b. Program themes query (no active themes)
+    // 5c. Program themes query (no active themes)
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
     // 6. Segment inserts (main loop uses RETURNING id; shoutout INSERT does not)
@@ -280,7 +288,11 @@ describe('generationWorker', () => {
     });
     // 4c. Pending shoutouts (none)
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    // 5. Script insert
+    // 5. Existing script check (none — fresh run)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 5a. Segments resume query — always executes (WHERE script_id = NULL → empty result)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // 5b. Script insert
     mockQuery.mockResolvedValueOnce({ rows: [{ id: scriptId }] });
 
     // 6. Segment inserts (show_intro, song_intro, station_id, song_transition×3, show_outro + 2 adlibs at interval 1)
