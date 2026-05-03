@@ -247,6 +247,57 @@ async function fetchAudioBuffer(audioUrl: string): Promise<Buffer> {
   return fs.readFileSync(audioUrl);
 }
 
+/** Bitrate variants to generate in addition to the high-quality base file. */
+const SONG_VARIANTS: Array<{ suffix: string; bitrateK: number; channels: number }> = [
+  { suffix: 'low', bitrateK: 32,  channels: 1 }, // 32kbps mono — 2G/3G fallback
+  { suffix: 'mid', bitrateK: 128, channels: 2 }, // 128kbps stereo — standard
+  // 'high' = existing songs/${id}.aac at 192kbps stereo — no suffix needed
+];
+
+async function uploadSongVariants(
+  songId: string,
+  srcPath: string,
+  s3: S3Client,
+  bucket: string,
+  publicBase: string,
+): Promise<void> {
+  for (const v of SONG_VARIANTS) {
+    const s3Key = `songs/${songId}.${v.suffix}.aac`;
+
+    // Skip if already uploaded
+    try {
+      await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: s3Key }));
+      continue;
+    } catch { /* not found — transcode + upload */ }
+
+    const tmpOut = path.join(os.tmpdir(), `song-${songId}-${v.suffix}.aac`);
+    try {
+      await execFileAsync('ffmpeg', [
+        '-i', srcPath,
+        '-c:a', 'aac',
+        '-b:a', `${v.bitrateK}k`,
+        '-ar', '44100',
+        '-ac', String(v.channels),
+        '-f', 'adts',
+        '-y', tmpOut,
+      ], { timeout: 300_000 });
+
+      const body = fs.readFileSync(tmpOut);
+      await s3.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: s3Key,
+        Body: body,
+        ContentType: 'audio/aac',
+      }));
+      console.info(`[stageUploadAssets] Uploaded song ${songId} variant ${v.suffix} → ${publicBase}/${s3Key}`);
+    } catch (err) {
+      console.warn(`[stageUploadAssets] Variant ${v.suffix} failed for song ${songId} (non-fatal):`, err);
+    } finally {
+      fs.promises.unlink(tmpOut).catch(() => {});
+    }
+  }
+}
+
 async function stageUploadAssets(scriptId: string, stationSlug: string, playlistDate: string): Promise<void> {
   const pool = getPool();
   const s3 = getS3Client();
@@ -380,6 +431,11 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
       durationSec !== null ? [cdnUrl, song.song_id, durationSec] : [cdnUrl, song.song_id],
     );
     console.info(`[stageUploadAssets] Transcoded + uploaded song ${song.song_id} → ${cdnUrl}`);
+
+    // Upload 32kbps + 128kbps variants for adaptive streaming (#500)
+    if (srcPath && fs.existsSync(srcPath)) {
+      await uploadSongVariants(song.song_id, srcPath, s3, bucket, publicBase);
+    }
   }
 
   // ── 3. Upload station artwork if stored as local DJ API path ─────────────
