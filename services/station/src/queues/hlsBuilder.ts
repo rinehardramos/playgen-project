@@ -83,6 +83,9 @@ export function resolveDjClips(
   return clips;
 }
 
+export type { VariantStream } from './hlsVariantBuilder.js';
+export { buildVariantMasterM3u8 } from './hlsVariantBuilder.js';
+
 /**
  * Build the text content of a music.m3u8 HLS packed-audio playlist.
  * References song CDN URLs as ADTS AAC segments — no transcoding required.

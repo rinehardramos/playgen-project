@@ -206,3 +206,84 @@ describe('resolveDjClips', () => {
     expect(offsets).toEqual([0, 260, 380, 605]);
   });
 });
+
+// ── buildVariantMasterM3u8 ────────────────────────────────────────────────────
+
+import { buildVariantMasterM3u8, type VariantStream } from '../../src/queues/hlsVariantBuilder.js';
+
+describe('buildVariantMasterM3u8', () => {
+  const variants: VariantStream[] = [
+    { bandwidth: 256000, codecs: 'mp4a.40.2', uri: 'https://cdn/programs/s1/2026-05-03/dj_high.m3u8', label: 'High' },
+    { bandwidth: 32000,  codecs: 'mp4a.40.2', uri: 'https://cdn/programs/s1/2026-05-03/dj_low.m3u8',  label: 'Low' },
+    { bandwidth: 128000, codecs: 'mp4a.40.2', uri: 'https://cdn/programs/s1/2026-05-03/dj_mid.m3u8',  label: 'Standard' },
+  ];
+
+  it('returns empty string for empty variants array', () => {
+    expect(buildVariantMasterM3u8([])).toBe('');
+  });
+
+  it('starts with #EXTM3U and #EXT-X-VERSION:3', () => {
+    const m3u8 = buildVariantMasterM3u8(variants);
+    const lines = m3u8.split('\n');
+    expect(lines[0]).toBe('#EXTM3U');
+    expect(lines[1]).toBe('#EXT-X-VERSION:3');
+  });
+
+  it('sorts variants ascending by bandwidth', () => {
+    const m3u8 = buildVariantMasterM3u8(variants);
+    // Each variant tag begins with the HLS stream info directive
+    const streamTag = '#EXT-X-STREAM-INF';
+    const bwLines = m3u8.split('\n').filter(l => l.startsWith(streamTag));
+    expect(bwLines[0]).toContain('BANDWIDTH=32000');
+    expect(bwLines[1]).toContain('BANDWIDTH=128000');
+    expect(bwLines[2]).toContain('BANDWIDTH=256000');
+  });
+
+  it('emits each variant URI on the line after its stream info tag', () => {
+    const m3u8 = buildVariantMasterM3u8(variants);
+    const lines = m3u8.split('\n').filter(l => l.length > 0);
+    const streamTag = '#EXT-X-STREAM-INF';
+    // After sorting: low → mid → high
+    const lowIdx = lines.findIndex(l => l.startsWith(streamTag) && l.includes('BANDWIDTH=32000'));
+    expect(lines[lowIdx + 1]).toBe('https://cdn/programs/s1/2026-05-03/dj_low.m3u8');
+  });
+
+  it('includes CODECS attribute in each stream info tag', () => {
+    const m3u8 = buildVariantMasterM3u8(variants);
+    const streamTag = '#EXT-X-STREAM-INF';
+    const bwLines = m3u8.split('\n').filter(l => l.startsWith(streamTag));
+    for (const line of bwLines) {
+      expect(line).toContain('CODECS="mp4a.40.2"');
+    }
+  });
+
+  it('includes NAME attribute when label is provided', () => {
+    const m3u8 = buildVariantMasterM3u8(variants);
+    expect(m3u8).toContain('NAME="Low"');
+    expect(m3u8).toContain('NAME="Standard"');
+    expect(m3u8).toContain('NAME="High"');
+  });
+
+  it('omits NAME attribute when label is absent', () => {
+    const noLabel: VariantStream[] = [
+      { bandwidth: 128000, codecs: 'mp4a.40.2', uri: 'https://cdn/mid.m3u8' },
+    ];
+    const m3u8 = buildVariantMasterM3u8(noLabel);
+    expect(m3u8).not.toContain('NAME=');
+  });
+
+  it('ends with a trailing newline', () => {
+    const m3u8 = buildVariantMasterM3u8(variants);
+    expect(m3u8.endsWith('\n')).toBe(true);
+  });
+
+  it('handles a single variant correctly', () => {
+    const single: VariantStream[] = [
+      { bandwidth: 128000, codecs: 'mp4a.40.2', uri: 'https://cdn/only.m3u8', label: 'Only' },
+    ];
+    const m3u8 = buildVariantMasterM3u8(single);
+    const streamTag = '#EXT-X-STREAM-INF';
+    expect(m3u8).toContain(`${streamTag}:BANDWIDTH=128000,CODECS="mp4a.40.2",NAME="Only"`);
+    expect(m3u8).toContain('https://cdn/only.m3u8');
+  });
+});
