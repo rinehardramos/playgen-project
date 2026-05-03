@@ -5,7 +5,7 @@
  * Non-retryable errors (400, 401, 404, etc.) are rethrown immediately.
  */
 
-const BASE_DELAY_MS = 1_000;
+const BASE_DELAY_MS = process.env.NODE_ENV === 'test' ? 10 : 1_000;
 const MAX_DELAY_MS = 30_000;
 
 /** True for errors that are worth retrying (rate limits, transient server errors). */
@@ -34,13 +34,20 @@ function parseRetryAfterMs(err: unknown): number | null {
   return null;
 }
 
+export interface RetryOptions {
+  /** Label for log messages (e.g. 'non-song/show_intro'). */
+  label?: string;
+  /** Override max attempts (default 3). */
+  maxAttempts?: number;
+}
+
 /**
  * Retry `fn` up to `maxAttempts` times with exponential backoff + jitter.
  * Non-retryable errors are rethrown immediately (no retry delay wasted).
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  { maxAttempts = 3, label = 'call' }: { maxAttempts?: number; label?: string } = {},
+  { maxAttempts = 3, label = 'call' }: RetryOptions = {},
 ): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -49,7 +56,7 @@ export async function withRetry<T>(
       if (!isRetryable(err) || attempt === maxAttempts) throw err;
       const retryAfterMs = parseRetryAfterMs(err);
       const backoffMs = retryAfterMs ?? Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS);
-      const jitter = Math.random() * 500;
+      const jitter = process.env.NODE_ENV === 'test' ? 0 : Math.random() * 500;
       const delayMs = Math.round(backoffMs + jitter);
       console.warn(
         `[retry] ${label} failed (attempt ${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${(err as Error).message}`,

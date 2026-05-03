@@ -11,6 +11,12 @@ interface RunParams {
   runId: string;
 }
 
+interface RetryParams {
+  id: string;
+  runId: string;
+  stageName: string;
+}
+
 interface TriggerBody {
   date?: string;
   dj_profile_id?: string;
@@ -24,6 +30,18 @@ interface TriggerBody {
 interface ListQuery {
   limit?: number;
 }
+
+/** Ordered stage names — used for retry to determine which stages to clear. */
+const STAGE_ORDER = ['generate_playlist', 'generate_script', 'generate_tts', 'publish'] as const;
+type StageName = typeof STAGE_ORDER[number];
+
+/** Maps stage name to per-stage JSONB column name. */
+const STAGE_COLUMN: Record<StageName, string> = {
+  generate_playlist: 'stage_playlist',
+  generate_script: 'stage_dj_script',
+  generate_tts: 'stage_tts',
+  publish: 'stage_publish',
+};
 
 export default async function radioPipelineRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: StationParams; Body: TriggerBody }>(
@@ -93,20 +111,26 @@ export default async function radioPipelineRoutes(app: FastifyInstance): Promise
 
   app.get<{ Params: StationParams; Querystring: ListQuery }>(
     '/stations/:id/pipeline/runs',
-    async (req, reply) => {
+    async (req, _reply) => {
       const { id: station_id } = req.params;
       const limit = Math.min(req.query.limit ?? 10, 50);
       const pool = getPool();
 
-      const { rows } = await pool.query(
-        `SELECT * FROM pipeline_runs
-         WHERE station_id = $1
-         ORDER BY created_at DESC
-         LIMIT $2`,
-        [station_id, limit],
-      );
+      const [{ rows }, { rows: countRows }] = await Promise.all([
+        pool.query(
+          `SELECT * FROM pipeline_runs
+           WHERE station_id = $1
+           ORDER BY created_at DESC
+           LIMIT $2`,
+          [station_id, limit],
+        ),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*)::int AS count FROM pipeline_runs WHERE station_id = $1`,
+          [station_id],
+        ),
+      ]);
 
-      return rows;
+      return { runs: rows, total: Number(countRows[0]?.count ?? 0) };
     },
   );
 
@@ -123,6 +147,56 @@ export default async function radioPipelineRoutes(app: FastifyInstance): Promise
 
       if (!rows[0]) return reply.notFound('Pipeline run not found');
       return rows[0];
+    },
+  );
+
+  app.post<{ Params: RetryParams }>(
+    '/stations/:id/pipeline/runs/:runId/retry/:stageName',
+    async (req, reply) => {
+      const { id: station_id, runId, stageName } = req.params;
+
+      const stageIdx = STAGE_ORDER.indexOf(stageName as StageName);
+      if (stageIdx === -1) return reply.badRequest(`Unknown stage: ${stageName}`);
+
+      const pool = getPool();
+      const { rows } = await pool.query<{
+        id: string;
+        status: string;
+        stages_completed: Record<string, unknown>;
+      }>(
+        `SELECT id, status, stages_completed FROM pipeline_runs WHERE id = $1 AND station_id = $2`,
+        [runId, station_id],
+      );
+      const run = rows[0];
+      if (!run) return reply.notFound('Pipeline run not found');
+      if (run.status === 'running') return reply.conflict('Cannot retry a running pipeline');
+
+      // Clear the retried stage and all subsequent stages from stages_completed
+      const stagesToClear = STAGE_ORDER.slice(stageIdx);
+      const stagesCompleted = { ...(run.stages_completed as Record<string, unknown>) };
+      for (const s of stagesToClear) {
+        delete stagesCompleted[s];
+      }
+
+      // Build SET clause to reset per-stage columns back to pending
+      const stageCols = stagesToClear
+        .map((s) => `${STAGE_COLUMN[s]} = '{"status":"pending"}'::jsonb`)
+        .join(', ');
+
+      await pool.query(
+        `UPDATE pipeline_runs
+         SET status = 'queued', stages_completed = $1, ${stageCols}, updated_at = NOW()
+         WHERE id = $2`,
+        [JSON.stringify(stagesCompleted), runId],
+      );
+
+      const queue = getRadioPipelineQueue();
+      await queue.add('pipeline', { station_id, pipeline_run_id: runId }, {
+        jobId: `pipeline:${station_id}:${Date.now()}`,
+      });
+
+      reply.code(202);
+      return { pipeline_run_id: runId, stage: stageName, status: 'queued' };
     },
   );
 }

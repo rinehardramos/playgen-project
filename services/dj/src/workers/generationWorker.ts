@@ -361,28 +361,56 @@ export async function runGenerationJob(
       .map((s) => ({ id: '', listener_name: s.listener_name, message: s.message })),
   ].slice(0, 3);
 
-  // 5. Create the script record (with multi-DJ fields when applicable)
+  // 5. Find or create the script record (checkpoint resume on retry)
   const voiceMap = isDualDj
     ? (data.voice_map ?? Object.fromEntries(allProfiles.map((p) => [p.name, p.tts_voice_id])))
     : null;
 
-  const { rows: scriptRows } = await pool.query(
-    `INSERT INTO dj_scripts
-       (playlist_id, station_id, dj_profile_id, secondary_dj_profile_id,
-        review_status, llm_model, total_segments, voice_map)
-     VALUES ($1, $2, $3, $4, $5, $6, 0, $7)
-     RETURNING id`,
-    [
-      data.playlist_id,
-      data.station_id,
-      profile.id,
-      secondaryProfile?.id ?? null,
-      data.auto_approve ? 'auto_approved' : 'pending_review',
-      profile.llm_model,
-      voiceMap ? JSON.stringify(voiceMap) : null,
-    ],
+  // Check for existing incomplete script for this playlist (generation_ms IS NULL = not finished)
+  const { rows: existingScriptRows } = await pool.query<{ id: string }>(
+    `SELECT id FROM dj_scripts
+     WHERE playlist_id = $1 AND station_id = $2 AND generation_ms IS NULL
+     ORDER BY created_at DESC LIMIT 1`,
+    [data.playlist_id, data.station_id],
   );
-  const script_id: string = scriptRows[0].id;
+  const existingScript = existingScriptRows[0];
+
+  // Track already-generated positions for checkpoint resume
+  const donePositions = new Set<number>();
+  const resumeSegmentTexts = new Map<number, string>();
+  let script_id: string;
+
+  // Always query existing segments (WHERE script_id = NULL returns [] when no prior script found)
+  const { rows: existingSegments } = await pool.query<{ position: number; script_text: string }>(
+    `SELECT position, script_text FROM dj_segments WHERE script_id = $1 ORDER BY position`,
+    [existingScript?.id ?? null],
+  );
+  for (const seg of existingSegments) {
+    donePositions.add(seg.position);
+    resumeSegmentTexts.set(seg.position, seg.script_text);
+  }
+
+  if (existingScript) {
+    script_id = existingScript.id;
+  } else {
+    const { rows: scriptRows } = await pool.query(
+      `INSERT INTO dj_scripts
+         (playlist_id, station_id, dj_profile_id, secondary_dj_profile_id,
+          review_status, llm_model, total_segments, voice_map)
+       VALUES ($1, $2, $3, $4, $5, $6, 0, $7)
+       RETURNING id`,
+      [
+        data.playlist_id,
+        data.station_id,
+        profile.id,
+        secondaryProfile?.id ?? null,
+        data.auto_approve ? 'auto_approved' : 'pending_review',
+        profile.llm_model,
+        voiceMap ? JSON.stringify(voiceMap) : null,
+      ],
+    );
+    script_id = scriptRows[0].id;
+  }
 
   // 5b. Load program themes for this station/hour and resolve directives
   const { resolveThemeDirectives, formatDirectivesForSegment } = await import('../lib/themeResolver.js');
@@ -456,6 +484,13 @@ export async function runGenerationJob(
   // Running list of generated texts — passed to each LLM call to enforce variety
   const generatedTexts: string[] = [];
 
+  // Pre-populate generatedTexts from already-done segments (for variety context on resume)
+  if (donePositions.size > 0) {
+    for (const [, text] of [...resumeSegmentTexts.entries()].sort(([a], [b]) => a - b)) {
+      generatedTexts.push(text);
+    }
+  }
+
   // Pre-count total segment slots for progress reporting (approximate — non-song segments added dynamically)
   let totalSegmentSlots = 0;
   for (let i = 0; i < entries.length; i++) {
@@ -500,6 +535,14 @@ export async function runGenerationJob(
       : buildSystemPrompt(profile!, station.locale_code, effectiveTtsProvider);
     const userPrompt = buildUserPrompt(ctx) + rejectionContext;
 
+    // Resume checkpoint: skip if this position was already inserted in a previous attempt
+    const previewPosNonSong = position;
+    if (donePositions.has(previewPosNonSong)) {
+      position++;
+      generatedTexts.push(resumeSegmentTexts.get(previewPosNonSong) ?? '');
+      return;
+    }
+
     // Soft rate limit check — skip segment rather than abort the whole script
     const llmRateCheck = await checkLlmRateLimit(data.station_id);
     if (!llmRateCheck.allowed) {
@@ -512,7 +555,7 @@ export async function runGenerationJob(
     );
     let script_text: string;
     try {
-      const llmResult = await llmComplete(
+      const llmResult = await withRetry(() => llmComplete(
         [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -523,7 +566,7 @@ export async function runGenerationJob(
           apiKey: effectiveLlmApiKey ?? undefined,
           provider: effectiveLlmProvider,
         },
-      );
+      ), { label: `non-song/${segment_type}` });
       script_text = llmResult.text;
       if (llmResult.usage) {
         logLlmUsage({
@@ -537,7 +580,7 @@ export async function runGenerationJob(
       }
     } catch (llmErr) {
       console.error(
-        `[generationWorker] LLM call FAILED — provider=${effectiveLlmProvider} model=${effectiveLlmModel} error:`,
+        `[generationWorker] LLM call FAILED permanently (3 retries) — provider=${effectiveLlmProvider} model=${effectiveLlmModel} segment=${segment_type}:`,
         llmErr,
       );
       throw llmErr;
@@ -717,6 +760,15 @@ export async function runGenerationJob(
       const llmProgress = 10 + Math.round((segmentsDone / totalSegmentSlots) * 80);
       await reportProgress(llmProgress, `Writing ${segment_type.replace('_', ' ')} (${segmentsDone + 1}/${totalSegmentSlots})…`);
 
+      // Checkpoint: skip already-inserted positions from a previous attempt
+      const currentPos = position;
+      if (donePositions.has(currentPos)) {
+        position++;
+        generatedTexts.push(resumeSegmentTexts.get(currentPos) ?? '');
+        segmentsDone++;
+        continue;
+      }
+
       // Soft rate limit check — skip segment rather than abort the whole script
       const llmRateCheckSong = await checkLlmRateLimit(data.station_id);
       if (!llmRateCheckSong.allowed) {
@@ -727,17 +779,20 @@ export async function runGenerationJob(
 
       let script_text: string;
       try {
-        const llmResult = await llmComplete(
-          [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          {
-            model: effectiveLlmModel,
-            temperature: profile.llm_temperature != null ? Number(profile.llm_temperature) : undefined,
-            apiKey: effectiveLlmApiKey ?? undefined,
-            provider: effectiveLlmProvider,
-          },
+        const llmResult = await withRetry(
+          () => llmComplete(
+            [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            {
+              model: effectiveLlmModel,
+              temperature: profile.llm_temperature != null ? Number(profile.llm_temperature) : undefined,
+              apiKey: effectiveLlmApiKey ?? undefined,
+              provider: effectiveLlmProvider,
+            },
+          ),
+          { label: `song/${segment_type}` },
         );
         script_text = llmResult.text;
         if (llmResult.usage) {
@@ -752,7 +807,7 @@ export async function runGenerationJob(
         }
       } catch (llmErr) {
         console.error(
-          `[generationWorker] LLM call FAILED — provider=${effectiveLlmProvider} model=${effectiveLlmModel} error:`,
+          `[generationWorker] LLM call FAILED permanently (3 retries) — provider=${effectiveLlmProvider} model=${effectiveLlmModel} segment=${segment_type}:`,
           llmErr,
         );
         throw llmErr;
