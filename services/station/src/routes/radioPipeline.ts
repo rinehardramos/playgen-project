@@ -23,6 +23,7 @@ interface TriggerBody {
 
 interface ListQuery {
   limit?: number;
+  offset?: number;
 }
 
 export default async function radioPipelineRoutes(app: FastifyInstance): Promise<void> {
@@ -74,8 +75,8 @@ export default async function radioPipelineRoutes(app: FastifyInstance): Promise
       });
 
       const { rows: runRows } = await pool.query<{ id: string }>(
-        `INSERT INTO pipeline_runs (station_id, date, status, config)
-         VALUES ($1, $2, 'queued', $3) RETURNING id`,
+        `INSERT INTO pipeline_runs (station_id, date, status, config, triggered_by)
+         VALUES ($1, $2, 'queued', $3, 'manual') RETURNING id`,
         [station_id, date, config],
       );
       const pipeline_run_id = runRows[0].id;
@@ -93,20 +94,27 @@ export default async function radioPipelineRoutes(app: FastifyInstance): Promise
 
   app.get<{ Params: StationParams; Querystring: ListQuery }>(
     '/stations/:id/pipeline/runs',
-    async (req, reply) => {
+    async (req, _reply) => {
       const { id: station_id } = req.params;
-      const limit = Math.min(req.query.limit ?? 10, 50);
+      const limit = Math.min(req.query.limit ?? 20, 100);
+      const offset = req.query.offset ?? 0;
       const pool = getPool();
 
-      const { rows } = await pool.query(
-        `SELECT * FROM pipeline_runs
-         WHERE station_id = $1
-         ORDER BY created_at DESC
-         LIMIT $2`,
-        [station_id, limit],
-      );
+      const [dataRes, countRes] = await Promise.all([
+        pool.query(
+          `SELECT * FROM pipeline_runs
+           WHERE station_id = $1
+           ORDER BY created_at DESC
+           LIMIT $2 OFFSET $3`,
+          [station_id, limit, offset],
+        ),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*) FROM pipeline_runs WHERE station_id = $1`,
+          [station_id],
+        ),
+      ]);
 
-      return rows;
+      return { runs: dataRes.rows, total: Number(countRes.rows[0].count) };
     },
   );
 

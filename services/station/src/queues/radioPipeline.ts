@@ -108,29 +108,77 @@ async function fetchServiceToken(): Promise<string> {
   return token;
 }
 
+// ── Stage column map ─────────────────────────────────────────────────────────
+
+/** Maps logical stage name → per-stage JSONB column (for Pipeline UI, migration 075). */
+const STAGE_TO_COLUMN: Record<string, string> = {
+  generate_playlist: 'stage_playlist',
+  generate_script:   'stage_dj_script',
+  review:            'stage_review',
+  generate_tts:      'stage_tts',
+  publish:           'stage_publish',
+};
+
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
 async function setStage(runId: string, stage: string): Promise<void> {
-  await getPool().query(
-    `UPDATE pipeline_runs SET current_stage = $1, status = 'running', updated_at = NOW()
-     WHERE id = $2`,
-    [stage, runId],
-  );
+  const col = STAGE_TO_COLUMN[stage];
+  if (col) {
+    await getPool().query(
+      `UPDATE pipeline_runs
+       SET current_stage = $1, status = 'running',
+           ${col} = jsonb_build_object('status', 'running', 'started_at', NOW()::text),
+           updated_at = NOW()
+       WHERE id = $2`,
+      [stage, runId],
+    );
+  } else {
+    await getPool().query(
+      `UPDATE pipeline_runs SET current_stage = $1, status = 'running', updated_at = NOW()
+       WHERE id = $2`,
+      [stage, runId],
+    );
+  }
 }
 
 async function completeStage(runId: string, stage: string, result: Record<string, unknown>): Promise<void> {
-  await getPool().query(
-    `UPDATE pipeline_runs
-     SET stages_completed = stages_completed || jsonb_build_object($1::text, $2::jsonb),
-         updated_at = NOW()
-     WHERE id = $3`,
-    [stage, JSON.stringify(result), runId],
-  );
+  const col = STAGE_TO_COLUMN[stage];
+  const status = result.skipped ? 'skipped' : 'completed';
+  const stageData = JSON.stringify({
+    status,
+    ...(status === 'completed' ? { completed_at: new Date().toISOString() } : {}),
+    ...result,
+  });
+  if (col) {
+    await getPool().query(
+      `UPDATE pipeline_runs
+       SET stages_completed = stages_completed || jsonb_build_object($1::text, $2::jsonb),
+           ${col} = $3::jsonb,
+           updated_at = NOW()
+       WHERE id = $4`,
+      [stage, JSON.stringify(result), stageData, runId],
+    );
+  } else {
+    await getPool().query(
+      `UPDATE pipeline_runs
+       SET stages_completed = stages_completed || jsonb_build_object($1::text, $2::jsonb),
+           updated_at = NOW()
+       WHERE id = $3`,
+      [stage, JSON.stringify(result), runId],
+    );
+  }
 }
 
 async function failRun(runId: string, message: string): Promise<void> {
+  // Also mark the currently-running stage column as failed
   await getPool().query(
-    `UPDATE pipeline_runs SET status = 'failed', error_message = $1, updated_at = NOW()
+    `UPDATE pipeline_runs
+     SET status = 'failed', error_message = $1,
+         stage_playlist  = CASE WHEN current_stage = 'generate_playlist' THEN stage_playlist  || jsonb_build_object('status','failed','error',$1,'completed_at',NOW()::text) ELSE stage_playlist  END,
+         stage_dj_script = CASE WHEN current_stage = 'generate_script'   THEN stage_dj_script || jsonb_build_object('status','failed','error',$1,'completed_at',NOW()::text) ELSE stage_dj_script END,
+         stage_tts       = CASE WHEN current_stage = 'generate_tts'      THEN stage_tts       || jsonb_build_object('status','failed','error',$1,'completed_at',NOW()::text) ELSE stage_tts       END,
+         stage_publish   = CASE WHEN current_stage = 'publish'           THEN stage_publish   || jsonb_build_object('status','failed','error',$1,'completed_at',NOW()::text) ELSE stage_publish   END,
+         updated_at = NOW()
      WHERE id = $2`,
     [message, runId],
   );
