@@ -501,7 +501,7 @@ export default function EpisodeDetailPage() {
           {/* Adaptive stream player — shown only for published scripts with ABR variants */}
           {(script.hls_tracks?.dj_stream ?? script.hls_tracks?.music_stream) && (
             <RadioStreamPlayer
-              src={script.hls_tracks?.dj_stream ?? script.hls_tracks!.music_stream!}
+              src={(script.hls_tracks?.dj_stream ?? script.hls_tracks?.music_stream) as string}
               title="Published Radio Stream"
             />
           )}
