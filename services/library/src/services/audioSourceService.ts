@@ -10,6 +10,21 @@ const execFileAsync = promisify(execFile);
 
 const YT_DLP = process.env.YT_DLP_PATH || 'yt-dlp';
 
+/**
+ * Build yt-dlp args that bypass YouTube bot-detection on cloud/Railway IPs.
+ * iOS/Android player clients use YouTube's mobile API and are not subject to
+ * the bot-check pipeline that blocks requests from cloud server IPs.
+ * Exported for unit testing.
+ */
+export function buildYtDlpBotArgs(): string[] {
+  const args: string[] = ['--extractor-args', 'youtube:player_client=ios,android'];
+  const cookiesFile = process.env.YT_DLP_COOKIES_FILE;
+  if (cookiesFile) {
+    args.push('--cookies', cookiesFile);
+  }
+  return args;
+}
+
 interface SourceResult {
   songId: string;
   audioUrl: string;
@@ -42,6 +57,7 @@ export async function sourceFromYouTube(
       '--output', outputTemplate,
       '--no-warnings',
       '--quiet',
+      ...buildYtDlpBotArgs(),
     ], { timeout: 120_000 });
 
     // Find the downloaded file

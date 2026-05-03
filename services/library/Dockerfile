@@ -20,6 +20,8 @@ RUN pnpm --filter @playgen/library-service build
 
 FROM node:25-alpine
 WORKDIR /app
+RUN apk add --no-cache python3 py3-pip ffmpeg && \
+    pip3 install --break-system-packages yt-dlp
 RUN npm install -g pnpm
 COPY --from=builder /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/package.json ./

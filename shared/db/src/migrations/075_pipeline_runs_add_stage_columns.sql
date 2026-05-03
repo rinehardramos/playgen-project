@@ -1,9 +1,9 @@
--- Migration 075: Add per-stage JSONB columns + triggered_by to pipeline_runs
+-- Migration 073: Add per-stage JSONB columns + triggered_by to pipeline_runs
 --
--- Migration 067 created the table with a generic stages_completed JSONB map.
--- Migration 068 used CREATE TABLE IF NOT EXISTS which was a no-op (067 already
--- created the table with a different schema). This migration adds the missing
--- per-stage columns so the Pipeline UI (#499) can read granular stage status.
+-- Migration 068 used CREATE TABLE IF NOT EXISTS which was a no-op (067 already created
+-- the table with a different schema). This migration adds the missing per-stage columns
+-- so the frontend Pipeline UI can read granular stage status without reconstructing it
+-- from the generic stages_completed map.
 
 ALTER TABLE pipeline_runs
   ADD COLUMN IF NOT EXISTS stage_playlist  JSONB NOT NULL DEFAULT '{"status":"pending"}'::jsonb,

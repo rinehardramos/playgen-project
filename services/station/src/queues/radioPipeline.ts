@@ -110,7 +110,7 @@ async function fetchServiceToken(): Promise<string> {
 
 // ── Stage column map ─────────────────────────────────────────────────────────
 
-/** Maps logical stage name → per-stage JSONB column (for Pipeline UI, migration 075). */
+/** Maps logical stage name → per-stage JSONB column (for Pipeline UI). */
 const STAGE_TO_COLUMN: Record<string, string> = {
   generate_playlist: 'stage_playlist',
   generate_script:   'stage_dj_script',
@@ -457,6 +457,10 @@ export function startRadioPipelineWorker(): Worker<RadioPipelineJobData> {
           segments_done: segRow ? parseInt(String(segRow.count), 10) : null,
           total_segments: segRow?.total_segments ?? null,
         });
+        // Mark review stage as skipped when auto-approved (manual review stays at default 'pending')
+        if (config.auto_approve) {
+          await completeStage(pipeline_run_id, 'review', { skipped: true });
+        }
       }
 
       // ── Stage 3: generate_tts ───────────────────────────────────────────────
