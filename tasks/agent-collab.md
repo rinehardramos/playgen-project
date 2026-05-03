@@ -29,6 +29,7 @@ _Updated: 2026-05-03 by PM agent_
 
 ## Active Work
 
+- [ ] fix(dj): status.json stale metadata — time-based CDN segment computation (#491, fix/issue-491) | @claude-sonnet-4-6 | 2026-05-03
 - [ ] feat(station+dj+frontend): Pipeline UI — GitHub Actions-style Radio Program Factory dashboard (#499, feat/issue-499) | @claude-sonnet-4-6 | 2026-05-03 | Migration: none (uses 075 from #529)
 - [x] fix(scheduler+station): inherit_library category remapping + station auto-creation slots (#497, #498, fix/issue-497-498) | @claude-sonnet-4-6 | 2026-05-03
 - [x] fix(library): yt-dlp YouTube bot detection — cookie auth + ios/android player clients (#465, fix/issue-465, PR #547) | @claude-sonnet-4-6 | 2026-05-03
