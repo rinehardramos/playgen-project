@@ -31,7 +31,14 @@ import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getPool } from '../db';
-import { buildEntryCumulativeMap, buildMusicM3u8, resolveDjClips, type DjSegmentRow } from './hlsBuilder.js';
+import {
+  buildEntryCumulativeMap,
+  buildMusicM3u8,
+  resolveDjClips,
+  buildVariantMasterM3u8,
+  type DjSegmentRow,
+  type VariantStream,
+} from './hlsBuilder.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -479,6 +486,42 @@ async function stageUploadAssets(scriptId: string, stationSlug: string, playlist
 // Only runs if the script has at least one floating segment with TTS audio.
 // Sequential-only scripts skip this stage (hls_tracks remains NULL).
 //
+async function runDjFfmpegVariant(
+  ffmpegBaseArgs: string[],
+  bitrateK: number,
+  channels: number,
+  tmpDir: string,
+  suffix: string,
+): Promise<{ segFiles: string[]; rawM3u8: string; segDir: string }> {
+  const segDir = path.join(tmpDir, `dj_segs_${suffix}`);
+  await fs.promises.mkdir(segDir, { recursive: true });
+  const m3u8Path = path.join(tmpDir, `dj_${suffix}.m3u8`);
+
+  const fullArgs = [
+    ...ffmpegBaseArgs,
+    '-c:a', 'aac',
+    '-b:a', `${bitrateK}k`,
+    '-ar', '44100',
+    '-ac', String(channels),
+    '-f', 'hls',
+    '-hls_time', '10',
+    '-hls_playlist_type', 'vod',
+    '-hls_list_size', '0',
+    '-hls_segment_filename', path.join(segDir, 'seg_%05d.ts'),
+    m3u8Path,
+  ];
+
+  await execFileAsync('ffmpeg', fullArgs, { timeout: 600_000 });
+
+  const rawM3u8 = await fs.promises.readFile(m3u8Path, 'utf8');
+  const segFiles = rawM3u8
+    .split('\n')
+    .filter(l => l.endsWith('.ts'))
+    .map(l => path.basename(l));
+
+  return { segFiles, rawM3u8, segDir };
+}
+
 async function stageBuildHls(scriptId: string, stationSlug: string, dateStr: string): Promise<void> {
   const pool = getPool();
   const s3 = getS3Client();
@@ -574,8 +617,8 @@ async function stageBuildHls(scriptId: string, stationSlug: string, dateStr: str
       }
     }
 
-    // Build ffmpeg args: silence base + per-clip delays + amix
-    const ffmpegArgs: string[] = [
+    // Build base ffmpeg args: inputs only (no codec/output spec yet)
+    const ffmpegBaseArgs: string[] = [
       '-y',
       '-f', 'lavfi',
       '-t', String(totalMusicDurationSec),
@@ -587,8 +630,8 @@ async function stageBuildHls(scriptId: string, stationSlug: string, dateStr: str
       const localPath = localClipPaths[i];
       if (!localPath) continue;
       const inputIdx = 1 + validClips.length;
-      ffmpegArgs.push('-itsoffset', djClips[i].offsetSec.toFixed(3));
-      ffmpegArgs.push('-i', localPath);
+      ffmpegBaseArgs.push('-itsoffset', djClips[i].offsetSec.toFixed(3));
+      ffmpegBaseArgs.push('-i', localPath);
       validClips.push({ clipIdx: i, localPath, inputIdx });
     }
 
@@ -597,68 +640,137 @@ async function stageBuildHls(scriptId: string, stationSlug: string, dateStr: str
     const totalInputs = 1 + validClips.length;
     const inputLabels = Array.from({ length: totalInputs }, (_, i) => `[${i}]`).join('');
     const filterComplex = `${inputLabels}amix=inputs=${totalInputs}:normalize=0:duration=first[out]`;
+    ffmpegBaseArgs.push('-filter_complex', filterComplex);
+    ffmpegBaseArgs.push('-map', '[out]');
 
-    const djSegDir = path.join(tmpDir, 'dj_segs');
-    await fs.promises.mkdir(djSegDir, { recursive: true });
-    const djM3u8Path = path.join(tmpDir, 'dj.m3u8');
+    /** DJ HLS quality variants */
+    const DJ_HLS_VARIANTS = [
+      { suffix: 'low',  bitrateK: 32,  channels: 1 },
+      { suffix: 'mid',  bitrateK: 128, channels: 2 },
+      { suffix: 'high', bitrateK: 256, channels: 2 },
+    ] as const;
 
-    ffmpegArgs.push(
-      '-filter_complex', filterComplex,
-      '-map', '[out]',
-      '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '2',
-      '-f', 'hls',
-      '-hls_time', '10',
-      '-hls_playlist_type', 'vod',
-      '-hls_list_size', '0',
-      '-hls_segment_filename', path.join(djSegDir, 'seg_%05d.ts'),
-      djM3u8Path,
-    );
+    const djM3u8Urls: Record<string, string> = {};
 
-    await execFileAsync('ffmpeg', ffmpegArgs, { timeout: 600_000 });
+    for (const variant of DJ_HLS_VARIANTS) {
+      const { segFiles, rawM3u8 } = await runDjFfmpegVariant(
+        ffmpegBaseArgs, variant.bitrateK, variant.channels, tmpDir, variant.suffix,
+      );
 
-    // Read the generated m3u8 and rewrite segment URLs to CDN paths
-    const rawM3u8 = await fs.promises.readFile(djM3u8Path, 'utf8');
-    const segFiles = rawM3u8
-      .split('\n')
-      .filter(l => l.endsWith('.ts'))
-      .map(l => path.basename(l));
+      const segCdnBase = `programs/${stationSlug}/${dateStr}/dj_${variant.suffix}`;
+      for (const segFile of segFiles) {
+        const segLocalPath = path.join(tmpDir, `dj_segs_${variant.suffix}`, segFile);
+        if (!fs.existsSync(segLocalPath)) continue;
+        await s3.send(new PutObjectCommand({
+          Bucket: bucket,
+          Key: `${segCdnBase}/${segFile}`,
+          Body: fs.readFileSync(segLocalPath),
+          ContentType: 'video/mp2t',
+        }));
+      }
 
-    // Upload each .ts segment to R2
-    const segCdnBase = `programs/${stationSlug}/${dateStr}/dj`;
-    for (const segFile of segFiles) {
-      const segLocalPath = path.join(djSegDir, segFile);
-      if (!fs.existsSync(segLocalPath)) continue;
-      const segBody = fs.readFileSync(segLocalPath);
+      const cdnM3u8 = rawM3u8
+        .split('\n')
+        .map(l => l.endsWith('.ts') ? `${publicBase}/${segCdnBase}/${path.basename(l)}` : l)
+        .join('\n');
+
+      const m3u8Key = `programs/${stationSlug}/${dateStr}/dj_${variant.suffix}.m3u8`;
       await s3.send(new PutObjectCommand({
-        Bucket: bucket,
-        Key: `${segCdnBase}/${segFile}`,
-        Body: segBody,
-        ContentType: 'video/mp2t',
+        Bucket: bucket, Key: m3u8Key,
+        Body: Buffer.from(cdnM3u8),
+        ContentType: 'application/vnd.apple.mpegurl',
       }));
+      djM3u8Urls[variant.suffix] = `${publicBase}/${m3u8Key}`;
+      console.info(`[buildHls] Uploaded dj_${variant.suffix}.m3u8 (${segFiles.length} segs) → ${djM3u8Urls[variant.suffix]}`);
     }
 
-    // Rewrite the m3u8 so segment URLs point to CDN
-    const cdnM3u8 = rawM3u8
+    // Backward-compat: keep dj.m3u8 pointing to mid quality
+    const legacyDjKey = `programs/${stationSlug}/${dateStr}/dj.m3u8`;
+    const midRawM3u8 = await fs.promises.readFile(path.join(tmpDir, 'dj_mid.m3u8'), 'utf8');
+    const midCdnM3u8 = midRawM3u8
       .split('\n')
-      .map(l => l.endsWith('.ts') ? `${publicBase}/${segCdnBase}/${path.basename(l)}` : l)
+      .map(l => l.endsWith('.ts') ? `${publicBase}/programs/${stationSlug}/${dateStr}/dj_mid/${path.basename(l)}` : l)
       .join('\n');
-
-    const djM3u8Key = `programs/${stationSlug}/${dateStr}/dj.m3u8`;
     await s3.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: djM3u8Key,
-      Body: Buffer.from(cdnM3u8),
+      Bucket: bucket, Key: legacyDjKey,
+      Body: Buffer.from(midCdnM3u8),
       ContentType: 'application/vnd.apple.mpegurl',
     }));
-    const djM3u8Url = `${publicBase}/${djM3u8Key}`;
-    console.info(`[buildHls] Uploaded dj.m3u8 (${segFiles.length} segments) → ${djM3u8Url}`);
+    const djM3u8LegacyUrl = `${publicBase}/${legacyDjKey}`;
+    console.info(`[buildHls] Uploaded legacy dj.m3u8 (mid-quality copy) → ${djM3u8LegacyUrl}`);
 
-    // ── Store both URLs in dj_scripts.hls_tracks ───────────────────────────
+    // ── Music variant M3U8s (low/mid) + master manifest ──────────────────────
+    function deriveSongVariantUrl(baseUrl: string, suffix: string): string {
+      if (baseUrl.endsWith('.aac') && baseUrl.includes('/songs/')) {
+        return baseUrl.replace(/\.aac$/, `.${suffix}.aac`);
+      }
+      return baseUrl; // graceful degradation: use base quality
+    }
+
+    const musicMidEntries = entries.map(e => ({
+      ...e,
+      audio_url: e.audio_url ? deriveSongVariantUrl(e.audio_url, 'mid') : null,
+    }));
+    const musicLowEntries = entries.map(e => ({
+      ...e,
+      audio_url: e.audio_url ? deriveSongVariantUrl(e.audio_url, 'low') : null,
+    }));
+
+    const musicMidM3u8Key = `programs/${stationSlug}/${dateStr}/music_mid.m3u8`;
+    const musicLowM3u8Key = `programs/${stationSlug}/${dateStr}/music_low.m3u8`;
+    await Promise.all([
+      s3.send(new PutObjectCommand({
+        Bucket: bucket, Key: musicMidM3u8Key,
+        Body: Buffer.from(buildMusicM3u8(musicMidEntries)),
+        ContentType: 'application/vnd.apple.mpegurl',
+      })),
+      s3.send(new PutObjectCommand({
+        Bucket: bucket, Key: musicLowM3u8Key,
+        Body: Buffer.from(buildMusicM3u8(musicLowEntries)),
+        ContentType: 'application/vnd.apple.mpegurl',
+      })),
+    ]);
+
+    const musicVariants: VariantStream[] = [
+      { bandwidth: 32000,  codecs: 'mp4a.40.2', uri: `${publicBase}/${musicLowM3u8Key}`, label: 'Low' },
+      { bandwidth: 128000, codecs: 'mp4a.40.2', uri: `${publicBase}/${musicMidM3u8Key}`, label: 'Standard' },
+      { bandwidth: 192000, codecs: 'mp4a.40.2', uri: musicM3u8Url,                       label: 'High' },
+    ];
+    const musicStreamKey = `programs/${stationSlug}/${dateStr}/music_stream.m3u8`;
+    await s3.send(new PutObjectCommand({
+      Bucket: bucket, Key: musicStreamKey,
+      Body: Buffer.from(buildVariantMasterM3u8(musicVariants)),
+      ContentType: 'application/vnd.apple.mpegurl',
+    }));
+    const musicStreamUrl = `${publicBase}/${musicStreamKey}`;
+    console.info(`[buildHls] Uploaded music_stream.m3u8 (master) → ${musicStreamUrl}`);
+
+    // ── DJ master variant manifest ────────────────────────────────────────────
+    const djVariants: VariantStream[] = [
+      { bandwidth: 32000,  codecs: 'mp4a.40.2', uri: djM3u8Urls['low'],  label: 'Low' },
+      { bandwidth: 128000, codecs: 'mp4a.40.2', uri: djM3u8Urls['mid'],  label: 'Standard' },
+      { bandwidth: 256000, codecs: 'mp4a.40.2', uri: djM3u8Urls['high'], label: 'High' },
+    ];
+    const djStreamKey = `programs/${stationSlug}/${dateStr}/dj_stream.m3u8`;
+    await s3.send(new PutObjectCommand({
+      Bucket: bucket, Key: djStreamKey,
+      Body: Buffer.from(buildVariantMasterM3u8(djVariants)),
+      ContentType: 'application/vnd.apple.mpegurl',
+    }));
+    const djStreamUrl = `${publicBase}/${djStreamKey}`;
+    console.info(`[buildHls] Uploaded dj_stream.m3u8 (master) → ${djStreamUrl}`);
+
+    // ── Store all URLs in dj_scripts.hls_tracks (JSONB, backward-compatible) ──
     await pool.query(
       `UPDATE dj_scripts SET hls_tracks = $1::jsonb WHERE id = $2`,
-      [JSON.stringify({ music: musicM3u8Url, dj: djM3u8Url }), scriptId],
+      [JSON.stringify({
+        music:        musicM3u8Url,    // backward compat
+        dj:           djM3u8LegacyUrl, // backward compat
+        dj_stream:    djStreamUrl,     // NEW: ABR master manifest for DJ track
+        music_stream: musicStreamUrl,  // NEW: ABR master manifest for music track
+      }), scriptId],
     );
-    console.info(`[buildHls] hls_tracks saved for script ${scriptId}`);
+    console.info(`[buildHls] hls_tracks (with ABR URLs) saved for script ${scriptId}`);
 
   } finally {
     fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
