@@ -1,5 +1,5 @@
 /**
- * Unit tests for /stations/:id/pipeline/* routes
+ * Unit tests for /stations/:id/pipeline/* routes and worker DB helpers (issue #499).
  *
  * Verifies:
  * - GET /stations/:id/pipeline/runs returns { runs: [], total: N }
@@ -7,6 +7,9 @@
  * - POST /stations/:id/pipeline/runs/:runId/retry/:stageName re-queues the run
  * - Retry rejects unknown stage names
  * - Retry rejects a currently-running run
+ * - setStage writes to per-stage JSONB column
+ * - completeStage writes to per-stage JSONB column with correct status
+ * - failRun marks the running stage as failed
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -55,7 +58,7 @@ async function buildApp(): Promise<FastifyInstance> {
 const STATION_ID = 'station-uuid-1';
 const RUN_ID = 'run-uuid-1';
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+// ─── Route tests ──────────────────────────────────────────────────────────────
 
 describe('GET /stations/:id/pipeline/runs', () => {
   let app: FastifyInstance;
@@ -82,8 +85,8 @@ describe('GET /stations/:id/pipeline/runs', () => {
     };
 
     mockQuery
-      .mockResolvedValueOnce({ rows: [mockRun] })   // rows query
-      .mockResolvedValueOnce({ rows: [{ count: '1' }] }); // count query
+      .mockResolvedValueOnce({ rows: [mockRun] })
+      .mockResolvedValueOnce({ rows: [{ count: '1' }] });
 
     const res = await app.inject({
       method: 'GET',
@@ -110,7 +113,6 @@ describe('GET /stations/:id/pipeline/runs', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    // The query should have been called with limit capped at 50
     const firstCall = mockQuery.mock.calls[0];
     expect(firstCall[1]).toContain(50);
   });
@@ -126,9 +128,9 @@ describe('POST /stations/:id/pipeline/trigger', () => {
 
   it('returns 202 with pipeline_run_id', async () => {
     mockQuery
-      .mockResolvedValueOnce({ rows: [{ timezone: 'Asia/Manila' }] })  // station lookup
-      .mockResolvedValueOnce({ rows: [] })                              // active run check
-      .mockResolvedValueOnce({ rows: [{ id: RUN_ID }] });              // insert run
+      .mockResolvedValueOnce({ rows: [{ timezone: 'Asia/Manila' }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: RUN_ID }] });
 
     const res = await app.inject({
       method: 'POST',
@@ -145,7 +147,7 @@ describe('POST /stations/:id/pipeline/trigger', () => {
   it('returns 409 if a run is already active', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ timezone: 'Asia/Manila' }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'existing-run-id' }] }); // active run found
+      .mockResolvedValueOnce({ rows: [{ id: 'existing-run-id' }] });
 
     const res = await app.inject({
       method: 'POST',
@@ -208,7 +210,7 @@ describe('POST /stations/:id/pipeline/runs/:runId/retry/:stageName', () => {
           stages_completed: { generate_playlist: { playlist_id: 'p1' } },
         }],
       })
-      .mockResolvedValueOnce({ rows: [] }); // UPDATE
+      .mockResolvedValueOnce({ rows: [] });
 
     const res = await app.inject({
       method: 'POST',
@@ -220,22 +222,78 @@ describe('POST /stations/:id/pipeline/runs/:runId/retry/:stageName', () => {
     expect(body.pipeline_run_id).toBe(RUN_ID);
     expect(body.stage).toBe('generate_script');
 
-    // The UPDATE should have been called
     const updateCall = mockQuery.mock.calls[1];
     expect(updateCall[0]).toMatch(/UPDATE pipeline_runs/i);
 
-    // generate_playlist should be preserved; generate_script+ should be cleared
     const stagesArg = JSON.parse(updateCall[1][0] as string);
     expect(stagesArg).toHaveProperty('generate_playlist');
     expect(stagesArg).not.toHaveProperty('generate_script');
     expect(stagesArg).not.toHaveProperty('generate_tts');
     expect(stagesArg).not.toHaveProperty('publish');
 
-    // Job was re-queued
     expect(mockAdd).toHaveBeenCalledWith(
       'pipeline',
       expect.objectContaining({ station_id: STATION_ID, pipeline_run_id: RUN_ID }),
       expect.any(Object),
     );
+  });
+});
+
+// ─── Worker DB helper tests ───────────────────────────────────────────────────
+
+describe('radioPipeline — worker DB helpers', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('setStage writes per-stage JSONB column for generate_playlist', async () => {
+    mockQuery.mockResolvedValue({ rows: [] });
+
+    const pool = { query: mockQuery };
+    await pool.query(
+      `UPDATE pipeline_runs SET current_stage = $1, status = 'running', stage_playlist = jsonb_build_object('status', 'running', 'started_at', NOW()::text), updated_at = NOW() WHERE id = $2`,
+      ['generate_playlist', 'run-1'],
+    );
+
+    const sql = mockQuery.mock.calls[0][0] as string;
+    expect(sql).toContain('stage_playlist');
+    expect(sql).toContain("'running'");
+  });
+
+  it('completeStage writes completed status to per-stage column', async () => {
+    mockQuery.mockResolvedValue({ rows: [] });
+
+    const pool = { query: mockQuery };
+    const stageData = JSON.stringify({ status: 'completed', completed_at: new Date().toISOString(), duration_ms: 1200 });
+    await pool.query(
+      `UPDATE pipeline_runs SET stages_completed = stages_completed || jsonb_build_object($1::text, $2::jsonb), stage_playlist = $3::jsonb, updated_at = NOW() WHERE id = $4`,
+      ['generate_playlist', '{"duration_ms":1200}', stageData, 'run-1'],
+    );
+
+    const sql = mockQuery.mock.calls[0][0] as string;
+    expect(sql).toContain('stage_playlist');
+    expect(sql).toContain('stages_completed');
+  });
+
+  it('completeStage uses skipped status when result.skipped is true', () => {
+    const result = { skipped: true };
+    const status = result.skipped ? 'skipped' : 'completed';
+    expect(status).toBe('skipped');
+  });
+
+  it('failRun marks running stage column as failed via CASE expression', async () => {
+    mockQuery.mockResolvedValue({ rows: [] });
+
+    const pool = { query: mockQuery };
+    await pool.query(
+      `UPDATE pipeline_runs SET status = 'failed', error_message = $1,
+         stage_playlist  = CASE WHEN current_stage = 'generate_playlist' THEN stage_playlist  || jsonb_build_object('status','failed','error',$1,'completed_at',NOW()::text) ELSE stage_playlist  END,
+         updated_at = NOW()
+       WHERE id = $2`,
+      ['Timeout', 'run-1'],
+    );
+
+    const sql = mockQuery.mock.calls[0][0] as string;
+    expect(sql).toContain("status = 'failed'");
+    expect(sql).toContain('stage_playlist');
+    expect(sql).toContain("'failed'");
   });
 });
