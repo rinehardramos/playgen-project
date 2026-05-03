@@ -9,6 +9,7 @@ import {
 } from './playoutScheduler.js';
 import { generateHls, cleanupHls } from './hlsGenerator.js';
 import { getPool } from '../db.js';
+import { computeCurrentSong, computeElapsedSec } from './nowPlayingHelper.js';
 
 const HLS_OUTPUT_DIR = process.env.HLS_OUTPUT_PATH || path.join(process.cwd(), 'data', 'hls');
 
@@ -251,33 +252,91 @@ export async function streamRoutes(app: FastifyInstance) {
         });
     }
 
-    // Fallback: return the first song segment from the latest approved script in DB
+    // Fallback: compute currently playing song from the same CDN-backed script the HLS playlist uses.
+    // Uses cumulative segment durations + elapsed time since broadcast day midnight to pick the right song.
     try {
       const pool = getPool();
-      const { rows } = await pool.query<{ song_title: string; song_artist: string }>(
-        `SELECT pe_song.title AS song_title, pe_song.artist AS song_artist
-         FROM dj_segments ds
-         JOIN dj_scripts sc ON sc.id = ds.script_id
+
+      // Step 1: find the latest approved script that has CDN audio (same criteria as playlist.m3u8)
+      const { rows: scriptRows } = await pool.query<{
+        script_id: string;
+        playlist_date: string;
+        timezone: string;
+      }>(
+        `SELECT sc.id AS script_id, pl.date::text AS playlist_date, st.timezone
+         FROM dj_scripts sc
          JOIN playlists pl ON pl.id = sc.playlist_id
-         LEFT JOIN playlist_entries pe ON pe.id = ds.playlist_entry_id
-         LEFT JOIN songs pe_song ON pe_song.id = pe.song_id
+         JOIN stations st ON st.id = sc.station_id
          WHERE sc.station_id = $1
            AND sc.review_status IN ('approved', 'auto_approved')
-           AND ds.segment_type IN ('song_intro', 'song_transition')
-           AND pe_song.title IS NOT NULL
-         ORDER BY pl.date DESC, ds.position ASC
+           AND EXISTS (
+             SELECT 1 FROM dj_segments s2
+             WHERE s2.script_id = sc.id AND s2.audio_url LIKE 'http%'
+           )
+         ORDER BY pl.date DESC
          LIMIT 1`,
         [stationId],
       );
 
-      const track = rows[0];
-      return reply
-        .header('Content-Type', 'application/json')
-        .send({
-          title: track ? `${track.song_artist} - ${track.song_title}` : 'PlayGen Radio',
-          artist: track?.song_artist ?? '',
-          song: track?.song_title ?? '',
-        });
+      if (!scriptRows[0]) {
+        return reply.header('Content-Type', 'application/json')
+          .send({ title: 'PlayGen Radio', artist: '', song: '' });
+      }
+
+      const { script_id, playlist_date, timezone } = scriptRows[0];
+
+      // Step 2: fetch all ordered audio items with durations for time-based position calculation.
+      // DJ speech = ds.audio_duration_sec; songs = songs.duration_sec.
+      const { rows: segRows } = await pool.query<{
+        sort_order: number;
+        song_title: string | null;
+        song_artist: string | null;
+        duration_sec: number;
+      }>(
+        `SELECT
+           sub.sort_order,
+           sub.song_title,
+           sub.song_artist,
+           sub.duration_sec
+         FROM (
+           SELECT
+             ds.position::float                                AS sort_order,
+             NULL::text                                        AS song_title,
+             NULL::text                                        AS song_artist,
+             COALESCE(ds.audio_duration_sec, 0)::float         AS duration_sec
+           FROM dj_segments ds
+           WHERE ds.script_id = $1
+             AND ds.audio_url LIKE 'http%'
+             AND ds.segment_type NOT IN ('song_intro', 'song_transition')
+
+           UNION ALL
+
+           SELECT
+             ds.position::float + 0.5                          AS sort_order,
+             s.title                                           AS song_title,
+             s.artist                                          AS song_artist,
+             COALESCE(s.duration_sec, ds.audio_duration_sec, 0)::float AS duration_sec
+           FROM dj_segments ds
+           JOIN playlist_entries pe ON pe.id = ds.playlist_entry_id
+           JOIN songs s ON s.id = pe.song_id
+           WHERE ds.script_id = $1
+             AND ds.segment_type IN ('song_intro', 'song_transition')
+             AND s.title IS NOT NULL
+         ) sub
+         ORDER BY sub.sort_order`,
+        [script_id],
+      );
+
+      // Step 3 & 4: compute elapsed time and find the current song using pure helpers
+      const totalDuration = segRows.reduce((acc, r) => acc + r.duration_sec, 0);
+      const elapsedSec = computeElapsedSec(playlist_date, timezone, totalDuration);
+      const currentSong = computeCurrentSong(segRows, elapsedSec);
+
+      return reply.header('Content-Type', 'application/json').send({
+        title: currentSong ? `${currentSong.song_artist} - ${currentSong.song_title}` : 'PlayGen Radio',
+        artist: currentSong?.song_artist ?? '',
+        song: currentSong?.song_title ?? '',
+      });
     } catch {
       return reply
         .header('Content-Type', 'application/json')
