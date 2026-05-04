@@ -20,6 +20,7 @@ import { startPublishWorker } from './queues/publishPipeline';
 import { startRadioPipelineWorker } from './queues/radioPipeline';
 import { programExportRoutes } from './routes/programExport';
 import { programImportRoutes } from './routes/programImport';
+import { specRoutes } from './routes/specRoutes';
 
 const app = Fastify({
   logger: {
@@ -51,6 +52,7 @@ app.register(publicStationRoutes,  { prefix: '/api/v1' });
 app.register(radioPipelineRoutes,  { prefix: '/api/v1' });
 app.register(programExportRoutes,  { prefix: '/api/v1' });
 app.register(programImportRoutes,  { prefix: '/api/v1' });
+app.register(specRoutes,           { prefix: '/api/v1' });
 
 app.setErrorHandler((err: FastifyError, _req, reply) => {
   app.log.error(err);

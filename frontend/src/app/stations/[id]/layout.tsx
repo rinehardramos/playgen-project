@@ -8,6 +8,7 @@ const TABS = [
   { href: 'dj', label: 'DJ' },
   { href: 'pipeline', label: 'Pipeline' },
   { href: 'settings', label: 'Settings' },
+  { href: 'spec', label: 'Spec' },
 ];
 
 export default function StationLayout({ children }: { children: React.ReactNode }) {
