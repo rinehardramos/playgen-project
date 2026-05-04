@@ -29,6 +29,7 @@ _Updated: 2026-05-03 by PM agent_
 
 ## Active Work
 
+- [ ] feat(station+frontend): adaptive bandwidth streaming — multi-bitrate HLS + RadioStreamPlayer (#500, feat/issue-500) | @claude-sonnet-4-6 | 2026-05-03 | Migration: none
 - [x] fix(scheduler+station): inherit_library category remapping + station auto-creation slots (#497, #498, fix/issue-497-498) | @claude-sonnet-4-6 | 2026-05-03
 - [x] fix(library): yt-dlp YouTube bot detection — cookie auth + ios/android player clients (#465, fix/issue-465, PR #547) | @claude-sonnet-4-6 | 2026-05-03
 

@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { useDjPlayer } from '@/lib/DjPlayerContext';
 import ScriptReviewPanel, { type ReviewPanelScript, type PlaylistEntry as ReviewPanelEntry } from '@/components/ScriptReviewPanel';
 import ProgramPreviewModal from '@/components/ProgramPreviewModal';
+import RadioStreamPlayer from '@/components/RadioStreamPlayer';
 import {
   buildTimeline,
   DJ_COLORS,
@@ -52,8 +53,15 @@ interface PlaylistEntryWithSong extends TimelinePlaylistEntry {
   duration_sec: number | null;
 }
 
-// ReviewPanelScript is a superset of our local DjScript needs — reuse it directly
-type DjScript = ReviewPanelScript;
+// ReviewPanelScript is a superset of our local DjScript needs — extend with ABR HLS URLs (#500)
+type DjScript = ReviewPanelScript & {
+  hls_tracks?: {
+    music?: string;
+    dj?: string;
+    dj_stream?: string;
+    music_stream?: string;
+  } | null;
+};
 
 type EpisodeTab = 'rundown' | 'music' | 'script' | 'preview';
 
@@ -489,20 +497,30 @@ export default function EpisodeDetailPage() {
       )}
 
       {tab === 'preview' && script && (
-        <div className="bg-[#1a1a2e] border border-[#2a2a40] rounded-xl p-6">
-          <p className="text-gray-500 text-sm mb-4">
-            Full show timeline with DJ segments and music interleaved in broadcast order.
-          </p>
-          <button
-            onClick={() => setShowPreview(true)}
-            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            Open Full Preview
-          </button>
+        <div className="space-y-6">
+          {/* Adaptive stream player — shown only for published scripts with ABR variants */}
+          {(script.hls_tracks?.dj_stream ?? script.hls_tracks?.music_stream) && (
+            <RadioStreamPlayer
+              src={(script.hls_tracks?.dj_stream ?? script.hls_tracks?.music_stream) as string}
+              title="Published Radio Stream"
+            />
+          )}
+
+          {/* Visual timeline preview */}
+          <div className="bg-[#1a1a2e] border border-[#2a2a40] rounded-xl p-6">
+            <p className="text-gray-500 text-sm mb-4">
+              Full show timeline with DJ segments and music interleaved in broadcast order.
+            </p>
+            <button
+              onClick={() => setShowPreview(true)}
+              className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.362a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+              </svg>
+              Open Visual Timeline
+            </button>
+          </div>
         </div>
       )}
       {tab === 'preview' && !script && (
