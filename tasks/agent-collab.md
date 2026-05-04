@@ -29,11 +29,14 @@ _Updated: 2026-05-03 by PM agent_
 
 ## Active Work
 
-- [ ] feat(station+frontend): adaptive bandwidth streaming — multi-bitrate HLS + RadioStreamPlayer (#500, feat/issue-500) | @claude-sonnet-4-6 | 2026-05-03 | Migration: none
-- [x] fix(scheduler+station): inherit_library category remapping + station auto-creation slots (#497, #498, fix/issue-497-498) | @claude-sonnet-4-6 | 2026-05-03
-- [x] fix(library): yt-dlp YouTube bot detection — cookie auth + ios/android player clients (#465, fix/issue-465, PR #547) | @claude-sonnet-4-6 | 2026-05-03
+_(no active claims)_
 
 ## Recently Completed
+- [x] feat(station): human-like DJ transition jitter — seeded FNV-1a jitter on song_transition segments (#422, feat/issue-495) | @claude-sonnet-4-6 | 2026-05-04
+- [x] feat(station+types+dj+frontend): Station Spec — declarative blueprint with YAML editor, spec API, DJ persona bootstrap, and pipeline injection (#495, feat/issue-495) | @claude-sonnet-4-6 | 2026-05-04 | Migration: 076
+- [x] feat(station+frontend): adaptive bandwidth streaming — multi-bitrate HLS + HLS.js player (#500, feat/issue-500, PR #549) | @claude-sonnet-4-6 | 2026-05-04
+- [x] fix(scheduler+station): inherit_library category remapping + station auto-creation slots (#497, #498, fix/issue-497-498) | @claude-sonnet-4-6 | 2026-05-03
+- [x] fix(library): yt-dlp YouTube bot detection — cookie auth + ios/android player clients (#465, fix/issue-465, PR #547) | @claude-sonnet-4-6 | 2026-05-03
 - [x] feat(station+frontend): Pipeline UI — GitHub Actions-style dashboard (#499, feat/issue-499-standalone, PR #546) | @claude-sonnet-4-6 | 2026-05-03
 - [x] fix(dj): status.json stale metadata — time-based CDN segment computation (#491, fix/issue-491, PR #548) | @claude-sonnet-4-6 | 2026-05-03
 - [x] fix(dj+station): LLM/TTS backoff, checkpoint resume, pipeline progress (#529, fix/issue-529, PR #544) | @claude-sonnet-4-6 | 2026-05-03 | Migration: 075

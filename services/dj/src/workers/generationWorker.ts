@@ -2,8 +2,9 @@ import { getPool } from '../db.js';
 import { getSocialProviders } from '../adapters/social/index.js';
 import { llmComplete } from '../adapters/llm/index.js';
 import { withRetry } from '../utils/retry.js';
-import { buildSystemPrompt, buildDualDjSystemPrompt, buildMultiDjSystemPrompt, buildUserPrompt } from '../lib/promptBuilder.js';
+import { buildSystemPrompt, buildDualDjSystemPrompt, buildMultiDjSystemPrompt, buildUserPrompt, buildSpecRulesSection } from '../lib/promptBuilder.js';
 import type { StationIdentity } from '../lib/promptBuilder.js';
+import type { StationSpec } from '@playgen/types';
 import { logLlmUsage } from '../lib/usageLogger.js';
 import { checkLlmRateLimit } from '../lib/rateLimiter.js';
 import { getInfoBrokerClient } from '../lib/infoBroker.js';
@@ -51,6 +52,8 @@ interface StationRow {
   frequency: string | null;
   news_scope: string | null;
   news_topic: string | null;
+  // Declarative station blueprint (migration 076)
+  station_spec: StationSpec | null;
 }
 
 /**
@@ -148,7 +151,7 @@ export async function runGenerationJob(
     `SELECT id, name, timezone, locale_code, company_id,
             city, country_code, latitude, longitude,
             callsign, tagline, frequency,
-            news_scope, news_topic
+            news_scope, news_topic, station_spec
      FROM stations WHERE id = $1`,
     [data.station_id],
   );
@@ -161,6 +164,11 @@ export async function runGenerationJob(
     frequency: station.frequency,
     city: station.city,
   };
+
+  // Build spec-rules string from station_spec (migration 076) — injected into every system prompt.
+  const specRules = station.station_spec
+    ? buildSpecRulesSection(station.station_spec.script_rules, station.station_spec.library)
+    : null;
 
   // 1b. Load per-station settings (API key overrides, model, TTS provider, etc.)
   const stationSettings = await loadStationSettings(data.station_id);
@@ -531,8 +539,8 @@ export async function runGenerationJob(
         : undefined,
     };
     const systemPrompt = isDualDj
-      ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider)
-      : buildSystemPrompt(profile!, station.locale_code, effectiveTtsProvider);
+      ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider, specRules)
+      : buildSystemPrompt(profile!, station.locale_code, effectiveTtsProvider, specRules);
     const userPrompt = buildUserPrompt(ctx) + rejectionContext;
 
     // Resume checkpoint: skip if this position was already inserted in a previous attempt
@@ -748,8 +756,8 @@ export async function runGenerationJob(
       };
 
       const systemPrompt = isDualDj
-        ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider)
-        : buildSystemPrompt(profile, station.locale_code, effectiveTtsProvider);
+        ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider, specRules)
+        : buildSystemPrompt(profile, station.locale_code, effectiveTtsProvider, specRules);
       const userPrompt = buildUserPrompt(ctx) + rejectionContext;
 
       console.info(
@@ -859,8 +867,8 @@ export async function runGenerationJob(
           };
 
           const shoutoutSystemPrompt = isDualDj
-            ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider)
-            : buildSystemPrompt(profile, station.locale_code, effectiveTtsProvider);
+            ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider, specRules)
+            : buildSystemPrompt(profile, station.locale_code, effectiveTtsProvider, specRules);
           const shoutoutUserPrompt = buildUserPrompt(shoutoutCtx) + (data.rejection_notes
             ? `\n\nIMPORTANT: The previous script was rejected by the reviewer. Their feedback: "${data.rejection_notes}". Please rewrite accordingly.`
             : '');
@@ -1036,9 +1044,13 @@ async function injectFloatingSegments(opts: FloatingSegmentOpts): Promise<void> 
   );
   const sponsorName = settingRows[0]?.value ?? null;
 
+  const floatingSpecRules = station.station_spec
+    ? buildSpecRulesSection(station.station_spec.script_rules, station.station_spec.library)
+    : null;
+
   const systemPrompt = isDualDj
-    ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider)
-    : buildSystemPrompt(profile, station.locale_code, effectiveTtsProvider);
+    ? buildMultiDjSystemPrompt(allProfiles, station.locale_code, effectiveTtsProvider, floatingSpecRules)
+    : buildSystemPrompt(profile, station.locale_code, effectiveTtsProvider, floatingSpecRules);
 
   let injected = 0;
 

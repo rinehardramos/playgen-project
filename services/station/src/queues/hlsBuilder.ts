@@ -41,8 +41,26 @@ export function buildEntryCumulativeMap(entries: SongEntry[]): Map<string, numbe
 }
 
 /**
+ * Deterministic pseudo-random float in [min, max) seeded by a string.
+ * Uses FNV-1a hash so the same segment always receives the same jitter,
+ * making HLS rebuilds (e.g. on publish retry) produce identical output.
+ */
+function seededJitter(seed: string, min: number, max: number): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return min + ((h % 10000) / 10000) * (max - min);
+}
+
+/**
  * Resolve all DJ segments to absolute program-timeline clips.
  * Skips segments without audio or unresolvable anchors.
+ *
+ * song_transition sequential segments receive a seeded jitter of -1.5 to +2.0 s
+ * so the DJ doesn't always cut in at the exact song boundary — emulating the
+ * natural dead-air pauses and early cut-ins heard on live radio (Issue #422).
  */
 export function resolveDjClips(
   allSegs: DjSegmentRow[],
@@ -64,10 +82,15 @@ export function resolveDjClips(
       if (songStartSec == null) continue;
       offsetSec = songStartSec + parseFloat(String(seg.start_offset_sec));
     } else if (seg.playlist_entry_id != null) {
-      // Sequential segment: offset = associated entry's start in music timeline
+      // Sequential segment: offset = associated entry's start in music timeline.
+      // song_transition segments get seeded jitter (-1.5 s to +2.0 s) to
+      // simulate natural dead-air gaps and early DJ cut-ins (Issue #422).
       const songStartSec = entryCumulativeSec.get(seg.playlist_entry_id);
       if (songStartSec == null) continue;
-      offsetSec = songStartSec;
+      const jitter = seg.segment_type === 'song_transition'
+        ? seededJitter(seg.id, -1.5, 2.0)
+        : 0;
+      offsetSec = songStartSec + jitter;
     } else {
       // Unanchored: show_outro at end, everything else at 0
       offsetSec = seg.segment_type === 'show_outro'

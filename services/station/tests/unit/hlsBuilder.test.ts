@@ -156,10 +156,57 @@ describe('resolveDjClips', () => {
     expect(clips[0].audioUrl).toBe('https://cdn/dj/float.mp3');
   });
 
-  it('resolves sequential segment to its entry start_sec', () => {
+  it('resolves sequential song_intro to its exact entry start_sec (no jitter)', () => {
     const clips = resolveDjClips([sequentialIntro], cumulativeMap, totalDuration);
     expect(clips).toHaveLength(1);
-    expect(clips[0].offsetSec).toBe(380); // song4 starts at 380
+    expect(clips[0].offsetSec).toBe(380); // song4 starts at 380, no jitter for song_intro
+  });
+
+  it('applies seeded jitter (-1.5 to +2.0 s) to sequential song_transition segments', () => {
+    const transition: DjSegmentRow = {
+      id: 'seg-trans-1',
+      segment_type: 'song_transition',
+      audio_url: 'https://cdn/dj/trans.mp3',
+      audio_duration_sec: 6,
+      playlist_entry_id: 'e2', // song2 starts at 200s
+      anchor_playlist_entry_id: null,
+      start_offset_sec: null,
+    };
+    const clips = resolveDjClips([transition], cumulativeMap, totalDuration);
+    expect(clips).toHaveLength(1);
+    // Jitter range: 200 + [-1.5, +2.0] → [198.5, 202.0]
+    expect(clips[0].offsetSec).toBeGreaterThanOrEqual(200 - 1.5);
+    expect(clips[0].offsetSec).toBeLessThanOrEqual(200 + 2.0);
+  });
+
+  it('song_transition jitter is deterministic for the same segment id', () => {
+    const transition: DjSegmentRow = {
+      id: 'seg-trans-determinism',
+      segment_type: 'song_transition',
+      audio_url: 'https://cdn/dj/trans2.mp3',
+      audio_duration_sec: 5,
+      playlist_entry_id: 'e4', // song4 starts at 380s
+      anchor_playlist_entry_id: null,
+      start_offset_sec: null,
+    };
+    const clips1 = resolveDjClips([transition], cumulativeMap, totalDuration);
+    const clips2 = resolveDjClips([transition], cumulativeMap, totalDuration);
+    expect(clips1[0].offsetSec).toBe(clips2[0].offsetSec);
+  });
+
+  it('different segment ids produce different jitter values', () => {
+    const makeTransition = (id: string): DjSegmentRow => ({
+      id,
+      segment_type: 'song_transition',
+      audio_url: 'https://cdn/dj/t.mp3',
+      audio_duration_sec: 5,
+      playlist_entry_id: 'e2',
+      anchor_playlist_entry_id: null,
+      start_offset_sec: null,
+    });
+    const c1 = resolveDjClips([makeTransition('seg-a')], cumulativeMap, totalDuration);
+    const c2 = resolveDjClips([makeTransition('seg-b')], cumulativeMap, totalDuration);
+    expect(c1[0].offsetSec).not.toBe(c2[0].offsetSec);
   });
 
   it('places show_outro at total_duration minus its duration', () => {

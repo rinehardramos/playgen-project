@@ -230,6 +230,8 @@ export interface Station {
   website_url?: string | null;
   /** DALL-E generated abstract cover art URL (nullable until generated). Added in migration 072. */
   artwork_url?: string | null;
+  /** Declarative station blueprint. Drives DJ personality, script rules, and music guidelines. Added in migration 076. */
+  station_spec?: StationSpec | null;
 }
 
 export interface Role {
@@ -768,5 +770,115 @@ export interface PaginatedResponse<T> {
     limit: number;
     total: number;
     total_pages: number;
+  };
+}
+
+// ─── Station Spec ─────────────────────────────────────────────────────────────
+
+/** Voice config within a spec DJ definition. */
+export interface SpecDjVoice {
+  provider: string;
+  voice_id: string;
+}
+
+/** DJ persona definition within a station spec. */
+export interface SpecDj {
+  name: string;
+  role?: 'primary' | 'co-host' | 'guest';
+  voice?: SpecDjVoice;
+  personality?: string;
+  energy?: number;          // 1-10
+  humor?: number;           // 1-10
+  formality?: 'casual' | 'balanced' | 'formal';
+  catchphrases?: string[];
+  greeting?: string;
+  signoff?: string;
+  backstory?: string;
+}
+
+/** DJ interaction rules within a station spec. */
+export interface SpecDjInteraction {
+  style?: 'solo' | 'banter' | 'formal';
+  rules?: string[];
+}
+
+/** Program theme directive within a station spec. */
+export interface SpecProgramTheme {
+  type: ProgramThemeType;
+  priority?: number;
+  config?: Record<string, unknown>;
+}
+
+/** Program definition within a station spec. */
+export interface SpecProgram {
+  name: string;
+  hours?: string;           // e.g. "5-12" or "22-2"
+  start_hour?: number;
+  end_hour?: number;
+  active_days?: string[];
+  dj_combo?: string[];      // DJ names that appear in this program
+  themes?: SpecProgramTheme[];
+}
+
+/** Music library guidelines within a station spec. */
+export interface SpecLibrary {
+  songs_per_hour?: number;
+  rules?: string[];
+}
+
+/** TTS configuration within a station spec. */
+export interface SpecTts {
+  provider?: string;
+  default_voice?: string;
+}
+
+/**
+ * Declarative station blueprint — like CLAUDE.md but for stations.
+ * All fields are optional; a partial spec only overrides the fields present.
+ * Stored as JSONB in `stations.station_spec` (migration 076).
+ */
+export interface StationSpec {
+  /** Spec format version (currently "1"). */
+  version?: string;
+
+  // ── Identity ──────────────────────────────────────────────────────────────
+  name?: string;
+  callsign?: string;
+  tagline?: string;
+  locale?: string;
+  city?: string;
+  timezone?: string;
+  frequency?: string;
+  broadcast_type?: 'fm' | 'am' | 'online' | 'podcast' | 'dab';
+
+  // ── Broadcast schedule ────────────────────────────────────────────────────
+  broadcast?: {
+    start_hour?: number;
+    end_hour?: number;
+    active_days?: string[];
+  };
+
+  // ── TTS config ────────────────────────────────────────────────────────────
+  tts?: SpecTts;
+
+  // ── DJ personas ───────────────────────────────────────────────────────────
+  djs?: SpecDj[];
+
+  // ── DJ interaction rules ──────────────────────────────────────────────────
+  dj_interaction?: SpecDjInteraction;
+
+  // ── Programs ──────────────────────────────────────────────────────────────
+  programs?: SpecProgram[];
+
+  // ── Music guidelines ─────────────────────────────────────────────────────
+  library?: SpecLibrary;
+
+  // ── Script style rules (injected into the LLM system prompt) ─────────────
+  script_rules?: {
+    language?: string;
+    tone?: string;
+    segment_length?: string;
+    avoid?: string[];
+    always?: string[];
   };
 }

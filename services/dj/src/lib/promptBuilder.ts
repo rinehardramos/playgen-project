@@ -228,10 +228,44 @@ No phonetic respellings needed — the TTS engine handles Filipino pronunciation
 // control chars / bidi codepoints / zero-width unicode. Free-form text is
 // further wrapped in <untrusted> delimiters so prompt-injection payloads are
 // treated by the LLM as character data, not directives.
+/**
+ * Build a compact spec-rules block from station spec script_rules and library guidelines.
+ * Returns null when no spec data is available.
+ */
+export function buildSpecRulesSection(
+  scriptRules?: { language?: string; tone?: string; segment_length?: string; avoid?: string[]; always?: string[] } | null,
+  library?: { rules?: string[] } | null,
+): string | null {
+  const parts: string[] = [];
+
+  if (scriptRules) {
+    if (scriptRules.language) parts.push(`Script language/style: ${s(scriptRules.language, 300)}`);
+    if (scriptRules.tone) parts.push(`Tone: ${s(scriptRules.tone, 200)}`);
+    if (scriptRules.segment_length) parts.push(`Target segment length: ${s(scriptRules.segment_length, 100)}`);
+    if (scriptRules.always?.length) {
+      const safe = scriptRules.always.map((r) => `  - ${s(r, 200)}`).join('\n');
+      parts.push(`Always:\n${safe}`);
+    }
+    if (scriptRules.avoid?.length) {
+      const safe = scriptRules.avoid.map((r) => `  - ${s(r, 200)}`).join('\n');
+      parts.push(`Never:\n${safe}`);
+    }
+  }
+
+  if (library?.rules?.length) {
+    const safe = library.rules.map((r) => `  - ${s(r, 200)}`).join('\n');
+    parts.push(`Music guidelines:\n${safe}`);
+  }
+
+  if (!parts.length) return null;
+  return `Station-specific guidelines (follow these for every segment):\n${parts.join('\n')}`;
+}
+
 export function buildSystemPrompt(
   profile: DjProfile,
   localeCode?: string | null,
   ttsProvider?: string | null,
+  specRules?: string | null,
 ): string {
   const safeName = s(profile.name, LIMITS.name);
   const lines: string[] = [
@@ -263,6 +297,11 @@ export function buildSystemPrompt(
       lines.push('');
       lines.push(ttsGuide);
     }
+  }
+
+  if (specRules) {
+    lines.push('');
+    lines.push(specRules);
   }
 
   lines.push('');
@@ -365,8 +404,9 @@ export function buildMultiDjSystemPrompt(
   profiles: DjProfile[],
   localeCode?: string | null,
   ttsProvider?: string | null,
+  specRules?: string | null,
 ): string {
-  if (profiles.length < 2) return buildSystemPrompt(profiles[0]!, localeCode, ttsProvider);
+  if (profiles.length < 2) return buildSystemPrompt(profiles[0]!, localeCode, ttsProvider, specRules);
 
   const names = profiles.map((p) => s(p.name, LIMITS.name));
   const nameList = names.join(', ');
@@ -399,6 +439,11 @@ export function buildMultiDjSystemPrompt(
       lines.push('');
       lines.push(ttsGuide);
     }
+  }
+
+  if (specRules) {
+    lines.push('');
+    lines.push(specRules);
   }
 
   const tagLines = names.map((n) => `[${n}] Spoken text here...`).join('\n');
