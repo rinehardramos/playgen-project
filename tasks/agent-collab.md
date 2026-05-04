@@ -29,9 +29,10 @@ _Updated: 2026-05-03 by PM agent_
 
 ## Active Work
 
-- [ ] feat(dj+station): human-like DJ transition jitter — seeded random cues between songs (#422, feat/issue-422-transition-jitter) | @claude-sonnet-4-6 | 2026-05-04
+_(no active claims)_
 
 ## Recently Completed
+- [x] feat(station): human-like DJ transition jitter — seeded FNV-1a jitter on song_transition segments (#422, feat/issue-495) | @claude-sonnet-4-6 | 2026-05-04
 - [x] feat(station+types+dj+frontend): Station Spec — declarative blueprint with YAML editor, spec API, DJ persona bootstrap, and pipeline injection (#495, feat/issue-495) | @claude-sonnet-4-6 | 2026-05-04 | Migration: 076
 - [x] feat(station+frontend): adaptive bandwidth streaming — multi-bitrate HLS + HLS.js player (#500, feat/issue-500, PR #549) | @claude-sonnet-4-6 | 2026-05-04
 - [x] fix(scheduler+station): inherit_library category remapping + station auto-creation slots (#497, #498, fix/issue-497-498) | @claude-sonnet-4-6 | 2026-05-03
