@@ -20,6 +20,6 @@
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^25.5.2",
     "@types/pg": "^8.11.0",
-    "typescript": "^5.4.0"
+    "typescript": "^6.0.3"
   }
 }
