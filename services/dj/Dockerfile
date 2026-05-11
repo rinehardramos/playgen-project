@@ -1,4 +1,4 @@
-FROM node:25-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 RUN npm install -g pnpm
 COPY pnpm-workspace.yaml ./
@@ -21,7 +21,7 @@ RUN pnpm --filter @playgen/info-broker-client build
 RUN pnpm --filter @playgen/storage build
 RUN pnpm --filter @playgen/dj-service build
 
-FROM node:25-alpine
+FROM node:26-alpine
 WORKDIR /app
 RUN apk add --no-cache ffmpeg
 RUN npm install -g pnpm
