@@ -36,11 +36,11 @@ export async function segmentRoutes(app: FastifyInstance) {
     };
 
     // Tenant check: verify station belongs to caller's company
-    const user = (req as unknown as { user?: { company_id: string } }).user;
+    const user = (req as unknown as { user?: { cid: string } }).user;
     if (user) {
       const { rows } = await getPool().query(
         `SELECT id FROM stations WHERE id = $1 AND company_id = $2`,
-        [body.stationId, user.company_id],
+        [body.stationId, user.cid],
       );
       if (rows.length === 0) {
         return reply.code(403).send({ error: 'Station not found or access denied' });

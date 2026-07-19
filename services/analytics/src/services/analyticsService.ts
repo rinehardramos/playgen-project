@@ -349,7 +349,7 @@ export async function getSongHistory(
   const sql = `
     SELECT
       played_at,
-      playlist_id
+      NULL::uuid AS playlist_id
     FROM play_history
     WHERE song_id = $1
     ORDER BY played_at DESC

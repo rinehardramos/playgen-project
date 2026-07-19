@@ -37,7 +37,7 @@ export async function adlibClipRoutes(app: FastifyInstance): Promise<void> {
       // Verify station belongs to caller's company
       const { rowCount: stationCheck } = await pool.query(
         `SELECT 1 FROM stations WHERE id = $1 AND company_id = $2`,
-        [station_id, user.company_id],
+        [station_id, user.cid],
       );
       if (!stationCheck) return reply.forbidden('Station not found or access denied');
 
@@ -115,7 +115,7 @@ export async function adlibClipRoutes(app: FastifyInstance): Promise<void> {
       // Verify station belongs to caller's company
       const { rowCount: stationCheck } = await pool.query(
         `SELECT 1 FROM stations WHERE id = $1 AND company_id = $2`,
-        [stationId, user.company_id],
+        [stationId, user.cid],
       );
       if (!stationCheck) return reply.forbidden('Station not found or access denied');
 
@@ -169,7 +169,7 @@ export async function adlibClipRoutes(app: FastifyInstance): Promise<void> {
            AND c.station_id = s.id
            AND s.company_id = $4
          RETURNING c.*`,
-        [name?.trim() ?? null, tags ?? null, id, user.company_id],
+        [name?.trim() ?? null, tags ?? null, id, user.cid],
       );
       if (!rowCount) return reply.notFound('Clip not found or access denied');
       return rows[0];
@@ -190,7 +190,7 @@ export async function adlibClipRoutes(app: FastifyInstance): Promise<void> {
         `SELECT c.* FROM dj_adlib_clips c
          JOIN stations s ON s.id = c.station_id
          WHERE c.id = $1 AND s.company_id = $2`,
-        [id, user.company_id],
+        [id, user.cid],
       );
       if (!rowCount) return reply.notFound('Clip not found or access denied');
 

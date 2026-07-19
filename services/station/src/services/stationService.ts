@@ -29,6 +29,10 @@ export async function createStation(data: {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
+  // stations.active_days is varchar(3)[] — accept full day names too
+  const activeDays = (data.active_days ?? ['MON','TUE','WED','THU','FRI','SAT','SUN'])
+    .map(d => d.slice(0, 3).toUpperCase());
+
   const { rows } = await getPool().query<Station>(
     `INSERT INTO stations (company_id, name, slug, timezone, broadcast_start_hour, broadcast_end_hour, active_days)
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
@@ -39,7 +43,7 @@ export async function createStation(data: {
       data.timezone ?? 'Asia/Manila',
       data.broadcast_start_hour ?? 4,
       data.broadcast_end_hour ?? 3,
-      data.active_days ?? ['MON','TUE','WED','THU','FRI','SAT','SUN'],
+      activeDays,
     ]
   );
 
@@ -136,7 +140,14 @@ export async function updateStation(id: string, data: Partial<{
 }
 
 export async function deleteStation(id: string): Promise<boolean> {
-  const { rowCount } = await getPool().query('DELETE FROM stations WHERE id = $1', [id]);
+  const pool = getPool();
+  // template_slots.required_category_id is NOT ON DELETE CASCADE, so the
+  // categories cascade aborts while seeded slots still reference them.
+  await pool.query(
+    'DELETE FROM template_slots WHERE template_id IN (SELECT id FROM templates WHERE station_id = $1)',
+    [id]
+  );
+  const { rowCount } = await pool.query('DELETE FROM stations WHERE id = $1', [id]);
   return (rowCount ?? 0) > 0;
 }
 

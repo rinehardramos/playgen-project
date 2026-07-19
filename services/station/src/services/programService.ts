@@ -29,11 +29,12 @@ export async function createProgram(data: {
   template_id?: string | null;
   color_tag?: string | null;
   themes?: unknown[] | null;
+  is_default?: boolean;
 }): Promise<Program> {
   const { rows } = await getPool().query<Program>(
     `INSERT INTO programs
-       (station_id, name, description, active_days, start_hour, end_hour, template_id, color_tag, themes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (station_id, name, description, active_days, start_hour, end_hour, template_id, color_tag, themes, is_default)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
     [
       data.station_id,
@@ -52,6 +53,7 @@ export async function createProgram(data: {
       data.template_id ?? null,
       data.color_tag ?? null,
       JSON.stringify(data.themes ?? []),
+      data.is_default ?? false,
     ]
   );
   return rows[0];
@@ -69,10 +71,11 @@ export async function updateProgram(
     color_tag: string | null;
     dj_profile_id: string | null;
     is_active: boolean;
+    is_default: boolean;
     themes: unknown[] | null;
   }>
 ): Promise<Program | null> {
-  const allowed = ['name', 'description', 'active_days', 'start_hour', 'end_hour', 'template_id', 'color_tag', 'dj_profile_id', 'is_active', 'themes'] as const;
+  const allowed = ['name', 'description', 'active_days', 'start_hour', 'end_hour', 'template_id', 'color_tag', 'dj_profile_id', 'is_active', 'is_default', 'themes'] as const;
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;
