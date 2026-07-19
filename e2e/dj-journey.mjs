@@ -92,6 +92,41 @@ async function main() {
   const social = await api(`/api/v1/dj/social/status?station_id=${station.id}`);
   assert(social.status === 200, 'GET /dj/social/status returns 200', social);
 
+  setStep(9, 'podcast episode intake (imported script, two hosts)');
+  const hosts = [
+    { name: 'Alex', provider: 'mistral', voice_id: 'en_paul_cheerful' },
+    { name: 'Sam', provider: 'elevenlabs', voice_id: 'e2e-cloned-voice' },
+  ];
+  const badHosts = await api('/api/v1/dj/podcasts', {
+    method: 'POST',
+    body: { station_id: station.id, title: 'E2E Pod', hosts: [hosts[0]], script_text: '[Alex] hi' },
+  });
+  assert(badHosts.status === 400, 'single-host request is rejected', badHosts);
+  const podCreate = await api('/api/v1/dj/podcasts', {
+    method: 'POST',
+    body: {
+      station_id: station.id,
+      title: `E2E Podcast ${Date.now()}`,
+      hosts,
+      script_text: '[Alex] Welcome to the show!\n[Sam] Great to be here.',
+    },
+  });
+  assert(podCreate.status === 202, 'POST /dj/podcasts returns 202', podCreate);
+  const episode = podCreate.data;
+  assert(episode?.source === 'imported', 'episode is marked imported');
+  assert(Array.isArray(episode?.hosts) && episode.hosts.length === 2, 'episode persists both hosts');
+  assert(!JSON.stringify(episode.hosts).includes('api_key'), 'api keys are never persisted');
+
+  setStep(10, 'podcast list + detail + delete');
+  const podList = await api(`/api/v1/dj/podcasts?station_id=${station.id}`);
+  assert(podList.status === 200, 'GET /dj/podcasts returns 200', podList);
+  assert(podList.data.some(p => p.id === episode.id), 'episode is listed');
+  const podGet = await api(`/api/v1/dj/podcasts/${episode.id}`);
+  assert(podGet.status === 200, 'GET /dj/podcasts/:id returns 200', podGet);
+  assert(['pending', 'rendering', 'ready', 'failed'].includes(podGet.data?.status), 'episode has a lifecycle status', podGet.data);
+  const podDel = await api(`/api/v1/dj/podcasts/${episode.id}`, { method: 'DELETE' });
+  assert(podDel.status === 204, 'DELETE /dj/podcasts/:id returns 204', podDel);
+
   finish('dj');
 }
 
