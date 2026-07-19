@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate, requirePermission, requireStationAccess } from '@playgen/middleware';
 import * as stationService from '../services/stationService';
-import { ensureStationOnOwnRadio } from '../services/streamControlNotifier';
+import { ensureStationOnOwnRadio, deleteStationOnOwnRadio } from '../services/streamControlNotifier';
 
 function syncStationToOwnRadio(
   station: { slug?: string | null; name?: string | null },
@@ -113,8 +113,16 @@ export async function stationRoutes(app: FastifyInstance) {
     onRequest: [requirePermission('station:write'), requireStationAccess()],
   }, async (req, reply) => {
     const { id } = req.params as { id: string };
+    // The Station type predates the slug column (migration adds it at runtime)
+    const station = (await stationService.getStation(id)) as { slug?: string } | null;
     const deleted = await stationService.deleteStation(id);
     if (!deleted) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Station not found' } });
+    const slug = station?.slug;
+    if (slug) {
+      deleteStationOnOwnRadio(slug).catch((err) =>
+        req.log.warn({ err, slug }, 'OwnRadio station delete failed'),
+      );
+    }
     return reply.code(204).send();
   });
 }

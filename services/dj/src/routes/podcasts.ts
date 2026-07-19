@@ -138,6 +138,8 @@ export async function podcastRoutes(app: FastifyInstance): Promise<void> {
     if (!(await stationBelongsToCompany(episode.station_id, user.cid))) {
       return reply.forbidden('Station not found or access denied');
     }
+    const { retractEpisodeFromOwnRadio } = await import('../services/ownradioPublisher.js');
+    await retractEpisodeFromOwnRadio(episode);
     await deleteEpisode(req.params.id);
     return reply.code(204).send();
   });

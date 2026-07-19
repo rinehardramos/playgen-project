@@ -38,6 +38,22 @@ export async function ensureStationOnOwnRadio(station: {
   }
 }
 
+/** Remove a deleted station (and its local records) from OwnRadio. */
+export async function deleteStationOnOwnRadio(slug: string): Promise<void> {
+  if (!OWNRADIO_WEBHOOK_URL) return;
+  // No content-type header: a bodyless request with application/json set is
+  // rejected by Fastify with 400 "body cannot be empty".
+  const headers: Record<string, string> = {};
+  if (PLAYGEN_WEBHOOK_SECRET) headers['X-PlayGen-Secret'] = PLAYGEN_WEBHOOK_SECRET;
+  const res = await fetch(`${OWNRADIO_WEBHOOK_URL}/stations/${slug}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`OwnRadio station delete failed (${res.status})`);
+  }
+}
+
 export async function notifyStreamUrlChange(slug: string, streamUrl: string): Promise<void> {
   if (!OWNRADIO_WEBHOOK_URL) return;
   await fetch(`${OWNRADIO_WEBHOOK_URL}/webhooks/stations/${slug}/stream-control`, {

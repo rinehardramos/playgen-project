@@ -40,11 +40,41 @@ async function recordResult(episodeId: string, result: OwnRadioPublishResult): P
     `UPDATE dj_podcast_episodes
      SET ownradio_status = $2,
          ownradio_error = $3,
-         ownradio_published_at = CASE WHEN $2 = 'published' THEN NOW() ELSE ownradio_published_at END,
+         ownradio_published_at = COALESCE($4, ownradio_published_at),
          updated_at = NOW()
      WHERE id = $1`,
-    [episodeId, result.status, result.status === 'published' ? null : result.detail],
+    [
+      episodeId,
+      result.status,
+      result.status === 'published' ? null : result.detail,
+      result.status === 'published' ? new Date() : null,
+    ],
   );
+}
+
+/**
+ * Retract a previously published episode from OwnRadio (called on episode
+ * delete). Best-effort: never throws, a 404 means it was already gone.
+ */
+export async function retractEpisodeFromOwnRadio(episode: PodcastEpisode): Promise<void> {
+  if (!OWNRADIO_WEBHOOK_URL || episode.ownradio_status !== 'published') return;
+  try {
+    const { rows } = await getPool().query<{ slug: string | null }>(
+      'SELECT slug FROM stations WHERE id = $1',
+      [episode.station_id],
+    );
+    const slug = rows[0]?.slug;
+    if (!slug) return;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (PLAYGEN_WEBHOOK_SECRET) headers['X-PlayGen-Secret'] = PLAYGEN_WEBHOOK_SECRET;
+    await fetch(`${OWNRADIO_WEBHOOK_URL}/webhooks/stations/${slug}/program`, {
+      method: 'DELETE',
+      headers,
+      body: JSON.stringify({ recordedAt: new Date(episode.created_at).toISOString() }),
+    });
+  } catch {
+    // best-effort retraction
+  }
 }
 
 /**
@@ -98,6 +128,8 @@ export async function publishEpisodeToOwnRadio(episode: PodcastEpisode): Promise
     result = { status: 'failed', detail: err instanceof Error ? err.message : String(err) };
   }
 
-  await recordResult(episode.id, result).catch(() => undefined);
+  await recordResult(episode.id, result).catch((err) =>
+    console.error('[ownradioPublisher] failed to record publish result', err),
+  );
   return result;
 }
