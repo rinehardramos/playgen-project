@@ -117,6 +117,20 @@ export async function podcastRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // Manual (re)publish to OwnRadio — the automatic push runs when rendering
+  // finishes; this lets users retry after fixing config (e.g. cloud storage).
+  app.post<{ Params: { id: string } }>('/dj/podcasts/:id/publish-ownradio', async (req, reply) => {
+    const user = (req as any).user;
+    const episode = await getEpisode(req.params.id);
+    if (!episode) return reply.notFound('Episode not found');
+    if (!(await stationBelongsToCompany(episode.station_id, user.cid))) {
+      return reply.forbidden('Station not found or access denied');
+    }
+    const { publishEpisodeToOwnRadio } = await import('../services/ownradioPublisher.js');
+    const result = await publishEpisodeToOwnRadio(episode);
+    return reply.send({ id: episode.id, ...result });
+  });
+
   app.delete<{ Params: { id: string } }>('/dj/podcasts/:id', async (req, reply) => {
     const user = (req as any).user;
     const episode = await getEpisode(req.params.id);

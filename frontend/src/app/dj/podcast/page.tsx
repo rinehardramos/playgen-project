@@ -29,8 +29,16 @@ interface Episode {
   error_message: string | null;
   audio_url: string | null;
   audio_duration_sec: number | null;
+  ownradio_status: 'published' | 'skipped' | 'failed' | null;
+  ownradio_error: string | null;
   created_at: string;
 }
+
+const OWNRADIO_STYLES: Record<NonNullable<Episode['ownradio_status']>, string> = {
+  published: 'bg-emerald-900 text-emerald-300',
+  skipped: 'bg-gray-700 text-gray-400',
+  failed: 'bg-red-900 text-red-300',
+};
 
 const PROVIDERS = [
   { value: 'mistral', label: 'Mistral (Voxtral)' },
@@ -361,6 +369,14 @@ export default function PodcastPage() {
                     <span className={`text-xs px-2 py-0.5 rounded capitalize ${STATUS_STYLES[ep.status]}`}>
                       {ep.status.replace('_', ' ')}
                     </span>
+                    {ep.ownradio_status && (
+                      <span
+                        title={ep.ownradio_error ?? undefined}
+                        className={`text-xs px-2 py-0.5 rounded ${OWNRADIO_STYLES[ep.ownradio_status]}`}
+                      >
+                        OwnRadio: {ep.ownradio_status}
+                      </span>
+                    )}
                     {(ep.status === 'failed' || ep.status === 'ready') && (
                       <button onClick={() => handleRerender(ep.id)} className="text-xs text-blue-400 hover:text-blue-300">
                         Re-render

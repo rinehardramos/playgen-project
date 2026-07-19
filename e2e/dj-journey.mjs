@@ -124,6 +124,15 @@ async function main() {
   const podGet = await api(`/api/v1/dj/podcasts/${episode.id}`);
   assert(podGet.status === 200, 'GET /dj/podcasts/:id returns 200', podGet);
   assert(['pending', 'rendering', 'ready', 'failed'].includes(podGet.data?.status), 'episode has a lifecycle status', podGet.data);
+  assert('ownradio_status' in (podGet.data ?? {}), 'episode carries an ownradio_status field', podGet.data);
+
+  setStep(11, 'manual OwnRadio publish is guarded');
+  const pub = await api(`/api/v1/dj/podcasts/${episode.id}/publish-ownradio`, { method: 'POST', body: {} });
+  assert(pub.status === 200, 'POST publish-ownradio returns 200', pub);
+  assert(['published', 'skipped', 'failed'].includes(pub.data?.status), 'publish returns an outcome', pub.data);
+  // Un-rendered/local-audio episodes must never be pushed silently
+  assert(pub.data.status !== 'published' || podGet.data?.status === 'ready', 'only ready episodes can publish');
+
   const podDel = await api(`/api/v1/dj/podcasts/${episode.id}`, { method: 'DELETE' });
   assert(podDel.status === 204, 'DELETE /dj/podcasts/:id returns 204', podDel);
 

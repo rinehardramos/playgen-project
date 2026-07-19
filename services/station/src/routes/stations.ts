@@ -1,6 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate, requirePermission, requireStationAccess } from '@playgen/middleware';
 import * as stationService from '../services/stationService';
+import { ensureStationOnOwnRadio } from '../services/streamControlNotifier';
+
+function syncStationToOwnRadio(
+  station: { slug?: string | null; name?: string | null },
+  log: { warn: (obj: unknown, msg: string) => void },
+): void {
+  if (!station?.slug || !station?.name) return;
+  ensureStationOnOwnRadio({ slug: station.slug, name: station.name }).catch((err) =>
+    log.warn({ err, slug: station.slug }, 'OwnRadio station sync failed'),
+  );
+}
 
 const SECRET_KEYS = ['openai_api_key', 'elevenlabs_api_key', 'openrouter_api_key'] as const;
 
@@ -32,6 +43,7 @@ export async function stationRoutes(app: FastifyInstance) {
       active_days?: string[];
     };
     const station = await stationService.createStation({ ...body, company_id: id });
+    syncStationToOwnRadio(station, req.log);
     return reply.code(201).send(station);
   });
 
@@ -93,6 +105,7 @@ export async function stationRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const station = await stationService.updateStation(id, req.body as Parameters<typeof stationService.updateStation>[1]);
     if (!station) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Station not found' } });
+    syncStationToOwnRadio(station, req.log);
     return maskSecrets(station as unknown as Record<string, unknown>);
   });
 

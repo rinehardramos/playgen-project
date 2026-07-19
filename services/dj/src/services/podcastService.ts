@@ -47,6 +47,9 @@ export interface PodcastEpisode {
   error_message: string | null;
   audio_url: string | null;
   audio_duration_sec: number | null;
+  ownradio_status: 'published' | 'skipped' | 'failed' | null;
+  ownradio_error: string | null;
+  ownradio_published_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -295,6 +298,13 @@ export async function renderEpisode(episodeId: string, hosts: PodcastHost[]): Pr
         audio_duration_sec: duration,
         error_message: null,
       });
+
+      // Automatic OwnRadio pickup — outcome lands on ownradio_* columns.
+      const ready = await getEpisode(episodeId);
+      if (ready) {
+        const { publishEpisodeToOwnRadio } = await import('./ownradioPublisher.js');
+        await publishEpisodeToOwnRadio(ready);
+      }
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
