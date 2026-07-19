@@ -195,7 +195,8 @@ async function main() {
   assert(gapFix.status === 201 || gapFix.status === 200, 'POST stub default-clock program returns 2xx', gapFix);
   assert(!!gapFix.data?.id, 'stub program has an id');
   assert(gapFix.data?.is_default === true, 'stub program is_default=true');
-  // Clean up
+  // Clean up — DELETE refuses default programs, so demote first
+  await api(`/api/v1/programs/${gapFix.data.id}`, { method: 'PUT', body: { is_default: false } });
   await api(`/api/v1/programs/${gapFix.data.id}`, { method: 'DELETE' });
 
   console.log('\nAll user-journey assertions passed ✔');
